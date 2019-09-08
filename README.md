@@ -37,15 +37,19 @@ Wrapper for tranining and testing Text-to-SQL model, built on Pytorch.
 
 ### Implemented
 1.Models
+
 - SyntaxSQL
 - TypeSQL
 - SQLNet
 - From Predictor
 
 2.Dataset
+
 - Spider 
 
 ### To-Do
 - Add more datasets
 - Add more models
 - Generalize train and test script
+
+
