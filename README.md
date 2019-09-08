@@ -3,7 +3,8 @@
 Wrapper for tranining and testing Text-to-SQL model, built on Pytorch.
 
 ## Description  
-Training and Testing is done in the following sequence  
+Build your own Text-to-SQL Model.  
+Training and Testing is done in the following sequence.  
 
 1. DataLoader loads data (preprocessing data if necessary)  
 2. Text-to-SQL model receives data from  DataLoader and preprocess in the batch unit  
