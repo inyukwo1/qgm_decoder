@@ -44,12 +44,14 @@ Training and Testing is done in the following sequence
 
 ### Implemented
 1.Models
-- SyntaxSQL
-- TypeSQL
-- SQLNet
+
+- SyntaxSQL  
+- TypeSQL  
+- SQLNet  
 - From Predictor
 
-2.Dataset
+2.Dataset  
+
 - Spider 
 
 ### To-Do
