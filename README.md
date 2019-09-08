@@ -2,11 +2,17 @@
 
 Wrapper for tranining and testing Text-to-SQL model, built on Pytorch.
 
-## Requirments
+##Description
+Training and Testing is done in the following sequence
+1. DataLoader loads data (preprocessing data if necessary)
+2. Text-to-SQL model receives data from  DataLoader and preprocess in the batch unit
+3. Text-to-SQL model predicts SQL
+4. Text-to-SQL model evaluates the result
 
+## Requirments
 #### DataLoader Methods:
 1. \_\_init__(H_PARAMS: Dict)
-2. load_data(mode: Text, load_option: Dict): None
+2. load_data(mode: Text, load_option: Dict)
 3. shuffle() : None
 4. get_train() : List
 5. get_train_len() : Int
@@ -37,19 +43,15 @@ Wrapper for tranining and testing Text-to-SQL model, built on Pytorch.
 
 ### Implemented
 1.Models
-
 - SyntaxSQL
 - TypeSQL
 - SQLNet
 - From Predictor
 
 2.Dataset
-
 - Spider 
 
 ### To-Do
 - Add more datasets
 - Add more models
 - Generalize train and test script
-
-
