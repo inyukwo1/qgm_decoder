@@ -160,7 +160,7 @@ class SuperModel(nn.Module):
             self.cuda()
         self.path_not_found = 0
 
-    def load_model(self):
+    def load_weights(self):
         print('loading models')
         dev_type = 'cuda' if self.gpu else 'cpu'
         device = torch.device(dev_type)

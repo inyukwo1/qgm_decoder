@@ -1,52 +1,32 @@
-import os
 import json
 import torch
 import argparse
 import datetime
-from commons.utils import train, eval
+from commons.utils import train, eval, import_module
 
 if __name__ == '__main__':
     # Parse Arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_name', type=str, default='', help='Model Name')
-    parser.add_argument('--data_name', type=str, default='', help='Dataset Name')
-    parser.add_argument('--param', type=str, default='parameters.json', help='json file containing parameters')
+    parser.add_argument('--train_config', type=str, default='', help='Path for train config json file')
     parser.add_argument('--not_save', action='store_true')
     args = parser.parse_args()
 
     # Load Model
-    if args.model_name == 'syntaxsql':
-        from models.syntaxsql.syntaxsql import SyntaxSQL as Model
-        H_PARAMS = json.loads(open('./models/syntaxsql/{}'.format(args.param)).read())
-
-    elif args.model_name == 'typesql':
-        from models.typesql.typesql import TypeSQL as Model
-        H_PARAMS = json.loads(open('./models/typesql/{}'.format(args.param)).read())
-
-    elif args.model_name == 'sqlnet':
-        from models.sqlnet.sqlnet import SQLNet as Model
-        H_PARAMS = json.loads(open('./models/sqlnet/{}'.format(args.param)).read())
-
-    elif args.model_name == 'frompredictor':
-        from models.frompredictor.from_predictor import FromPredictor as Model
-        H_PARAMS = json.loads(open('./models/frompredictor/{}'.format(args.param)).read())
-
-    else:
-        print('Give correct model name!')
-        exit(-1)
-
+    H_PARAMS = json.loads(open(args.train_config).read())
+    Model = import_module(H_PARAMS['model'])
     model = Model(H_PARAMS)
 
-    # Load DataLoader
-    if args.data_name == 'spider':
-        from datasets.spider.data_loader import DataLoader
-    else:
-        print('Give correct dataset name!')
-        exit(-1)
+    # Show model name
+    model_name = H_PARAMS['model_name'] if 'model_name' in H_PARAMS.keys() else 'Unknown'
+    print('Loading model:{}'.format(model_name))
 
-    load_option = H_PARAMS['load_option']if 'load_option' in H_PARAMS.keys() else None
-    dataloader = DataLoader(H_PARAMS['batch_size'])
-    dataloader.load_data('train', load_option)
+    # Load Dataloader
+    DataLoader = import_module(H_PARAMS['dataloader'])
+    dataLoader = DataLoader(H_PARAMS)
+
+    # Load data
+    load_option = H_PARAMS['load_option'] if 'load_option' in H_PARAMS.keys() else None
+    dataLoader.load_data('train', load_option)
 
     # Prepare Optimizer
     model.optimizer = torch.optim.Adam(model.parameters(), lr=H_PARAMS['lr'], weight_decay=H_PARAMS['weight_decay'])
@@ -56,14 +36,14 @@ if __name__ == '__main__':
         print('Epoch {} @ {} '.format(epoch + 1, datetime.datetime.now()), end='')
 
         # Training
-        total_loss = train(model, dataloader)
+        total_loss = train(model, dataLoader)
         print('Loss: {}'.format(total_loss))
 
         # Evaluating
         if not epoch % H_PARAMS['eval_freq']:
             print('Evaluating...', end='')
-            total_acc = eval(model, dataloader)
+            total_acc = eval(model, dataLoader)
             if not args.not_save:
                 # Save model if high acc
-                model.save_model(total_acc)
+                model.save_weights(total_acc)
 

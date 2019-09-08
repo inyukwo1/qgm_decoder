@@ -125,6 +125,6 @@ class HavingPredictor(nn.Module):
 
         return input_data, gt_data
 
-    def save_model(self, save_dir):
+    def save_weights(self, save_dir):
         print('Saving model...')
         torch.save(self.state_dict(), os.path.join(save_dir, "having_models.dump"))

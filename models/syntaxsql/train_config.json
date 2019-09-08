@@ -1,4 +1,7 @@
 {
+  "model_name": "syntaxsql",
+  "model": "models.syntaxsql.syntaxsql.SyntaxSQL",
+  "dataloader": "datasets.spider.data_loader.DataLoader",
   "gpu": true,
   "B_WORD": 42,
   "N_WORD": 300,

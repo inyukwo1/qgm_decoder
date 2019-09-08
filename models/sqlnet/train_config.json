@@ -1,4 +1,7 @@
 {
+  "model_name": "sqlnet",
+  "model": "models.sqlnet.sqlnet.SQLNet",
+  "dataloader": "datasets.spider.data_loader.DataLoader",
   "use_small": true,
   "lr": 1e-3,
   "bert_lr": 1e-5,

@@ -1,28 +1,51 @@
 # Text-to-SQL Development Environment
 
-### Models
+Wrapper for tranining and testing Text-to-SQL model, built on Pytorch.
+
+## Requirments
+
+#### DataLoader Methods:
+1. \_\_init__(H_PARAMS: Dict)
+2. load_data(mode: Text, load_option: Dict)
+3. shuffle() : None
+4. get_train() : List
+5. get_train_len() : Int
+6. get_eval() : List
+7. get_eval_len() : Int
+
+#### Text-to-SQL Model Methods:
+1. preprocess(batch: ) : tuple(input_data, gt_data)
+2. forward(input_data: List) : List
+3. loss(score: List, gt_data: List) : List
+4. evaluate(score: List, gt_data: List, batch: List) : List
+5. gen_sql(score:List, gt_data: List) : List
+5. acc_num <- variable 
+
+#### Config File for training/testing
+1. model: str (model module path)
+2. dataloader: str (dataloader module path)
+3. batch_size: int
+4. lr: int
+5. weight_decay: int
+6. epoch: int
+7. eval_freq: int
+
+### Training and Testing
+``` python train.py --train_config={train_config_path}```  
+``` python test.py --test_config={test_config_path}```
+
+
+### Implemented
+1.Models
 - SyntaxSQL
 - TypeSQL
 - SQLNet
 - From Predictor
 
-### Dataset
+2.Dataset
 - Spider 
 
-### Environment Setup
-- Download glove from [Glove](https://nlp.stanford.edu/data/wordvecs/glove.42B.300d.zip) and put it under `glove/`
-- Download modified Spider dataset from [Spider](https://drive.google.com/file/d/1TsekxtgIUum4xa6WRGFUGS_jpPWhvamL/view?usp=sharing) and put it under `datasets/spider/data/`
-- Download trained model weights from ----- and put it under `saved_models/{model_name}/`
-
-### Training and Testing
-1. Set all hyper-parameters in `modes/{model_name}/parameters.json` 
-
-- ```python train.py --model_name="{model_name}" --data_name="{dataset_name}"```
-
-- ```python test.py --model_name="{model_name}" --data_name="{dataset_name}"```
-
-#### Fixed bugs for the Spider Dataset
-- Order difference b/w ("column names", "column names original") and ("table names", "table names original") for db_id: "scholar", "store_1", and "formula_1" in tables.json
-- Non-existing "Ref_Company_Types" table being used for db_id: assets_maintenance in train.json and dev.json
-- "Nested query in from clause" bug. (About 7 queries are erased)
-- "syntaxsqlnet bug - parsing bug" bug. (About 50 queries are erased)
+### To-Do
+- Add more datasets
+- Add more models
+- Generalize train and test script

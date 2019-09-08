@@ -42,7 +42,7 @@ class FromPredictor(nn.Module):
         if self.gpu:
             self.cuda()
 
-    def load_model(self):
+    def load_weights(self):
         print('Loading from model...')
         dev_type = 'cuda' if self.gpu else 'cpu'
         device = torch.device(dev_type)
@@ -52,7 +52,7 @@ class FromPredictor(nn.Module):
         self.bert.bert_param.load_state_dict(torch.load(os.path.join(self.save_dir, "bert_from_params.dump"), map_location=device))
 
 
-    def save_model(self, acc):
+    def save_weights(self, acc):
         print('tot_err:{}'.format(acc))
 
         if acc > self.acc:

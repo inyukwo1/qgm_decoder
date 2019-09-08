@@ -10,7 +10,7 @@ AGG_OPS = ('none', 'max', 'min', 'count', 'sum', 'avg')
 
 
 class DataLoader():
-    def __init__(self, batch_size):
+    def __init__(self, H_PARAMS):
         self.schemas = {}
         self.dbs = {}
         self.train_data = None
@@ -20,7 +20,7 @@ class DataLoader():
         self.eval_len = None
         self.train_len = None
 
-        self.batch_size = batch_size
+        self.batch_size = H_PARAMS['batch_size']
 
         self._data_path = './datasets/spider/data/'
         self._table_path = os.path.join(self._data_path, 'tables.json')

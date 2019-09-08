@@ -1,4 +1,7 @@
 {
+  "model_name": "frompredictor",
+  "model": "models.frompredictor.from_predictor.FromPredictor",
+  "dataloader": "datasets.spider.data_loader.DataLoader",
   "N_h": 300,
   "N_depth": 2,
   "gpu": true,

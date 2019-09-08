@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 import numpy as np
-
+import importlib
 
 def train(model, dataloader):
     total_loss = 0.0
@@ -11,17 +11,17 @@ def train(model, dataloader):
     dataloader.shuffle()
     batches = dataloader.get_train()
     for batch in batches:
-        # preprocess
+        # Preprocess
         input_data, gt_data = model.preprocess(batch)
 
-        # forward
+        # Forward
         score = model.forward(input_data)
 
-        # criterion
+        # Criterion
         loss = model.loss(score, gt_data)
         total_loss += loss.data.cpu().numpy() * len(batch)
 
-        # backward
+        # Backward
         model.zero_grad()
         loss.backward()
         model.step()
@@ -30,15 +30,19 @@ def train(model, dataloader):
 
 # Evaluation during training
 def eval(model, dataloader, log=False):
+    '''
+    To-Do:
+        Remove acc_num
+    '''
     total_acc = np.zeros(model.acc_num)
     model.eval()
     dataloader.shuffle()
     batches = dataloader.get_eval()
     for batch in batches:
-        # preprocess
+        # Preprocess
         input_data, gt_data = model.preprocess(batch)
 
-        # forward
+        # Forward
         score = model.forward(input_data)
 
         # Generate Query
@@ -62,6 +66,10 @@ def test(model, dataloader, output_path):
         for sql in gen_sqls:
             file.write("{}\n".format(sql))
     file.close()
+
+def import_module(module_path):
+    module = importlib.import_module('.'.join(module_path.split('.')[:-1]), package=None)
+    return getattr(module, module_path.split('.')[-1])
 
 
 def SIZE_CHECK(tensor, size):

@@ -184,7 +184,7 @@ class TypeSQL(nn.Module):
         if self.bert:
             self.bert.step()
 
-    def load_model(self):
+    def load_weights(self):
         dev_type = 'cuda' if self.gpu else 'cpu'
         device = torch.device(dev_type)
 
@@ -208,7 +208,7 @@ class TypeSQL(nn.Module):
             self.bert_model.bert_param.load_state_dict(
                 torch.load(os.path.join(self.save_dir, "bert_from_params.dump"), map_location=device))
 
-    def save_model(self, acc):
+    def save_weights(self, acc):
         print('tot_acc:{} sel_acc:{} cond_acc:{} gby_acc:{} ody_acc:{} from_acc:{}'.format(*acc))
 
         if acc[1] > self.acc[0]:

@@ -72,13 +72,13 @@ class SyntaxSQL(nn.Module):
     def preprocess(self, batch):
         return self.model.preprocess(batch)
 
-    def save_model(self, acc):
+    def save_weights(self, acc):
         if acc > self.acc:
             self.acc = acc
-            self.model.save_model(self.save_dir)
+            self.model.save_weights(self.save_dir)
 
-    def load_model(self):
-        self.model.load_model()
+    def load_weights(self):
+        self.model.load_weigths()
 
     def set_test_table_dict(self, schemas, test_data):
         self.model.set_test_table_dict(schemas, test_data)
