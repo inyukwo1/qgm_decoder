@@ -6,7 +6,7 @@ Wrapper for tranining and testing Text-to-SQL model, built on Pytorch.
 
 #### DataLoader Methods:
 1. \_\_init__(H_PARAMS: Dict)
-2. load_data(mode: Text, load_option: Dict)
+2. load_data(mode: Text, load_option: Dict): None
 3. shuffle() : None
 4. get_train() : List
 5. get_train_len() : Int
