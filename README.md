@@ -29,7 +29,7 @@ Training and Testing is done in the following sequence.
 5. gen_sql(score:List, gt_data: List) : List
 5. acc_num <- variable 
 
-#### Keys in the config file:
+#### Keys for the config file:
 1. model: str (model module path)
 2. dataloader: str (dataloader module path)
 3. batch_size: int
