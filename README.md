@@ -7,8 +7,8 @@ Build your own Text-to-SQL Model.
 Training and Testing is done in the following sequence.  
 
 1. DataLoader loads data (preprocessing data if necessary)  
-2. Text-to-SQL model receives data from  DataLoader and preprocess in the batch unit  
-3. Text-to-SQL model predicts SQL  
+2. Text-to-SQL model receives data from  DataLoader and preprocess the data as a batch
+3. Text-to-SQL model predicts SQL from text 
 4. Text-to-SQL model evaluates the result  
 
 ## Requirments
