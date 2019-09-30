@@ -141,6 +141,7 @@ class IRNet(BasicModel):
                         action_tm1 = example.sketch_sketch[t - 1]
                         if type(action_tm1) in [define_rule.Root1,
                                                 define_rule.Root]:
+                            # TODO - nested Root 빼기
                             a_tm1_embed = self.production_embed.weight[self.grammar.prod2id[action_tm1.production]]
                         else:
                             print(action_tm1, 'only for sketch-sketch')
@@ -713,7 +714,7 @@ class IRNet(BasicModel):
                         new_hyp.sketch_actions.insert(0, define_rule.Root)
                     elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Filter > A Root':
                         new_hyp.sketch_actions.insert(0, define_rule.Root)
-                    elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Filter !=1 A Root':
+                    elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Filter != A Root':
                         new_hyp.sketch_actions.insert(0, define_rule.Root)
                     elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Filter between A Root':
                         new_hyp.sketch_actions.insert(0, define_rule.Root)

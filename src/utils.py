@@ -291,16 +291,18 @@ def epoch_train(model, optimizer, batch_size, sql_data, table_data,
         optimizer.zero_grad()
 
         score = model.forward(examples)
-        loss_sketch = -score[0]
-        loss_lf = -score[1]
+        loss_sketch_sketch = -score[0]
+        loss_sketch = -score[1]
+        loss_lf = -score[2]
 
+        loss_sketch_sketch = torch.mean(loss_sketch_sketch)
         loss_sketch = torch.mean(loss_sketch)
         loss_lf = torch.mean(loss_lf)
 
         if epoch > loss_epoch_threshold:
-            loss = loss_lf + sketch_loss_coefficient * loss_sketch
+            loss = loss_lf + sketch_loss_coefficient * loss_sketch + sketch_loss_coefficient * loss_sketch_sketch
         else:
-            loss = loss_lf + loss_sketch
+            loss = loss_lf + loss_sketch + loss_sketch_sketch
 
         loss.backward()
         if args.clip_grad > 0.:
