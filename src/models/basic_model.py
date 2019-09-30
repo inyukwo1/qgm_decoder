@@ -16,6 +16,7 @@ from torch.autograd import Variable
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
 from src.rule import semQL as define_rule
+from src.rule.semQL import Action
 
 
 class BasicModel(nn.Module):
@@ -104,6 +105,34 @@ class BasicModel(nn.Module):
                 padding_result.append(define_rule.T(0))
 
         return padding_result
+
+    def padding_sketch_sketch(self, sketch_sketch):
+        padding_result = []
+        for action in sketch_sketch:
+            padding_result.append(action)
+            if type(action) == define_rule.Root:
+                if action.id_c == 0:
+                    padding_result.append(define_rule.Sel(0))
+                    padding_result.append(define_rule.Sup(0))
+                    padding_result.append(define_rule.Filter(0))
+                elif action.id_c == 1:
+                    padding_result.append(define_rule.Sel(0))
+                    padding_result.append(define_rule.Filter(0))
+                    padding_result.append(define_rule.Order(0))
+                elif action.id_c == 2:
+                    padding_result.append(define_rule.Sel(0))
+                    padding_result.append(define_rule.Sup(0))
+                elif action.id_c == 3:
+                    padding_result.append(define_rule.Sel(0))
+                    padding_result.append(define_rule.Filter(0))
+                elif action.id_c == 4:
+                    padding_result.append(define_rule.Sel(0))
+                    padding_result.append(define_rule.Order(0))
+                elif action.id_c == 5:
+                    padding_result.append(define_rule.Sel(0))
+
+        return padding_result
+
 
     def gen_x_batch(self, q):
         B = len(q)

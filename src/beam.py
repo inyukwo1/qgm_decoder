@@ -28,15 +28,30 @@ class ActionInfo(object):
 
 
 class Beams(object):
-    def __init__(self, is_sketch=False):
+    def __init__(self, is_sketch=False, is_sketch_sketch=False, sketch_sketch_actions=None):
         self.actions = []
         self.action_infos = []
         self.inputs = []
         self.score = 0.
         self.t = 0
         self.is_sketch = is_sketch
+        self.is_sketch_sketch = is_sketch_sketch
         self.sketch_step = 0
+        self.sketch_sketch_step = 0
         self.sketch_attention_history = list()
+        self.sketch_sketch_attention_history = list()
+
+        self.sketch_sketch_actions = copy.copy(sketch_sketch_actions)
+        self.sketch_actions = []
+
+    def pop_sketch_actions(self):
+        if not self.sketch_actions:
+            return None
+        else:
+            return self.sketch_actions.pop(0)
+
+    def pop_sketch_sketch_actions(self):
+        return self.sketch_sketch_actions.pop(0)
 
     def get_availableClass(self):
         """
@@ -55,7 +70,7 @@ class Beams(object):
 
         stack = [semQL.Root1]
         for action in self.actions:
-            infer_action = action.get_next_action(is_sketch=self.is_sketch)
+            infer_action = action.get_next_action(is_sketch=self.is_sketch, is_sketch_sketch=self.is_sketch_sketch)
             infer_action.reverse()
             if stack[-1] is type(action):
                 stack.pop()
@@ -128,12 +143,16 @@ class Beams(object):
         new_hyp = self.clone_and_apply_action(action)
         new_hyp.action_infos.append(action_info)
         new_hyp.sketch_step = self.sketch_step
+        new_hyp.sketch_sketch_step = self.sketch_sketch_step
         new_hyp.sketch_attention_history = copy.copy(self.sketch_attention_history)
+        new_hyp.sketch_sketch_attention_history = copy.copy(self.sketch_sketch_attention_history)
+        new_hyp.sketch_sketch_actions = copy.copy(self.sketch_sketch_actions)
+        new_hyp.sketch_actions = copy.copy(self.sketch_actions)
 
         return new_hyp
 
     def copy(self):
-        new_hyp = Beams(is_sketch=self.is_sketch)
+        new_hyp = Beams(is_sketch=self.is_sketch, is_sketch_sketch=self.is_sketch_sketch)
         # if self.tree:
         #     new_hyp.tree = self.tree.copy()
 
@@ -141,8 +160,11 @@ class Beams(object):
         new_hyp.score = self.score
         new_hyp.t = self.t
         new_hyp.sketch_step = self.sketch_step
+        new_hyp.sketch_sketch_step = self.sketch_sketch_step
         new_hyp.sketch_attention_history = copy.copy(self.sketch_attention_history)
-
+        new_hyp.sketch_sketch_attention_history = copy.copy(self.sketch_sketch_attention_history)
+        new_hyp.sketch_sketch_actions = copy.copy(self.sketch_sketch_actions)
+        new_hyp.sketch_actions = copy.copy(self.sketch_actions)
         return new_hyp
 
     def infer_n(self):

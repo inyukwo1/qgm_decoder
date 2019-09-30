@@ -18,6 +18,8 @@ from src.models import nn_utils
 from src.models.basic_model import BasicModel
 from src.models.pointer_net import PointerNet
 from src.rule import semQL as define_rule
+from src.dataset import Example
+from typing import List
 
 
 class IRNet(BasicModel):
@@ -50,12 +52,16 @@ class IRNet(BasicModel):
 
         self.sketch_decoder_lstm = nn.LSTMCell(input_dim, args.hidden_size)
 
+        self.sketch_sketch_decoder_lstm = nn.LSTMCell(input_dim, args.hidden_size)
+
         # initialize the decoder's state and cells with encoder hidden states
         self.decoder_cell_init = nn.Linear(args.hidden_size, args.hidden_size)
 
+        self.att_sketch_sketch_linear = nn.Linear(args.hidden_size, args.hidden_size, bias=False)
         self.att_sketch_linear = nn.Linear(args.hidden_size, args.hidden_size, bias=False)
         self.att_lf_linear = nn.Linear(args.hidden_size, args.hidden_size, bias=False)
 
+        self.sketch_sketch_att_vec_linear = nn.Linear(args.hidden_size + args.hidden_size, args.att_vec_size, bias=False)
         self.sketch_att_vec_linear = nn.Linear(args.hidden_size + args.hidden_size, args.att_vec_size, bias=False)
         self.lf_att_vec_linear = nn.Linear(args.hidden_size + args.hidden_size, args.att_vec_size, bias=False)
 
@@ -63,8 +69,6 @@ class IRNet(BasicModel):
         self.prob_len = nn.Linear(1, 1)
 
         self.col_type = nn.Linear(4, args.col_embed_size)
-        self.sketch_encoder = nn.LSTM(args.action_embed_size, args.action_embed_size // 2, bidirectional=True,
-                                      batch_first=True)
 
         self.production_embed = nn.Embedding(len(grammar.prod2id), args.action_embed_size)
         self.type_embed = nn.Embedding(len(grammar.type2id), args.type_embed_size)
@@ -99,7 +103,7 @@ class IRNet(BasicModel):
         nn.init.xavier_normal_(self.N_embed.weight.data)
         print('Use Column Pointer: ', True if self.use_column_pointer else False)
         
-    def forward(self, examples):
+    def forward(self, examples: List[Example]):
         args = self.args
         # now should implement the examples
         batch = Batch(examples, self.grammar, cuda=self.args.cuda)
@@ -111,6 +115,7 @@ class IRNet(BasicModel):
 
         src_encodings = self.dropout(src_encodings)
 
+        utterance_encodings_sketch_sketch_linear = self.att_sketch_sketch_linear(src_encodings)
         utterance_encodings_sketch_linear = self.att_sketch_linear(src_encodings)
         utterance_encodings_lf_linear = self.att_lf_linear(src_encodings)
 
@@ -121,7 +126,75 @@ class IRNet(BasicModel):
         zero_action_embed = Variable(self.new_tensor(args.action_embed_size).zero_())
         zero_type_embed = Variable(self.new_tensor(args.type_embed_size).zero_())
 
-        sketch_attention_history = list()
+        for t in range(batch.max_sketch_sketch_num):
+            if t == 0:
+                x = Variable(self.new_tensor(len(batch), self.sketch_sketch_decoder_lstm.input_size).zero_(),
+                             requires_grad=False)
+            else:
+                a_tm1_embeds = []
+                pre_types = []
+                for e_id, example in enumerate(examples):
+
+                    if t < len(example.sketch_sketch):
+                        # get the last action
+                        # This is the action embedding
+                        action_tm1 = example.sketch_sketch[t - 1]
+                        if type(action_tm1) in [define_rule.Root1,
+                                                define_rule.Root]:
+                            a_tm1_embed = self.production_embed.weight[self.grammar.prod2id[action_tm1.production]]
+                        else:
+                            print(action_tm1, 'only for sketch-sketch')
+                            quit()
+                            a_tm1_embed = zero_action_embed
+                            pass
+                    else:
+                        a_tm1_embed = zero_action_embed
+
+                    a_tm1_embeds.append(a_tm1_embed)
+
+                a_tm1_embeds = torch.stack(a_tm1_embeds)
+                inputs = [a_tm1_embeds]
+
+                for e_id, example in enumerate(examples):
+                    if t < len(example.sketch_sketch):
+                        action_tm = example.sketch_sketch[t - 1]
+                        pre_type = self.type_embed.weight[self.grammar.type2id[type(action_tm)]]
+                    else:
+                        pre_type = zero_type_embed
+                    pre_types.append(pre_type)
+
+                pre_types = torch.stack(pre_types)
+
+                inputs.append(att_tm1)
+                inputs.append(pre_types)
+                x = torch.cat(inputs, dim=-1)
+
+            src_mask = batch.src_token_mask
+
+            (h_t, cell_t), att_t, aw = self.step(x, h_tm1, src_encodings,
+                                                 utterance_encodings_sketch_sketch_linear, self.sketch_sketch_decoder_lstm,
+                                                 self.sketch_sketch_att_vec_linear,
+                                                 src_token_mask=src_mask, return_att_weight=True)
+
+            # get the Root possibility
+            apply_rule_prob = F.softmax(self.production_readout(att_t), dim=-1)
+
+            for e_id, example in enumerate(examples):
+                if t < len(example.sketch_sketch):
+                    action_t = example.sketch_sketch[t]
+                    act_prob_t_i = apply_rule_prob[e_id, self.grammar.prod2id[action_t.production]]
+                    action_probs[e_id].append(act_prob_t_i)
+
+            h_tm1 = (h_t, cell_t)
+            att_tm1 = att_t
+
+        sketch_sketch_prob_var = torch.stack(
+            [torch.stack(action_probs_i, dim=0).log().sum() for action_probs_i in action_probs], dim=0)
+
+
+        action_probs = [[] for _ in examples]
+
+        h_tm1 = dec_init_vec
 
         for t in range(batch.max_sketch_num):
             if t == 0:
@@ -177,7 +250,6 @@ class IRNet(BasicModel):
                                                  utterance_encodings_sketch_linear, self.sketch_decoder_lstm,
                                                  self.sketch_att_vec_linear,
                                                  src_token_mask=src_mask, return_att_weight=True)
-            sketch_attention_history.append(att_t)
 
             # get the Root possibility
             apply_rule_prob = F.softmax(self.production_readout(att_t), dim=-1)
@@ -294,7 +366,7 @@ class IRNet(BasicModel):
 
             apply_rule_prob = F.softmax(self.production_readout(att_t), dim=-1)
             table_appear_mask_val = torch.from_numpy(table_appear_mask)
-            if self.cuda:
+            if self.args.cuda:
                 table_appear_mask_val = table_appear_mask_val.cuda()
 
             if self.use_column_pointer:
@@ -343,7 +415,7 @@ class IRNet(BasicModel):
         lf_prob_var = torch.stack(
             [torch.stack(action_probs_i, dim=0).log().sum() for action_probs_i in action_probs], dim=0)
 
-        return [sketch_prob_var, lf_prob_var]
+        return [sketch_sketch_prob_var, sketch_prob_var, lf_prob_var]
 
     def parse(self, examples, beam_size=5):
         """
@@ -357,6 +429,7 @@ class IRNet(BasicModel):
         src_encodings, (last_state, last_cell) = self.encode(batch.src_sents, batch.src_sents_len, None)
         src_encodings = self.dropout(src_encodings)
 
+        utterance_encodings_sketch_sketch_linear = self.att_sketch_sketch_linear(src_encodings)
         utterance_encodings_sketch_linear = self.att_sketch_linear(src_encodings)
         utterance_encodings_lf_linear = self.att_lf_linear(src_encodings)
 
@@ -364,33 +437,27 @@ class IRNet(BasicModel):
         h_tm1 = dec_init_vec
 
         t = 0
-        beams = [Beams(is_sketch=True)]
+        beams = [Beams(is_sketch_sketch=True)]
         completed_beams = []
-
         while len(completed_beams) < beam_size and t < self.args.decode_max_time_step:
             hyp_num = len(beams)
             exp_src_enconding = src_encodings.expand(hyp_num, src_encodings.size(1),
                                                      src_encodings.size(2))
-            exp_src_encodings_sketch_linear = utterance_encodings_sketch_linear.expand(hyp_num,
-                                                                                       utterance_encodings_sketch_linear.size(
+            exp_src_encodings_sketch_sketch_linear = utterance_encodings_sketch_sketch_linear.expand(hyp_num,
+                                                                                       utterance_encodings_sketch_sketch_linear.size(
                                                                                            1),
-                                                                                       utterance_encodings_sketch_linear.size(
+                                                                                       utterance_encodings_sketch_sketch_linear.size(
                                                                                            2))
             if t == 0:
                 with torch.no_grad():
-                    x = Variable(self.new_tensor(1, self.sketch_decoder_lstm.input_size).zero_())
+                    x = Variable(self.new_tensor(1, self.sketch_sketch_decoder_lstm.input_size).zero_())
             else:
                 a_tm1_embeds = []
                 pre_types = []
                 for e_id, hyp in enumerate(beams):
                     action_tm1 = hyp.actions[-1]
                     if type(action_tm1) in [define_rule.Root1,
-                                            define_rule.Root,
-                                            define_rule.Sel,
-                                            define_rule.Filter,
-                                            define_rule.Sup,
-                                            define_rule.N,
-                                            define_rule.Order]:
+                                            define_rule.Root]:
                         a_tm1_embed = self.production_embed.weight[self.grammar.prod2id[action_tm1.production]]
                     else:
                         raise ValueError('unknown action %s' % action_tm1)
@@ -411,8 +478,8 @@ class IRNet(BasicModel):
                 x = torch.cat(inputs, dim=-1)
 
             (h_t, cell_t), att_t = self.step(x, h_tm1, exp_src_enconding,
-                                             exp_src_encodings_sketch_linear, self.sketch_decoder_lstm,
-                                             self.sketch_att_vec_linear,
+                                             exp_src_encodings_sketch_sketch_linear, self.sketch_sketch_decoder_lstm,
+                                             self.sketch_sketch_att_vec_linear,
                                              src_token_mask=None)
 
             apply_rule_log_prob = F.log_softmax(self.production_readout(att_t), dim=-1)
@@ -421,12 +488,7 @@ class IRNet(BasicModel):
             for hyp_id, hyp in enumerate(beams):
                 action_class = hyp.get_availableClass()
                 if action_class in [define_rule.Root1,
-                                    define_rule.Root,
-                                    define_rule.Sel,
-                                    define_rule.Filter,
-                                    define_rule.Sup,
-                                    define_rule.N,
-                                    define_rule.Order]:
+                                    define_rule.Root]:
                     possible_productions = self.grammar.get_production(action_class)
                     for possible_production in possible_productions:
                         prod_id = self.grammar.prod2id[possible_production]
@@ -485,10 +547,213 @@ class IRNet(BasicModel):
             else:
                 break
 
+        # now get the sketch_sketch result
+        completed_beams.sort(key=lambda hyp: -hyp.score)
+        if len(completed_beams) == 0:
+            return [[], [], []]
+
+        sketch_sketch_actions = completed_beams[0].actions
+        padding_sketch_sketch = self.padding_sketch_sketch(sketch_sketch_actions)
+
+
+        h_tm1 = dec_init_vec
+
+        t = 0
+        beams = [Beams(is_sketch=True, sketch_sketch_actions=sketch_sketch_actions)]
+        completed_beams = []
+
+        while len(completed_beams) < beam_size and t < self.args.decode_max_time_step:
+            hyp_num = len(beams)
+            exp_src_enconding = src_encodings.expand(hyp_num, src_encodings.size(1),
+                                                     src_encodings.size(2))
+            exp_src_encodings_sketch_linear = utterance_encodings_sketch_linear.expand(hyp_num,
+                                                                                       utterance_encodings_sketch_linear.size(
+                                                                                           1),
+                                                                                       utterance_encodings_sketch_linear.size(
+                                                                                           2))
+            if t == 0:
+                with torch.no_grad():
+                    x = Variable(self.new_tensor(1, self.sketch_decoder_lstm.input_size).zero_())
+            else:
+                a_tm1_embeds = []
+                pre_types = []
+                for e_id, hyp in enumerate(beams):
+                    action_tm1 = hyp.actions[-1]
+                    if type(action_tm1) in [define_rule.Root1,
+                                            define_rule.Root,
+                                            define_rule.Sel,
+                                            define_rule.Filter,
+                                            define_rule.Sup,
+                                            define_rule.N,
+                                            define_rule.Order]:
+                        a_tm1_embed = self.production_embed.weight[self.grammar.prod2id[action_tm1.production]]
+                    else:
+                        raise ValueError('unknown action %s' % action_tm1)
+
+                    a_tm1_embeds.append(a_tm1_embed)
+                a_tm1_embeds = torch.stack(a_tm1_embeds)
+                inputs = [a_tm1_embeds]
+
+                for e_id, hyp in enumerate(beams):
+                    action_tm = hyp.actions[-1]
+                    pre_type = self.type_embed.weight[self.grammar.type2id[type(action_tm)]]
+                    pre_types.append(pre_type)
+
+                pre_types = torch.stack(pre_types)
+
+                inputs.append(att_tm1)
+                inputs.append(pre_types)
+                x = torch.cat(inputs, dim=-1)
+
+            (h_t, cell_t), att_t = self.step(x, h_tm1, exp_src_enconding,
+                                             exp_src_encodings_sketch_linear, self.sketch_decoder_lstm,
+                                             self.sketch_att_vec_linear,
+                                             src_token_mask=None)
+
+            apply_rule_log_prob = F.log_softmax(self.production_readout(att_t), dim=-1)
+
+            new_hyp_meta = []
+            for hyp_id, hyp in enumerate(beams):
+                rule_type = hyp.pop_sketch_actions()
+                if rule_type is None:
+                    action = hyp.pop_sketch_sketch_actions()
+                    prod_id = self.grammar.prod2id[action.production]
+                    new_hyp_score = hyp.score + torch.tensor(0.0)
+                    meta_entry = {'action_type': type(action), 'prod_id': prod_id,
+                                  'score': torch.tensor(0.0), 'new_hyp_score': new_hyp_score,
+                                  'prev_hyp_id': hyp_id}
+                    new_hyp_meta.append(meta_entry)
+                else:
+                    possible_productions = self.grammar.get_production(rule_type)
+                    for possible_production in possible_productions:
+                        prod_id = self.grammar.prod2id[possible_production]
+                        prod_score = apply_rule_log_prob[hyp_id, prod_id]
+
+                        new_hyp_score = hyp.score + prod_score.data.cpu()
+                        meta_entry = {'action_type': rule_type, 'prod_id': prod_id,
+                                      'score': prod_score, 'new_hyp_score': new_hyp_score,
+                                      'prev_hyp_id': hyp_id}
+                        new_hyp_meta.append(meta_entry)
+
+            if not new_hyp_meta: break
+
+            new_hyp_scores = torch.stack([x['new_hyp_score'] for x in new_hyp_meta], dim=0)
+            top_new_hyp_scores, meta_ids = torch.topk(new_hyp_scores,
+                                                      k=min(new_hyp_scores.size(0),
+                                                            beam_size - len(completed_beams)))
+
+            live_hyp_ids = []
+            new_beams = []
+            for new_hyp_score, meta_id in zip(top_new_hyp_scores.data.cpu(), meta_ids.data.cpu()):
+                action_info = ActionInfo()
+                hyp_meta_entry = new_hyp_meta[meta_id]
+                prev_hyp_id = hyp_meta_entry['prev_hyp_id']
+                prev_hyp = beams[prev_hyp_id]
+                action_type_str = hyp_meta_entry['action_type']
+
+                if 'prod_id' in hyp_meta_entry:
+                    prod_id = hyp_meta_entry['prod_id']
+                if prod_id < len(self.grammar.id2prod):
+                    production = self.grammar.id2prod[prod_id]
+                    production_list = list(action_type_str._init_grammar())
+                    action = action_type_str(production_list.index(production))
+                else:
+                    raise NotImplementedError
+
+                action_info.action = action
+                action_info.t = t
+                action_info.score = hyp_meta_entry['score']
+                new_hyp = prev_hyp.clone_and_apply_action_info(action_info)
+                new_hyp.score = new_hyp_score
+                new_hyp.inputs.extend(prev_hyp.inputs)
+                if hyp_meta_entry['action_type'] == define_rule.Root:
+                    if self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Root Sel Sup Filter':
+                        new_hyp.sketch_actions.insert(0, define_rule.Filter)
+                        new_hyp.sketch_actions.insert(0, define_rule.Sup)
+                        new_hyp.sketch_actions.insert(0, define_rule.Sel)
+                    elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Root Sel Filter Order':
+                        new_hyp.sketch_actions.insert(0, define_rule.Order)
+                        new_hyp.sketch_actions.insert(0, define_rule.Filter)
+                        new_hyp.sketch_actions.insert(0, define_rule.Sel)
+                    elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Root Sel Sup':
+                        new_hyp.sketch_actions.insert(0, define_rule.Sup)
+                        new_hyp.sketch_actions.insert(0, define_rule.Sel)
+                    elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Root Sel Filter':
+                        new_hyp.sketch_actions.insert(0, define_rule.Filter)
+                        new_hyp.sketch_actions.insert(0, define_rule.Sel)
+                    elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Root Sel Order':
+                        new_hyp.sketch_actions.insert(0, define_rule.Order)
+                        new_hyp.sketch_actions.insert(0, define_rule.Sel)
+                    elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Root Sel':
+                        new_hyp.sketch_actions.insert(0, define_rule.Sel)
+                    else:
+                        assert  False
+                elif hyp_meta_entry['action_type'] == define_rule.Sel:
+                    if self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Sel N':
+                        new_hyp.sketch_actions.insert(0, define_rule.N)
+                    else:
+                        assert False
+                elif hyp_meta_entry['action_type'] == define_rule.Sup:
+                    if self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Sup des A':
+                        pass
+                    elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Sup asc A':
+                        pass
+                    else:
+                        assert False
+                elif hyp_meta_entry['action_type'] == define_rule.Filter:
+                    if self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Filter and Filter Filter':
+                        new_hyp.sketch_actions.insert(0, define_rule.Filter)
+                        new_hyp.sketch_actions.insert(0, define_rule.Filter)
+                    elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Filter or Filter Filter':
+                        new_hyp.sketch_actions.insert(0, define_rule.Filter)
+                        new_hyp.sketch_actions.insert(0, define_rule.Filter)
+                    elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Filter = A Root':
+                        new_hyp.sketch_actions.insert(0, define_rule.Root)
+                    elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Filter < A Root':
+                        new_hyp.sketch_actions.insert(0, define_rule.Root)
+                    elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Filter > A Root':
+                        new_hyp.sketch_actions.insert(0, define_rule.Root)
+                    elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Filter !=1 A Root':
+                        new_hyp.sketch_actions.insert(0, define_rule.Root)
+                    elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Filter between A Root':
+                        new_hyp.sketch_actions.insert(0, define_rule.Root)
+                    elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Filter >= A Root':
+                        new_hyp.sketch_actions.insert(0, define_rule.Root)
+                    elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Filter <= A Root':
+                        new_hyp.sketch_actions.insert(0, define_rule.Root)
+                    elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Filter in A Root':
+                        new_hyp.sketch_actions.insert(0, define_rule.Root)
+                    elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Filter not_in A Root':
+                        new_hyp.sketch_actions.insert(0, define_rule.Root)
+                elif hyp_meta_entry['action_type'] == define_rule.Order:
+                    if self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Order des A':
+                        pass
+                    elif self.grammar.id2prod[hyp_meta_entry['prod_id']] == 'Order asc A':
+                        pass
+                    else:
+                        assert False
+
+                if new_hyp.is_valid is False:
+                    continue
+
+                if new_hyp.completed:
+                    completed_beams.append(new_hyp)
+                else:
+                    new_beams.append(new_hyp)
+                    live_hyp_ids.append(prev_hyp_id)
+
+            if live_hyp_ids:
+                h_tm1 = (h_t[live_hyp_ids], cell_t[live_hyp_ids])
+                att_tm1 = att_t[live_hyp_ids]
+                beams = new_beams
+                t += 1
+            else:
+                break
+
         # now get the sketch result
         completed_beams.sort(key=lambda hyp: -hyp.score)
         if len(completed_beams) == 0:
-            return [[], []]
+            return [[], [], []]
 
         sketch_actions = completed_beams[0].actions
         # sketch_actions = examples.sketch
@@ -734,7 +999,7 @@ class IRNet(BasicModel):
 
         completed_beams.sort(key=lambda hyp: -hyp.score)
 
-        return [completed_beams, sketch_actions]
+        return [completed_beams, sketch_actions, sketch_sketch_actions]
 
     def step(self, x, h_tm1, src_encodings, src_encodings_att_linear, decoder, attention_func, src_token_mask=None,
              return_att_weight=False):

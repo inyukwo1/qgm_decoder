@@ -12,19 +12,22 @@ Keywords = ['des', 'asc', 'and', 'or', 'sum', 'min', 'max', 'avg', 'none', '=', 
 
 
 class Grammar(object):
-    def __init__(self, is_sketch=False):
+    def __init__(self, is_sketch=False, is_sketch_sketch=False):
         self.begin = 0
         self.type_id = 0
         self.is_sketch = is_sketch
+        self.is_sketch_sketch = is_sketch_sketch
         self.prod2id = {}
         self.type2id = {}
-        self._init_grammar(Sel)
-        self._init_grammar(Root)
-        self._init_grammar(Sup)
-        self._init_grammar(Filter)
-        self._init_grammar(Order)
-        self._init_grammar(N)
         self._init_grammar(Root1)
+        self._init_grammar(Root)
+
+        if not self.is_sketch_sketch:
+            self._init_grammar(Sel)
+            self._init_grammar(Sup)
+            self._init_grammar(Filter)
+            self._init_grammar(Order)
+            self._init_grammar(N)
 
         if not self.is_sketch:
             self._init_grammar(A)
@@ -62,13 +65,16 @@ class Action(object):
         self.production = None
         self.children = list()
 
-    def get_next_action(self, is_sketch=False):
+    def get_next_action(self, is_sketch=False, is_sketch_sketch=False):
         actions = list()
         for x in self.production.split(' ')[1:]:
             if x not in Keywords:
                 rule_type = eval(x)
-                if is_sketch:
-                    if rule_type is not A:
+                if is_sketch_sketch:
+                    if rule_type is Root1 or rule_type is Root:
+                        actions.append(rule_type)
+                elif is_sketch:
+                    if rule_type in {Sel, Sup, Filter, Order, N, Root, Root1}:
                         actions.append(rule_type)
                 else:
                     actions.append(rule_type)

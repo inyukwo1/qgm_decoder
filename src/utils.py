@@ -79,6 +79,7 @@ def load_word_emb(file_name, use_small=False):
         with open(file_name) as inf:
             for idx, line in enumerate(inf):
                 if (use_small and idx >= 5000):
+                    ret['unk'] = np.array(list(map(lambda x: float(x), info[1:])))
                     break
                 info = line.strip().split(' ')
                 if info[0].lower() not in ret:
@@ -337,11 +338,13 @@ def epoch_acc(model, batch_size, sql_data, table_data, beam_size=3):
             simple_json = example.sql_json['pre_sql']
 
             simple_json['sketch_result'] =  " ".join(str(x) for x in results_all[1])
+            simple_json['sketch_sketch_result'] = " ".join(str(x) for x in results_all[2])
             simple_json['model_result'] = pred
 
             json_datas.append(simple_json)
         st = ed
     return json_datas
+
 
 def eval_acc(preds, sqls):
     sketch_correct, best_correct = 0, 0

@@ -33,8 +33,8 @@ def train(args):
 
     model = IRNet(args, grammar)
 
-
-    if args.cuda: model.cuda()
+    if args.cuda:
+        model.cuda()
 
     # now get the optimizer
     optimizer_cls = eval('torch.optim.%s' % args.optimizer)
@@ -59,7 +59,7 @@ def train(args):
 
         model.load_state_dict(pretrained_modeled)
 
-    model.word_emb = utils.load_word_emb(args.glove_embed_path)
+    model.word_emb = utils.load_word_emb(args.glove_embed_path, use_small=args.toy)
     # begin train
 
     model_save_path = utils.init_log_checkpoint_path(args)

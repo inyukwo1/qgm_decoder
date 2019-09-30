@@ -356,6 +356,7 @@ def infer_from_clause(table_names, schema, columns):
         assert current_tbl_idx != next_tbl_idx
 
         tar_set = set((current_tbl_idx, next_tbl_idx))
+        found = False
         for item in cond_list:
             cur_set = set((item[0][0], item[1][0]))
             # If find primary and foreign relation columns
@@ -378,9 +379,12 @@ def infer_from_clause(table_names, schema, columns):
     else:
         clause = '{} AS {}'.format(join_clause[0][0], join_clause[0][1])
         for idx in range(1, len(join_clause)):
-            pre_js = join_clause[idx-1]
-            cur_js = join_clause[idx]
-            clause += ' JOIN {} AS {} ON {}.{} = {}.{}'.format(cur_js[0], cur_js[1], pre_js[1], pre_js[3], cur_js[1], cur_js[2])
+            try:
+                pre_js = join_clause[idx-1]
+                cur_js = join_clause[idx]
+                clause += ' JOIN {} AS {} ON {}.{} = {}.{}'.format(cur_js[0], cur_js[1], pre_js[1], pre_js[3], cur_js[1], cur_js[2])
+            except:
+                print("XXX====={}".format(join_clause))
         join_clause = clause
 
     return 'FROM ' + join_clause
