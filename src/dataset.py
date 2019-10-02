@@ -53,9 +53,15 @@ class Example:
 
         self.sketch_sketch = list()
         if self.truth_actions:
+            to_skeep = False
             for ta in self.truth_actions:
-                if isinstance(ta, define_rule.Root) or isinstance(ta, define_rule.Root1):
+                if isinstance(ta, define_rule.Filter) and ta.id_c in range(11, 20):
+                    to_skeep = True
+                if isinstance(ta, define_rule.Root1):
                     self.sketch_sketch.append(ta)
+                if isinstance(ta, define_rule.Root) and not to_skeep:
+                    self.sketch_sketch.append(ta)
+                    to_skeep = False
 
 
 class cached_property(object):
