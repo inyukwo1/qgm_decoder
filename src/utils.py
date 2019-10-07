@@ -67,6 +67,7 @@ def seq2idx(seq):
 
     return indices
 
+
 def load_word_emb(file_name, use_small=False):
     print ('Loading word embedding from %s'%file_name)
     ret = {}
@@ -88,6 +89,7 @@ def load_word_emb(file_name, use_small=False):
             pickle.dump(ret, cache_file)
     return ret
 
+
 def lower_keys(x):
     if isinstance(x, list):
         return [lower_keys(v) for v in x]
@@ -95,6 +97,7 @@ def lower_keys(x):
         return dict((k.lower(), lower_keys(v)) for k, v in x.items())
     else:
         return x
+
 
 def get_table_colNames(tab_ids, tab_cols):
     table_col_dict = {}
@@ -105,6 +108,7 @@ def get_table_colNames(tab_ids, tab_cols):
     for ci in range(len(table_col_dict)):
         result.append(table_col_dict[ci])
     return result
+
 
 def get_col_table_dict(tab_cols, tab_ids, sql):
     table_dict = {}
@@ -165,6 +169,7 @@ def schema_linking(question_arg, question_arg_type, one_hot_type, col_set_type, 
                         continue
                     col_set_type[sql['col_set'].index(col_probase)][3] += 1
 
+
 def process(sql, table):
 
     process_dict = {}
@@ -199,6 +204,7 @@ def process(sql, table):
 
     return process_dict
 
+
 def is_valid(rule_label, col_table_dict, sql):
     try:
         lf.build_tree(copy.copy(rule_label))
@@ -217,7 +223,7 @@ def is_valid(rule_label, col_table_dict, sql):
 
 
 def to_batch_seq(sql_data, table_data, idxes, st, ed,
-                 is_train=True):
+                 is_train=True, is_fake_train=False):
     """
 
     :return:
@@ -225,6 +231,7 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed,
     examples = []
 
     for i in range(st, ed):
+
         sql = sql_data[idxes[i]]
         table = table_data[sql['db_id']]
 
@@ -244,7 +251,7 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed,
         process_dict['col_set_iter'][0] = ['count', 'number', 'many']
 
         rule_label = None
-        if 'rule_label' in sql and is_train:
+        if 'rule_label' in sql and (is_train or is_fake_train):
             # handle the subquery on From cause
             if 'from' in sql['rule_label']:
                 continue
@@ -277,6 +284,7 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed,
         return examples
     else:
         return examples
+
 
 def epoch_train(model, optimizer, batch_size, sql_data, table_data,
                 args, epoch=0, loss_epoch_threshold=20, sketch_loss_coefficient=0.2):
@@ -312,7 +320,8 @@ def epoch_train(model, optimizer, batch_size, sql_data, table_data,
         st = ed
     return cum_loss / len(sql_data)
 
-def epoch_acc(model, batch_size, sql_data, table_data, beam_size=3):
+
+def epoch_acc(model, batch_size, sql_data, table_data, beam_size=3, log_path="./analysis", epoch=None):
     model.eval()
     perm = list(range(len(sql_data)))
     st = 0
@@ -320,14 +329,25 @@ def epoch_acc(model, batch_size, sql_data, table_data, beam_size=3):
     json_datas = []
     while st < len(sql_data):
         ed = st+batch_size if st+batch_size < len(perm) else len(perm)
-        examples = to_batch_seq(sql_data, table_data, perm, st, ed,
-                                                        is_train=False)
-        for example in examples:
-            results_all = model.parse(example, beam_size=beam_size)
+        examples = to_batch_seq(sql_data, table_data, perm, st, ed, is_train=False, is_fake_train=True)
+        #examples = to_batch_seq(sql_data, table_data, perm, st, ed,
+        #                                                is_train=False)
+        for idx, example in enumerate(examples):
+
+            # assert example.sql_json['question_arg'] == sql_data[st+idx]['question_arg'], "idx:{} {} || {}".format(st+idx, example.sql_json['question_arg'], sql_data[st+idx]['question_arg'])
+            # assert example.sql == sql_data[st+idx]['query'], "idx:{} {} || {} ".format(st+idx, example.sql, sql_data[st+idx]['query'])
+
+            # Get Log file
+            file = get_log_file(log_path, example)
+
+            # Process
+            file.write('Epoch: {}\n'.format(epoch))
+            results_all = model.parse(example, beam_size=beam_size, file=file, epoch=epoch)
+            file.close()
+
             results = results_all[0]
             list_preds = []
             try:
-
                 pred = " ".join([str(x) for x in results[0].actions])
                 for x in results:
                     list_preds.append(" ".join(str(x.actions)))
@@ -348,10 +368,10 @@ def epoch_acc(model, batch_size, sql_data, table_data, beam_size=3):
     return json_datas
 
 
-def eval_acc(preds, sqls):
+def eval_acc(preds):
     sketch_correct, best_correct = 0, 0
-    for i, (pred, sql) in enumerate(zip(preds, sqls)):
-        if pred['model_result'] == sql['rule_label']:
+    for i, pred in enumerate(preds):
+        if pred['model_result'] == pred['rule_label']:
             best_correct += 1
     print(best_correct / len(preds))
     return best_correct / len(preds)
@@ -397,6 +417,7 @@ def save_args(args, path):
     with open(path, 'w') as f:
         f.write(json.dumps(vars(args), indent=4))
 
+
 def init_log_checkpoint_path(args):
     save_path = args.save
     dir_name = save_path + str(int(time.time()))
@@ -404,3 +425,33 @@ def init_log_checkpoint_path(args):
     if os.path.exists(save_path) is False:
         os.makedirs(save_path)
     return save_path
+
+
+def get_log_file(log_path='./analysis', example=None):
+    # Parse Info
+    db_id = example.sql_json['db_id']
+    nl = example.sql_json['question']
+    sql = example.sql_json['query']
+    semql = example.sql_json['rule_label']
+    semql_sketch = example.sketch
+
+    # Check if file exist in the log_path
+    if not os.path.exists(log_path):
+        os.makedirs(log_path)
+    onlyfiles = [f for f in os.listdir(log_path) if os.path.isfile(os.path.join(log_path, f))]
+
+    nl_modified = nl.replace('/', '').replace(' ', '_')
+
+    # Open File
+    file_name = os.path.join(log_path, nl_modified)
+    file = open(file_name, 'a' if nl_modified in onlyfiles else 'w')
+
+    # Write Meta Data
+    if nl_modified not in onlyfiles:
+        file.write('DB_ID: {}\n'.format(db_id))
+        file.write('TEXT: {}\n'.format(nl))
+        file.write('SQL: {}\n'.format(sql))
+        file.write('SemQL: {}\n'.format(semql))
+        file.write('SemQL_sketch: {}\n\n'.format(semql_sketch))
+
+    return file

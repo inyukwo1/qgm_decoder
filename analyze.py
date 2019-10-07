@@ -21,7 +21,7 @@ from src.models.model import IRNet
 from src.rule import semQL
 
 
-def train(args):
+def analyze(args):
     """
     :param args:
     :return:
@@ -33,8 +33,8 @@ def train(args):
 
     model = IRNet(args, grammar)
 
-    if args.cuda:
-        model.cuda()
+
+    if args.cuda: model.cuda()
 
     # now get the optimizer
     optimizer_cls = eval('torch.optim.%s' % args.optimizer)
@@ -59,12 +59,16 @@ def train(args):
 
         model.load_state_dict(pretrained_modeled)
 
-    model.word_emb = utils.load_word_emb(args.glove_embed_path, use_small=args.toy)
-    # begin train
+    model.word_emb = utils.load_word_emb(args.glove_embed_path)
 
+    # begin train
     model_save_path = utils.init_log_checkpoint_path(args)
+    log_path = os.path.join(model_save_path, 'analysis')
     utils.save_args(args, os.path.join(model_save_path, 'config.json'))
     best_dev_acc = .0
+
+    # Remove that has inner query in the from clause
+    val_sql_data = [item for item in val_sql_data if 'from' not in item['rule_label']]
 
     try:
         with open(os.path.join(model_save_path, 'epoch.log'), 'w') as epoch_fd:
@@ -73,11 +77,11 @@ def train(args):
                     scheduler.step()
                 epoch_begin = time.time()
                 # loss = utils.epoch_train(model, optimizer, args.batch_size, sql_data, table_data, args,
-                #                    loss_epoch_threshold=args.loss_epoch_threshold,
-                #                    sketch_loss_coefficient=args.sketch_loss_coefficient)
+                #                   loss_epoch_threshold=args.loss_epoch_threshold,
+                #                   sketch_loss_coefficient=args.sketch_loss_coefficient)
                 epoch_end = time.time()
                 json_datas = utils.epoch_acc(model, args.batch_size, val_sql_data, val_table_data,
-                                             beam_size=args.beam_size)
+                                             beam_size=args.beam_size, log_path=log_path, epoch=epoch)
                 acc = utils.eval_acc(json_datas)
 
                 if acc > best_dev_acc:
@@ -99,7 +103,7 @@ def train(args):
     else:
         utils.save_checkpoint(model, os.path.join(model_save_path, 'end_model.model'))
         json_datas = utils.epoch_acc(model, args.batch_size, val_sql_data, val_table_data,
-                                     beam_size=args.beam_size)
+                                     beam_size=args.beam_size, log_path='./analysis', epoch=epoch)
         acc = utils.eval_acc(json_datas)
 
         print("Sketch Acc: %f, Acc: %f, Beam Acc: %f" % (acc, acc, acc,))
@@ -109,4 +113,4 @@ if __name__ == '__main__':
     arg_parser = arg.init_arg_parser()
     args = arg.init_config(arg_parser)
     print(args)
-    train(args)
+    analyze(args)

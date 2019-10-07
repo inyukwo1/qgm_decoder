@@ -110,7 +110,6 @@ class IRNet(BasicModel):
 
         table_appear_mask = batch.table_appear_mask
 
-
         src_encodings, (last_state, last_cell) = self.encode(batch.src_sents, batch.src_sents_len, None)
 
         src_encodings = self.dropout(src_encodings)
@@ -418,13 +417,17 @@ class IRNet(BasicModel):
 
         return [sketch_sketch_prob_var, sketch_prob_var, lf_prob_var]
 
-    def parse(self, examples, beam_size=5):
+    def parse(self, examples, beam_size=5, file=None, epoch=None):
         """
         one example a time
         :param examples:
         :param beam_size:
         :return:
         """
+        # hkkang code
+        sketch_solution = examples.sketch
+        total_solution = examples.truth_actions
+
         batch = Batch([examples], self.grammar, cuda=self.args.cuda)
 
         src_encodings, (last_state, last_cell) = self.encode(batch.src_sents, batch.src_sents_len, None)
@@ -563,7 +566,7 @@ class IRNet(BasicModel):
         beams = [Beams(is_sketch=True, sketch_sketch_actions=sketch_sketch_actions)]
         completed_beams = []
 
-        while len(completed_beams) < beam_size and t < self.args.decode_max_time_step:
+        while len(completed_beams) < beam_size and t < self.args.decode_max_time_step and t < len(sketch_solution):
             hyp_num = len(beams)
             exp_src_enconding = src_encodings.expand(hyp_num, src_encodings.size(1),
                                                      src_encodings.size(2))
@@ -642,6 +645,47 @@ class IRNet(BasicModel):
             top_new_hyp_scores, meta_ids = torch.topk(new_hyp_scores,
                                                       k=min(new_hyp_scores.size(0),
                                                             beam_size - len(completed_beams)))
+
+            # Compare Top action and real solution
+            # GT Action
+            gt_action = sketch_solution[t].id_c
+
+            # Prediction
+            prediction = meta_ids[0].item()
+
+            # Current Path
+            current_path = beams[0].actions
+
+            # Right or wrong
+            right_or_wrong = gt_action == prediction
+
+            # Solution
+            action_id = self.grammar.prod2id[sketch_solution[t].production]
+
+            # prob. scores for all possible action at this stage of decoding
+            all_probs = new_hyp_scores
+
+            # Modify next input to Correct Answer
+            try:
+                top_new_hyp_scores = top_new_hyp_scores.new([new_hyp_scores[gt_action]])
+                meta_ids = meta_ids.new([gt_action])
+            except:
+                pass
+
+            # Get Current Action Type
+            action_type = type(sketch_solution[t])
+            action_type_id = self.grammar.type2id[action_type]
+
+            # Write to Files (Sketch)
+            file.write('Type: Sketch\n')
+            file.write('Path History: {}\n'.format(current_path))
+            file.write('Correct: {}\n'.format(right_or_wrong))
+            file.write('Prediction: {}\n'.format(prediction))
+            file.write('Solution: {}\n'.format(gt_action))
+            file.write('Solution Action Id: {}\n'.format(action_id))
+            file.write('Solution Action Type Str: {}\n'.format(action_type))
+            file.write('Solution Action Type Id: {}\n'.format(action_type_id))
+            file.write('Scores: {}\n\n'.format(str(all_probs).replace('\n', ' ').replace('\t', '')))
 
             live_hyp_ids = []
             new_beams = []
@@ -904,8 +948,10 @@ class IRNet(BasicModel):
 
             new_hyp_meta = []
             for hyp_id, hyp in enumerate(beams):
+                is_detail = False
                 # TODO: should change this
                 if type(padding_sketch[t]) == define_rule.A:
+                    is_detail = True
                     possible_productions = self.grammar.get_production(define_rule.A)
                     for possible_production in possible_productions:
                         prod_id = self.grammar.prod2id[possible_production]
@@ -918,6 +964,7 @@ class IRNet(BasicModel):
                         new_hyp_meta.append(meta_entry)
 
                 elif type(padding_sketch[t]) == define_rule.C:
+                    is_detail = True
                     for col_id, _ in enumerate(batch.table_sents[0]):
                         col_sel_score = column_selection_log_prob[hyp_id, col_id]
                         new_hyp_score = hyp.score + col_sel_score.data.cpu()
@@ -926,6 +973,7 @@ class IRNet(BasicModel):
                                       'prev_hyp_id': hyp_id}
                         new_hyp_meta.append(meta_entry)
                 elif type(padding_sketch[t]) == define_rule.T:
+                    is_detail = True
                     for t_id, _ in enumerate(batch.table_names[0]):
                         t_sel_score = table_weights[hyp_id, t_id]
                         new_hyp_score = hyp.score + t_sel_score.data.cpu()
@@ -948,6 +996,39 @@ class IRNet(BasicModel):
             top_new_hyp_scores, meta_ids = torch.topk(new_hyp_scores,
                                                       k=min(new_hyp_scores.size(0),
                                                             beam_size - len(completed_beams)))
+
+            if is_detail:
+                # Prepare variables
+                current_path = beams[0].actions
+                gt_action = total_solution[t].id_c
+                prediction = meta_ids[0].item()
+                right_or_wrong = gt_action == prediction
+                try:
+                    action_id = self.grammar.prod2id[total_solution[t].production]
+                except:
+                    action_id = None
+
+                action_type = type(total_solution[t])
+                action_type_id = self.grammar.type2id[action_type]
+                all_probs = new_hyp_scores
+
+                # Modify next input to Correct Answer
+                try:
+                    top_new_hyp_scores = top_new_hyp_scores.new([new_hyp_scores[gt_action]])
+                    meta_ids = meta_ids.new([gt_action])
+                except:
+                    pass
+
+                # Write to Files (Details)
+                file.write('Type: Detail\n')
+                file.write('Path History: {}\n'.format(current_path))
+                file.write('Correct: {}\n'.format(right_or_wrong))
+                file.write('Prediction: {}\n'.format(prediction))
+                file.write('Solution: {}\n'.format(gt_action))
+                file.write('Solution Action Id: {}\n'.format(action_id))
+                file.write('Solution Action Type Str: {}\n'.format(action_type))
+                file.write('Solution Action Type Id: {}\n'.format(action_type_id))
+                file.write('Scores: {}\n\n'.format(str(all_probs).replace('\n', ' ').replace('\t', '')))
 
             live_hyp_ids = []
             new_beams = []
