@@ -480,10 +480,10 @@ def load_dataset(dataset_dir, use_small=False):
         print("Loading data from %s"%TABLE_PATH)
         table_data = json.load(inf)
 
-    train_sql_data, train_table_data = load_data_new(TRAIN_PATH, table_data, use_small=use_small)
+    # train_sql_data, train_table_data = load_data_new(TRAIN_PATH, table_data, use_small=use_small)
     val_sql_data, val_table_data = load_data_new(DEV_PATH, table_data, use_small=use_small)
 
-    return train_sql_data, train_table_data, val_sql_data, val_table_data
+    return None, None, val_sql_data, val_table_data
 
 
 def save_checkpoint(model, checkpoint_name):

@@ -13,23 +13,23 @@ import numpy as np
 
 def init_arg_parser():
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument('--seed', default=5783287, type=int, help='random seed')
-    arg_parser.add_argument('--cuda', action='store_true', help='use gpu')
+    arg_parser.add_argument('--seed', default=90, type=int, help='random seed')
+    arg_parser.add_argument('--cuda', default=True, help='use gpu')
     arg_parser.add_argument('--lr_scheduler', action='store_true', help='use learning rate scheduler')
     arg_parser.add_argument('--milestones', default=[30, 50], type=list, help='milestones for lr scheduler')
     arg_parser.add_argument('--lr_scheduler_gammar', default=1e-1, type=float, help='decay rate of learning rate scheduler')
-    arg_parser.add_argument('--column_pointer', action='store_true', help='use column pointer')
+    arg_parser.add_argument('--column_pointer', default=True, help='use column pointer')
     arg_parser.add_argument('--loss_epoch_threshold', default=20, type=int, help='loss epoch threshold')
     arg_parser.add_argument('--sketch_loss_coefficient', default=0.2, type=float, help='sketch loss coefficient')
-    arg_parser.add_argument('--sentence_features', action='store_true', help='use sentence features')
+    arg_parser.add_argument('--sentence_features', default=True, help='use sentence features')
     arg_parser.add_argument('--model_name', choices=['transformer', 'rnn', 'table', 'sketch'], default='rnn',
                             help='model name')
 
     arg_parser.add_argument('--lstm', choices=['lstm', 'lstm_with_dropout', 'parent_feed'], default='lstm')
 
-    arg_parser.add_argument('--bert', type=int, default=-1)
+    arg_parser.add_argument('--bert', type=int, default=5)
     arg_parser.add_argument('--load_model', default=None, type=str, help='load a pre-trained model')
-    arg_parser.add_argument('--glove_embed_path', default="glove.42B.300d.txt", type=str)
+    arg_parser.add_argument('--glove_embed_path', default="./data/glove.42B.300d.txt", type=str)
 
     arg_parser.add_argument('--batch_size', default=64, type=int, help='batch size')
     arg_parser.add_argument('--beam_size', default=5, type=int, help='beam size for beam search')
