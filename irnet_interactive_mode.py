@@ -26,6 +26,9 @@ import plotly.graph_objs as gro
 from pattern.en import lemma
 from plotly.offline import plot
 import time
+from scp import SCPClient
+import paramiko
+
 
 with open('preprocess/conceptNet/english_RelatedTo.pkl', 'rb') as f:
     english_RelatedTo = pickle.load(f)
@@ -37,6 +40,13 @@ DBDIR="data/database"
 PLOTDIR="web/public/"
 
 AGG_SQL=['count', 'avg', 'min', 'max', 'sum']
+
+def createSSHClient(server, port, user, password):
+    client = paramiko.SSHClient()
+    client.load_system_host_keys()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(server, port, user, password)
+    return client
 
 def plot_execution(db, sql):
 
@@ -130,6 +140,7 @@ def get_runner(model_path):
     model.eval()
 
     db_values = dict()
+
 
     with open("data/tables.json") as f:
         schema_tables = json.load(f)
@@ -435,28 +446,32 @@ def get_runner(model_path):
 
 runner = get_runner("saved_model/best_model_leaderboard.model")
 
+ssh = createSSHClient('141.223.199.39', '2022', 'hjkim', 'sksmsdi!wkfTodrlszlaguswl33')
+scp = SCPClient(ssh.get_transport())
 
 class Service(Resource):
     def get(self):
-        # try:
+        try:
             parser = reqparse.RequestParser()
             parser.add_argument('db_id', required=True, type=str)
             parser.add_argument('question', required=True, type=str)
             args = parser.parse_args()
             print("done well")
+
             result_query, actions, question, plot_filename = runner(args["db_id"], args["question"])
             if plot_filename == '': 
                 return {'result': result_query,
                     'actions': actions,
                     'question': question}
             else:
+                scp.put(os.path.join(PLOTDIR, plot_filename), os.path.join('/data1/Benchmark_RA/irnet/web/public', plot_filename))
                 return {'result': result_query,
                     'actions': actions,
                     'question': question,
                     'plot_filename': plot_filename}
-        # except Exception as e:
-        #     print("done not well")
-        #     return {'result': str(e)}
+        except Exception as e:
+            print("done not well")
+            return {'result': str(e)}
 
 app = Flask('irnet service')
 CORS(app)
