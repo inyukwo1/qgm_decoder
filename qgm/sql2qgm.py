@@ -29,7 +29,13 @@ def create_group_by_box(sql, info, schema):
                 table_id = schema['column_names'][col_id][0]
                 quantifiers += [table_id]
                 quantifier_types += ['f']
-            right_operand = having_unit[3]
+            if isinstance(having_unit[3], dict):
+                right_operand = sql2qgm(sql, having_unit[3], schema)
+                quantifiers += [right_operand]
+                quantifier_types += ['s']
+            else:
+                right_operand = having_unit[3]
+
             local_predicates += [(agg_id, col_id, operator, right_operand)]
         body = {'quantifiers': quantifiers, 'quantifier_types': quantifier_types,
                 'join_predicates': None, 'local_predicates': local_predicates}
@@ -108,7 +114,7 @@ def create_select_box(sql, info, schema):
         assert table2_id in quantifiers
 
         # join
-        join_predicates += [((col1_id), WHERE_OPS.index('='), (col2_id))]
+        join_predicates += [(col1_id, WHERE_OPS.index('='), col2_id)]
 
     for idx in range(0, len(info['where']), 2):
         where_unit = info['where'][idx]
@@ -132,6 +138,7 @@ def create_select_box(sql, info, schema):
         else:
             right_operand = where_unit[3]
 
+        # add quantifier id
         local_predicates += [(agg_id, col_id, operator, right_operand)]
 
     # Combine body
