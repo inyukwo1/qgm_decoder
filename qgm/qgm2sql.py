@@ -11,9 +11,6 @@ def decode_qgm_box(iidx, info, boxes, schema, alias_cnt):
     # assumption is that if there is a quantifier with type s for the from clause, there are no other quantifiers in the box for the from clause.
     # set dictioanry for alias
 
-    if iidx == 926:
-        stop = 1
-
     select_box = group_box = order_box = None
     for box in boxes:
         if box['operator'] in [BOX_OPS.index(key) for key in ['select', 'intersect', 'except', 'union']]:
@@ -36,7 +33,7 @@ def decode_qgm_box(iidx, info, boxes, schema, alias_cnt):
             if table_name not in alias:
                 alias[table_name] = alias_cnt
             else:
-                alias[table_name] = [alias[table_name], alias_cnt]
+                alias[table_name] = alias[table_name] + [alias_cnt] if isinstance(alias[table_name], list) else [alias[table_name], alias_cnt]
             alias_cnt += 1
             if query_from != 'FROM ':
                 query_from += ' JOIN '
@@ -45,7 +42,8 @@ def decode_qgm_box(iidx, info, boxes, schema, alias_cnt):
         assert len(select_box['body']['quantifiers']) == 1
         query_from += '(' + qgm2sql(iidx, info, select_box['body']['quantifiers'][0], schema, alias_cnt) + ')'
 
-    local_cnt = 0
+    local1_cnt = 0
+    local2_cnt = 0
     if len(alias) > 1:
         for idx in range(len(select_box['body']['join_predicates'])):
             col1_id, operator_id, col2_id = select_box['body']['join_predicates'][idx]
@@ -55,9 +53,12 @@ def decode_qgm_box(iidx, info, boxes, schema, alias_cnt):
             table2_name = schema['table_names_original'][table2_id]
             alias1_id = alias[table1_name]
             alias2_id = alias[table2_name]
+            if isinstance(alias1_id, list):
+                alias1_id = alias1_id[local1_cnt]
+                local1_cnt = (local1_cnt + 1) % len(alias[table1_name])
             if isinstance(alias2_id, list):
-                alias2_id = alias2_id[local_cnt]
-                local_cnt += 1
+                alias2_id = alias2_id[local2_cnt]
+                local2_cnt = (local2_cnt + 1) % len(alias[table2_name])
             query_from_cond = ' ON T{}.{} = T{}.{}'.format(alias1_id, col1_name, alias2_id, col2_name)
             key = max(alias1_id, alias2_id)
             split_idx = query_from.index('T{}'.format(key)) + len('T{}'.format(key))
@@ -67,36 +68,34 @@ def decode_qgm_box(iidx, info, boxes, schema, alias_cnt):
     query_where = ''
     # Construct where clause
     # get all local predicates and join predicates with quantifier type s
-    for idx in range(len(select_box['body']['local_predicates'])):
-        agg_id, col_id, operator_id, right_operand = select_box['body']['local_predicates'][idx]
-        table_id, col_name = schema['column_names_original'][col_id]
-        table_name = schema['table_names_original'][table_id]
-        alias_id = alias[table_name]
-        if isinstance(alias_id, list):
-            alias_id = alias_id[local_cnt]
-            local_cnt += 1
-        operator = WHERE_OPS[operator_id].upper()
+    if select_box['body']['local_predicates']:
+        for idx in range(len(select_box['body']['local_predicates'])):
+            agg_id, col_id, operator_id, right_operand = select_box['body']['local_predicates'][idx]
+            table_id, col_name = schema['column_names_original'][col_id]
+            table_name = schema['table_names_original'][table_id]
+            alias_id = alias[table_name]
+            if isinstance(alias_id, list):
+                alias_id = alias_id[local_cnt]
+                local_cnt += 1
+            operator = WHERE_OPS[operator_id].upper()
 
-        # Right operand
-        if isinstance(right_operand, list):
-            if isinstance(right_operand[0], dict):
-                right_operand = '(' + qgm2sql(iidx, info, right_operand, schema, alias_cnt) + ')'
-            elif operator_id == WHERE_OPS.index('between'):
-                right_operand = '{} AND {}'.format(right_operand[0], right_operand[1])
-            else:
-                agg2_id, col2_id = right_operand
-                table2_id, col2_name = schema['column_names_original'][col2_id]
-                table2_name = schema['table_names_original'][table2_id]
-                alias2_id = alias[table2_name]
-                alias2_id = alias2_id[local_cnt] if isinstance(alias2_id, list) else alias2_id
-                right_operand = 'T{}.{}'.format(alias2_id, col2_name)
+            # Right operand
+            if isinstance(right_operand, list):
+                if isinstance(right_operand[0], dict):
+                    right_operand = '(' + qgm2sql(iidx, info, right_operand, schema, alias_cnt) + ')'
+                elif operator_id == WHERE_OPS.index('between'):
+                    right_operand = '{} AND {}'.format(right_operand[0], right_operand[1])
+                else:
+                    agg2_id, col2_id = right_operand
+                    table2_id, col2_name = schema['column_names_original'][col2_id]
+                    table2_name = schema['table_names_original'][table2_id]
+                    alias2_id = alias[table2_name]
+                    alias2_id = alias2_id[local_cnt] if isinstance(alias2_id, list) else alias2_id
+                    right_operand = 'T{}.{}'.format(alias2_id, col2_name)
 
-        # Create query
-        query_where = query_where + ' AND ' if query_where else 'WHERE'
-        query_where += ' T{}.{} {} {}'.format(alias_id, col_name, operator, right_operand)
-
-    if query_where:
-        stop = 1
+            # Create query
+            query_where = query_where + ' AND ' if query_where else 'WHERE'
+            query_where += ' T{}.{} {} {}'.format(alias_id, col_name, operator, right_operand)
 
     # construct group by clause
     # if box with group by operator
@@ -139,24 +138,25 @@ def decode_qgm_box(iidx, info, boxes, schema, alias_cnt):
     # if box with order by operator
     query_order_by = ''
     if order_box:
-        assert len(order_box['head']) == 1
         assert len(order_box['body']['quantifier_types'][0]) == 1
         assert order_box['body']['quantifier_types'][0] == 'f'
-        agg_id, col_id = order_box['head'][0]
-        agg = AGG_OPS[agg_id]
-        table_id, col_name = schema['column_names_original'][col_id]
-        table_name = schema['table_names_original'][table_id]
+        for idx in range(len(order_box['head'])):
+            agg_id, col_id = order_box['head'][idx]
+            agg = AGG_OPS[agg_id]
+            table_id, col_name = schema['column_names_original'][col_id]
+            table_name = schema['table_names_original'][table_id]
 
-        if table_id == -1:
-            agg_col = col_name if agg == 'none' else '{}({})'.format(agg, col_name)
-        else:
-            alias_id = alias[table_name]
-            agg_col = 'T{}.{}'.format(alias_id, col_name) if agg == 'none' else '{}(T{}.{})'.format(agg, alias_id, col_name)
+            if table_id == -1:
+                agg_col = col_name if agg == 'none' else '{}({})'.format(agg, col_name)
+            else:
+                alias_id = alias[table_name]
+                agg_col = 'T{}.{}'.format(alias_id, col_name) if agg == 'none' else '{}(T{}.{})'.format(agg, alias_id, col_name)
 
-        direction = 'ASC' if order_box['body']['is_asc'] else 'DESC'
-        limit_num = order_box['body']['limit_num']
-        limit_num = ' limit {}'.format(limit_num) if limit_num else ''
-        query_order_by = 'ORDER BY {} {}{}'.format(agg_col, direction, limit_num)
+            direction = 'ASC' if order_box['body']['is_asc'] else 'DESC'
+            limit_num = order_box['body']['limit_num']
+            limit_num = ' limit {}'.format(limit_num) if limit_num else ''
+            query_order_by = ', {}'.format(agg_col) if query_order_by else 'ORDER BY {}'.format(agg_col)
+        query_order_by += '{}{}'.format(direction, limit_num)
 
     # Construct select clause
     # read in head of box with operator select
