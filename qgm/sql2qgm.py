@@ -33,6 +33,8 @@ def create_group_by_box(sql, info, schema):
                 right_operand = sql2qgm(sql, having_unit[3], schema)
                 quantifiers += [right_operand]
                 quantifier_types += ['s']
+            elif having_unit[4]:
+                right_operand = having_unit[3:5]
             else:
                 right_operand = having_unit[3]
 
@@ -50,8 +52,8 @@ def create_order_by_box(sql, info, schema, group_by_box):
     quantifiers = []
     quantifier_types = []
     if info['orderBy']:
-        order_type = info['orderBy'][0]
-        operator = 'orderByDesc' if order_type == 'desc' else 'orderByAsc'
+        is_asc = info['orderBy'][0] == 'asc'
+        limit_num = info['limit']
         for order_unit in info['orderBy'][1]:
             # Get info
             agg_id = order_unit[1][0]
@@ -67,9 +69,9 @@ def create_order_by_box(sql, info, schema, group_by_box):
                 quantifier_types += ['f']
         # Create body
         body = {'quantifiers': quantifiers, 'quantifier_types': quantifier_types,
-                'join_predicates': None, 'local_predicates': None}
+                'join_predicates': None, 'local_predicates': None, 'is_asc': is_asc, 'limit_num': limit_num}
         # Create box
-        box = {'head': heads, 'body': body, 'operator': BOX_OPS.index(operator)}
+        box = {'head': heads, 'body': body, 'operator': BOX_OPS.index('orderBy')}
         return box
     else:
         return None
@@ -129,6 +131,7 @@ def create_select_box(sql, info, schema):
 
         # Operator
         operator = where_unit[1]
+        operator = WHERE_OPS.index('not ' + WHERE_OPS[operator]) if where_unit[0] else operator
 
         # Operand2
         if isinstance(where_unit[3], dict):
@@ -137,6 +140,14 @@ def create_select_box(sql, info, schema):
             quantifier_types += ['s']
         else:
             right_operand = where_unit[3]
+            if isinstance(right_operand, list):
+                agg2_id = where_unit[3][0]
+                col2_id = where_unit[3][1]
+                right_operand = [agg2_id, col2_id]
+            elif where_unit[4]:
+                right_operand = where_unit[3:5]
+            else:
+                right_operand = where_unit[3]
 
         # add quantifier id
         local_predicates += [(agg_id, col_id, operator, right_operand)]
@@ -185,6 +196,7 @@ def sql2qgm(sql, info, schema):
     # Create box2
     if box_operator != 'select':
         box2 = sql2qgm(sql, info[box_operator], schema)
+        box2[0]['operator'] = BOX_OPS.index(box_operator)
         boxes += box2
 
     return boxes
