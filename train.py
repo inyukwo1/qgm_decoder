@@ -65,8 +65,8 @@ def train(args):
 
         model.load_state_dict(pretrained_modeled)
 
-    #model.word_emb = utils.load_word_emb(args.glove_embed_path)
-    model.word_emb = None
+    model.word_emb = utils.load_word_emb(args.glove_embed_path)
+    #model.word_emb = None
     # begin train
 
     model_save_path = utils.init_log_checkpoint_path(args)
