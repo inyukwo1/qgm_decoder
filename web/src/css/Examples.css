@@ -1,0 +1,22 @@
+.examples {
+    background-color: #e3edfc;
+    color: #1c52a3;
+    font-size: calc(2vmin);
+    margin: 1vh 0vw;
+    padding-bottom: 2vh;
+    padding-left: calc(1vmin);
+    padding-top: calc(1vmin);
+    display: flex;
+    justify-content: flex-end;
+  }
+  
+  .ex_item {
+    font-family:"Open Sans";
+    display: flex;
+    font-size: calc(2vmin);
+    align-items: left;
+    flex-direction: column;
+    border-bottom: dashed 1px #1c52a3;
+    color: #1c52a3;
+    padding: calc(0.1vh) calc(0.1vw) calc(0.1vh);
+  }

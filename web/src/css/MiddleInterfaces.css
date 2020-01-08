@@ -1,0 +1,26 @@
+.mybotui {
+    display: flex;
+}
+
+.botui-messages-container {
+    text-align: left;
+}
+
+.statusbar {
+    background-color: azure;
+    width: 10px;
+}
+
+.incorrect {
+    background-color: red;
+    width: 10px;
+}
+
+.correct {
+    width: 10px;
+}
+
+.padding {
+    width: 10px;
+    height: 10px;
+}
