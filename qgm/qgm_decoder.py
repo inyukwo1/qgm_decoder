@@ -23,6 +23,7 @@ class QGM_Decoder(nn.Module):
             torch.nn.ReLU(),
             torch.nn.Dropout(0.2)
         )
+        self.nested_layer == nn.Linear(emb_dim, emb_dim)
 
         # Pointer Network
         self.src_encoding_layer = nn.Linear(emb_dim, emb_dim, bias=False)
@@ -42,6 +43,7 @@ class QGM_Decoder(nn.Module):
         self.select_qf_num = nn.Linear(emb_dim, 5)
         self.select_qs_num = nn.Linear(emb_dim, 4)
         self.select_p_num = nn.Linear(emb_dim, 5)
+        self.select_p_layer = nn.Linear(emb_dim+emb_dim, emb_dim)
         self.select_p_agg = nn.Linear(emb_dim, len(AGG_OPS))
         self.select_p_op = nn.Linear(emb_dim, len(WHERE_OPS))
         self.select_head_num = nn.Linear(emb_dim, 6)
@@ -53,6 +55,7 @@ class QGM_Decoder(nn.Module):
         self.group_by_head_agg = nn.Linear(emb_dim, len(AGG_OPS))
         # Having
         self.group_by_p_num = nn.Linear(emb_dim, 5)
+        self.group_by_p_layer = nn.Linear(emb_dim+emb_dim, emb_dim)
         self.group_by_p_agg = nn.Linear(emb_dim, len(AGG_OPS))
         self.group_by_p_op = nn.Linear(emb_dim, len(WHERE_OPS))
         # Order by
@@ -76,10 +79,17 @@ class QGM_Decoder(nn.Module):
         self.encoded_tab = encoded_tab
 
 
-    def decode(self, state_vector, qgm=None):
-        # IUEN
-        # Here (attention_vector 및 box 계산하여 context_vector 새로 계산)
-        x = torch.zeros()
+    def decode(self, att, state_vector, qgm=None):
+        '''
+        Assumption:
+            1. no nested query (yet)
+            2. only local predicates for the where clause and having clause (yet)
+        '''
+
+        if att:
+            x = self.compute_lstm_input(None, att)
+        else:
+            x = torch.zeros()
         state_vector, att = self.compute_context_vector(x, state_vector)
 
         iuen_score = self.iuen_linear(att)
@@ -100,29 +110,27 @@ class QGM_Decoder(nn.Module):
         if self.is_train:
             split_idx = [idx for idx, box in enumerate(qgm) if box['operator'] in IUE_INDICES]
             assert len(split_idx) == 1
-            front_boxes = qgm[:split_idx]
-            rear_boxes = qgm[split_idx:]
+            gold_front_boxes = qgm[:split_idx]
+            gold_rear_boxes = qgm[split_idx:]
         else:
-            front_boxes = None
-            rear_boxes = None
+            gold_front_boxes = None
+            gold_rear_boxes = None
 
-        state_vector = self.decode_box(state_vector, prev_box=None, gold_boxes=front_boxes)
-
-        # Create boxes
-        boxes = None
+        pred_front_boxes, state_vector = self.decode_box(att, state_vector, prev_box=None, gold_boxes=gold_front_boxes)
+        pred_boxes = [pred_front_boxes]
 
         if box_operator != BOX_OPS.index('select'):
-            x = self.compute_lstm_input(boxes[-1], att)
-            state_vector, att = self.compute_context_vector(x, state_vector)
-            state_vector = self.decode_box(state_vector, prev_att=att, prev_bix=None, gold_boxes=rear_boxes)
-
-        return state_vector
+            pred_rear_boxes, state_vector = self.decode_box(att, state_vector, prev_box=pred_boxes[-1], gold_boxes=gold_rear_boxes)
+            pred_boxes += [pred_rear_boxes]
 
 
-    def decode_box(self, state_vector, prev_att, prev_box, gold_boxes):
+        return pred_boxes
+
+
+    def decode_box(self, att, state_vector, prev_box, gold_boxes):
         '''To-Do: Need to split self.is_group_by for front and rear??'''
 
-        x = self.compute_lstm_input(prev_box, prev_att)
+        x = self.compute_lstm_input(prev_box, att)
         state_vector, att = self.compute_context_vector(x, state_vector)
 
         # Get scores for groupBy, orderBy
@@ -148,26 +156,32 @@ class QGM_Decoder(nn.Module):
         is_orderBy = order_selected_idx == 1
 
         # Predict each box
-        # Here (attention_vector 및 box 계산하여 context_vector 새로 계산)
-        context_vector = self.decode_select_box(state_vector)
+        selected_box, context_vector = self.decode_select_box(att, state_vector)
+        boxes = [selected_box]
         if is_groupBy:
             # Here (attention_vector 및 box 계산하여 context_vector 새로 계산)
-            context_vector = self.decode_groupBy_box(state_vector)
+            x = self.compute_lstm_input(prev_box, att)
+            state_vector, att = self.compute_context_vector(x, state_vector)
+
+            group_by_box, context_vector = self.decode_groupBy_box(state_vector)
+            boxes += [group_by_box]
         if is_orderBy:
             # Here (attention_vector 및 box 계산하여 context_vector 새로 계산)
-            context_vector = self.decode_orderBy_box(state_vector)
+            x = self.compute_lstm_input(prev_box, att)
+            state_vector, att = self.compute_context_vector(x, state_vector)
 
-        return context_vector
+            order_by_box, context_vector = self.decode_orderBy_box(state_vector)
+            boxes += [order_by_box]
+
+        return boxes, context_vector
 
 
-    def decode_select_box(self, state_vector, box):
-        att = self.attention(self.encoded_src, self.encoded_src_att, state_vector[0])
-
+    def decode_select_box(self, att, state_vector, gold_box):
         # Predict quantifier type f num
         qf_num_score = self.select_qf_num(att)
         qf_num_prob = torch.log_softmax(qf_num_score, dim=-1)
         if self.is_train:
-            selected_qf_num_idx = len([item for item in box['body']['quantifier_types'] if item == 'f'])
+            selected_qf_num_idx = len([item for item in gold_box['body']['quantifier_types'] if item == 'f'])
             selected_qf_num_prob = torch.gather(qf_num_prob, 1, selected_qf_num_idx)
         else:
             selected_qf_num_prob, selected_qf_num_idx = torch.topk(qf_num_prob, 1)
@@ -176,7 +190,7 @@ class QGM_Decoder(nn.Module):
         qs_num_score = self.select_qs_num(att)
         qs_num_prob = torch.log_softmax(qs_num_score, dim=-1)
         if self.is_train:
-            selected_qs_num_idx = len([item for item in box['body']['quantifier_types'] if item == 's'])
+            selected_qs_num_idx = len([item for item in gold_box['body']['quantifier_types'] if item == 's'])
             selected_qs_num_prob = torch.gather(qs_num_prob, 1, selected_qs_num_idx)
         else:
             selected_qs_num_prob, selected_qs_num_idx = torch.topk(qs_num_prob, 1)
@@ -185,35 +199,78 @@ class QGM_Decoder(nn.Module):
         table_score = self.pointerNetwork(self.encoded_tab, att)
         table_prob = torch.log_softmax(table_score, dim=-1)
         if self.is_train:
-            selected_table_idx = box['body']['quantifiers']
+            selected_table_idx = gold_box['body']['quantifiers']
             selected_table_prob = torch.gather(table_prob, 1, selected_table_idx)
         else:
             selected_table_prob, selected_table_idx = torch.topk(table_prob, selected_qf_num_idx)
 
+        '''
         # Predict nested quantifier
+        if selected_qs_num_idx:
+            if self.is_train:
+                gold_sub_box = [item for idx, item in enumerate(gold_box['body']['quantifiers']) if
+                                gold_box['body']['quantifier_types'][idx] == 's']
+            else:
+                gold_sub_box = None
+            pred_box, context_vector = self.decode(att, state_vector, gold_sub_box)
+
+        '''
+
+        # Predict local predicate Num
+        p_num_score = self.select_p_num(att)
+        p_num_prob = torch.log_softmax(p_num_score, dim=-1)
         if self.is_train:
-            box = [item for idx, item in enumerate(box['body']['quantifiers']) if
-                   box['body']['quantifier_types'][idx] == 's']
+            selected_p_num_idx = len(gold_box['body']['local_predicates'])
+            selected_p_num_prob = torch.gather(p_num_prob, 1, selected_p_num_idx)
         else:
-            box = None
-        # Context vector 바꿔줘야함
-        something = self.decode(state_vector, box)
+            selected_p_num_prob, selected_p_num_idx = torch.topk(p_num_prob, 1)
 
-        ####################
+        prev_agg = prev_col = prev_op = None
+        for idx in range(p_num_score):
+            # Create context
+            new_context_vector = torch.cat([att, prev_agg, prev_col, prev_op])
+            p_ctx_vector = self.select_p_layer(new_context_vector)
 
-        # Predict local predicates
-            # For quantifier:
-            # predict num
-            # predict agg, col, operator
-            # Predict Join predicates (Or use rule base or know)
+            # Predict Agg
+            p_agg_score = self.select_p_agg(p_ctx_vector)
+            p_agg_prob = torch.log_softmax(p_agg_score, dim=-1)
 
-        ####################
+            if self.is_train:
+                selected_p_agg_idx = gold_box['body']['local_predicates'][idx][0]
+                selected_p_agg_prob = torch.gather(p_agg_prob, 1, selected_p_agg_idx)
+            else:
+                selected_p_agg_prob, selected_p_agg_idx = torch.topk(p_agg_prob, 1)
+
+            # Predict Col
+            p_col_score = self.pointerNetwork(self.encoded_col, p_ctx_vector)
+            p_col_prob = torch.log_softmax(p_col_score, dim=-1)
+
+            if self.is_train:
+                selected_p_col_idx = gold_box['body']['local_predicates'][idx][1]
+                selected_p_col_prob = torch.gather(p_col_prob, 1, selected_p_col_idx)
+            else:
+                selected_p_col_prob, selected_p_col_idx = torch.topk(p_col_prob, 1)
+
+            # Predict operator
+            p_op_score = self.select_p_op(p_ctx_vector)
+            p_op_prob = torch.log_softmax(p_op_score, dim=-1)
+
+            if self.is_train:
+                selected_p_op_idx = gold_box['body']['local_predicates'][idx][2]
+                selected_p_op_prob = torch.gather(p_op_prob, 1, selected_p_op_idx)
+            else:
+                selected_p_op_prob, selected_p_op_idx = torch.topk(p_op_prob, 1)
+
+            # Save and prev
+            prev_agg = self.agg_emb[selected_p_agg_idx]
+            prev_col = self.encoded_col[selected_p_col_idx]
+            prev_op = self.op_emb[selected_p_op_idx]
 
         # Predict Head num
         head_num_score = self.select_head_num(att)
         head_num_prob = torch.log_softmax(head_num_score)
         if self.is_train:
-            selected_head_num_idx = len(box['head'])-1
+            selected_head_num_idx = len(gold_box['head'])-1
             selected_head_num_prob = torch.gather(head_num_prob, 1, selected_head_num_idx)
         else:
             selected_head_num_prob, selected_head_num_idx = torch.topk(head_num_prob, 1)
@@ -223,7 +280,7 @@ class QGM_Decoder(nn.Module):
         column_prob = torch.log_sfotmax(column_score, dim=-1)
         # Mask out those not in quantifiers
         if self.is_train:
-            selected_column_idx = [item[1] for item in box['head']]
+            selected_column_idx = [item[1] for item in gold_box['head']]
             selected_column_prob = torch.gather(column_prob, 1, selected_column_idx)
         else:
             selected_column_prob, selected_column_idx = torch.topk(column_prob, selected_head_num_idx+1)
@@ -236,7 +293,7 @@ class QGM_Decoder(nn.Module):
             agg_score = self.select_head_agg(att_col)
             agg_prob = torch.log_sfotmax(agg_score, dim=-1)
             if self.is_train:
-                selected_agg_idx = box['head'][c_idx][0]
+                selected_agg_idx = gold_box['head'][c_idx][0]
                 selected_agg_prob = torch.gather(agg_prob, 1, selected_agg_idx)
             else:
                 selected_agg_prob, selected_agg_idx = torch.topk(agg_prob, 1)
@@ -245,14 +302,12 @@ class QGM_Decoder(nn.Module):
         return state_vector
 
 
-    def decode_groupBy_box(self, state_vector, box):
-        att = self.attention(self.encoded_src, self.encoded_src_att, state_vector.hidden_state)
-
+    def decode_groupBy_box(self, att, state_vector, gold_box):
         # Predict quantifier type f num
         qf_num_score = self.group_by_qf_num(att)
         qf_num_prob = torch.log_softmax(qf_num_score, dim=-1)
         if self.is_train:
-            selected_qf_num_idx = len([item for item in box['body']['quantifier_types'] if item == 'f'])
+            selected_qf_num_idx = len([item for item in gold_box['body']['quantifier_types'] if item == 'f'])
             selected_qf_num_prob = torch.gather(qf_num_prob, 1, selected_qf_num_idx)
         else:
             selected_qf_num_prob, selected_qf_num_idx = torch.topk(qf_num_prob, 1)
@@ -261,7 +316,7 @@ class QGM_Decoder(nn.Module):
         qs_num_score = self.group_by_qs_num(att)
         qs_num_prob = torch.log_softmax(qs_num_score, dim=-1)
         if self.is_train:
-            selected_qs_num_idx = len([item for item in box['body']['quantifier_types'] if item == 's'])
+            selected_qs_num_idx = len([item for item in gold_box['body']['quantifier_types'] if item == 's'])
             selected_qs_num_prob = torch.gather(qs_num_prob, 1 ,selected_qs_num_idx)
         else:
             selected_qs_num_prob, selected_qs_num_idx = torch.topk(qs_num_prob, 1)
@@ -270,36 +325,73 @@ class QGM_Decoder(nn.Module):
         table_score = self.pointerNetwork(self.encoded_tab, att)
         table_prob = torch.log_softmax(table_score, dim=-1)
         if self.is_train:
-            selected_table_idx = box['body']['quantifiers']
+            selected_table_idx = gold_box['body']['quantifiers']
             selected_table_prob = torch.gather(table_prob, 1, selected_table_idx)
         else:
             selected_table_prob, selected_table_idx = torch.topk(table_prob, selected_qf_num_idx)
 
+        '''
         # Predict nested quantifier
-        if self.is_train:
-            box = [item for idx, item in enumerate(box['body']['quantifiers']) if
-                   box['body']['quantifier_types'][idx] == 's']
-        else:
-            box = None
-        something = self.decode(state_vector, box)
-
-        ############
-        # Having
+        if selected_qs_num_idx:
+            if self.is_train:
+                gold_sub_box = [item for idx, item in enumerate(gold_box['body']['quantifiers']) if
+                                gold_box['body']['quantifier_types'][idx] == 's']
+            else:
+                gold_sub_box = None
+            pred_box, context_vector = self.decode(att, state_vector, gold_sub_box)
+        '''
 
         # Predict local predicates num
         p_num_score = self.group_by_p_num(att)
         p_num_prob = torch.log_softmax(p_num_score, dim=-1)
         if self.is_train:
-            selected_p_num_idx = None # Somehow
+            selected_p_num_idx = len(gold_box['body']['local_predicates']) # This is not right
             selected_p_num_prob = torch.gather(p_num_prob, 1, selected_p_num_idx)
         else:
             selected_p_num_prob, selected_p_num_idx = torch.topk(p_num_prob, 1)
 
-        # Predict predicates
-            # Predict local predicates
-            # For quantifier:
-                # predict agg, col, operator
-        ############
+        prev_agg = prev_col = prev_op = None
+        for idx in range(p_num_score):
+            # Create context
+            new_context_vector = torch.cat([att, prev_agg, prev_col, prev_op])
+            p_ctx_vector = self.group_by_p_layer(new_context_vector)
+
+            # Predict Agg
+            p_agg_score = self.group_by_p_agg(p_ctx_vector)
+            p_agg_prob = torch.log_softmax(p_agg_score, dim=-1)
+
+            if self.is_train:
+                selected_p_agg_idx = gold_box['body']['local_predicates'][idx][0]
+                selected_p_agg_prob = torch.gather(p_agg_prob, 1, selected_p_agg_idx)
+            else:
+                selected_p_agg_prob, selected_p_agg_idx = torch.topk(p_agg_prob, 1)
+
+            # Predict Col
+            p_col_score = self.pointerNetwork(self.encoded_col, p_ctx_vector)
+            p_col_prob = torch.log_softmax(p_col_score, dim=-1)
+
+            if self.is_train:
+                selected_p_col_idx = gold_box['body']['local_predicates'][idx][1]
+                selected_p_col_prob = torch.gather(p_col_prob, 1, selected_p_col_idx)
+            else:
+                selected_p_col_prob, selected_p_col_idx = torch.topk(p_col_prob, 1)
+
+            # Predict operator
+            p_op_score = self.group_by_p_op(p_ctx_vector)
+            p_op_prob = torch.log_softmax(p_op_score, dim=-1)
+
+            if self.is_train:
+                selected_p_op_idx = gold_box['body']['local_predicates'][idx][2]
+                selected_p_op_prob = torch.gather(p_op_prob, 1, selected_p_op_idx)
+            else:
+                selected_p_op_prob, group_by_p_op_idx = torch.topk(p_op_prob, 1)
+
+            # Save and prev
+            prev_agg = self.agg_emb[selected_p_agg_idx]
+            prev_col = self.encoded_col[selected_p_col_idx]
+            prev_op = self.op_emb[selected_p_op_idx]
+
+        ############################
 
         # Predict Head Num
         head_num_score = self.group_by_head_num(att)
@@ -338,15 +430,12 @@ class QGM_Decoder(nn.Module):
         return state_vector
 
 
-    def decode_orderBy_box(self, state_vector, box):
-        # Here (attention_vector 및 box 계산하여 context_vector 새로 계산)
-        att = self.attention(self.encoded_src, self.encoded_src_att, state_vector.hidden_state)
-
+    def decode_orderBy_box(self, att, state_vector, gold_box):
         # Predict quantifiers - num
         num_score = self.order_by_num(att)
         num_prob = torch.log_softmax(num_score, dim=-1)
         if self.is_train:
-            selected_num_idx = len(box['body']['quantifiers'])
+            selected_num_idx = len(gold_box['body']['quantifiers'])
             selected_num_prob = torch.gather(num_prob, 1, selected_num_idx)
         else:
             selected_num_prob, selected_num_idx = torch.topk(num_prob, 1)
@@ -355,7 +444,7 @@ class QGM_Decoder(nn.Module):
         table_score = self.pointerNetwork(self.encoded_tab, att)
         table_prob = torch.log_softmax(table_score, dim=-1)
         if self.is_train:
-            selected_table_idx = box['body']['quantifiers']
+            selected_table_idx = gold_box['body']['quantifiers']
             selected_table_prob = torch.gather(table_prob, 1, selected_table_idx)
         else:
             selected_table_prob, selected_table_idx = torch.topk(table_prob, selected_num_idx)
@@ -364,7 +453,7 @@ class QGM_Decoder(nn.Module):
         head_num_score = self.order_by_head_num(att)
         head_num_prob = torch.log_softmax(head_num_score, dim=-1)
         if self.is_train:
-            selected_head_num_idx = len(box['head'])-1
+            selected_head_num_idx = len(gold_box['head'])-1
             selected_head_num_prob = torch.gather(head_num_prob, 1, selected_head_num_idx)
         else:
             selected_head_num_prob, selected_head_num_idx = torch.topk(head_num_prob, 1)
@@ -376,7 +465,7 @@ class QGM_Decoder(nn.Module):
         # Mask out those not in quantifiers
 
         if self.is_train:
-            selected_column_idx = [item[1] for item in box['head']]
+            selected_column_idx = [item[1] for item in gold_box['head']]
             selected_column_prob = torch.gather(column_prob, 1, selected_column_idx)
         else:
             selected_column_prob, selected_column_idx = torch.topk(column_prob, selected_head_num_idx+1)
@@ -389,7 +478,7 @@ class QGM_Decoder(nn.Module):
             agg_score = self.order_by_agg(att_col)
             agg_prob = torch.log_softmax(agg_score, dim=-1)
             if self.is_train:
-                selected_agg_idx = box['head'][c_idx][0]
+                selected_agg_idx = gold_box['head'][c_idx][0]
                 selected_agg_prob = torch.gather(agg_prob, 1, selected_agg_idx)
             else:
                 selected_agg_prob, selected_agg_idx = torch.topk(agg_prob, 1)
@@ -399,7 +488,7 @@ class QGM_Decoder(nn.Module):
         is_asc_score = self.order_by_is_asc(att)
         is_asc_prob = torch.log_softmax(is_asc_score, dim=-1)
         if self.is_train:
-            selected_is_asc_idx = int(box['is_asc'])
+            selected_is_asc_idx = int(gold_box['is_asc'])
             selected_is_asc_prob = torch.gather(is_asc_prob, 1, selected_is_asc_idx)
         else:
             selected_is_asc_prob, selected_is_asc_idx = torch.topk(is_asc_prob, 1)
@@ -408,7 +497,7 @@ class QGM_Decoder(nn.Module):
         limit_num_score = self.order_by_limit_num(att)
         limit_num_prob = torch.log_softmax(limit_num_score, dim=-1)
         if self.is_train:
-            selected_limit_num_idx = box['limit_num']
+            selected_limit_num_idx = gold_box['limit_num']
             selected_limit_num_prob = torch.gather(limit_num_prob, 1, selected_is_asc_idx)
         else:
             selected_limit_num_prob, selected_limit_num_idx = torch.topk(limit_num_prob, 1)

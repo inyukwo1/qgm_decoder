@@ -76,3 +76,11 @@ with open(os.path.join(path, out_path), 'w') as f:
     for line in new_lines:
         f.write(line)
 print('Editing dev_gol.sql Done!')
+
+
+'''
+car_1
+What are the different models for the cards produced after 1980?",
+"What is the average miles per gallon of all the cards with 4 cylinders?"
+"What is the average horsepower for all cards produced before 1980?",
+'''
