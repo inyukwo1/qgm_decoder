@@ -10,18 +10,18 @@ const sqlFormatter = sql => {
 };
 
 const unformatsql = formatted_sql => {
-  const sql = formatted_sql.replace ('<br />', '')
+  const sql = formatted_sql.replace ('<br />', '');
   return sql;
-}
+};
 
 const sqlFormatterWithWrongParts = (formatted_sql, wrong_parts) => {
-  const sql = unformatsql(formatted_sql);
-  const sql_array = sql.split(' ')
-  for (var [st, ed] of wrong_parts.reverse()) {
-    sql_array.splice(ed, 0, '</font>');
-    sql_array.splice(st, 0, '<font color="red">')
+  const sql = unformatsql (formatted_sql);
+  const sql_array = sql.split (' ');
+  for (var [st, ed] of wrong_parts.reverse ()) {
+    sql_array.splice (ed, 0, '</font>');
+    sql_array.splice (st, 0, '<font color="red">');
   }
-  const re_formatted_sql = sqlFormatter(sql_array.join(' '));
+  const re_formatted_sql = sqlFormatter (sql_array.join (' '));
   return re_formatted_sql;
 };
 
@@ -81,7 +81,7 @@ class BotUICommunicator {
     this.state.ready_to_analyze = false;
   }
 
-  exploreMessage (nlq, promise_result, refreshStatusbar) {
+  exploreMessage (nlq, promise_result) {
     this.sequentialHumanBotMessage ([nlq], ['processing'])
       .then (_ => promise_result)
       .then (pred_sql_filename => {
@@ -90,21 +90,25 @@ class BotUICommunicator {
           .remove (-1)
           .then (_ =>
             this.botui.message.bot ({
-              content: pred_sql,
+              content: sqlFormatter(pred_sql),
               delay: 100,
               add_button: true,
-              toggle_callback: refreshStatusbar,
+              toggle_callback: this.callback,
             })
           )
           .then (_ => {
             if (plot_filename) {
-              return this.oneBotMessage ('!![test](/' + plot_filename + ')');
+              this.botui.message.bot({
+                type: "embed",
+                content: plot_filename,
+                delay: 1000
+              })
             } else {
               return this.oneBotMessage (
                 'The generated SQL query is not executable.'
               );
             }
-          })
+          });
       })
       .catch (err => {
         this.oneBotMessage (err);
@@ -119,11 +123,11 @@ class BotUICommunicator {
       })
       .then (this.callback);
 
-  oneBotInsertMessage = (index, content) =>
+  oneBotInsertMessage = (index, content, delay=1000) =>
     this.botui.message
       .insert (index, {
         content: content,
-        delay: 1000,
+        delay: delay,
       })
       .then (this.callback)
       .then (_ => index + 1);

@@ -16,7 +16,7 @@ class App extends React.Component {
   componentDidMount () {
     this.BotUICommunicator = new BotUICommunicator ();
     this.BotUICommunicator.registerBotUI (this.botui);
-    this.BotUICommunicator.registerCallback (this.callbackAfterMsg);
+    this.BotUICommunicator.registerCallback (this.refreshStatusbar);
     this.BotUICommunicator.sequentialHumanBotMessage (
       [],
       [
@@ -37,7 +37,6 @@ class App extends React.Component {
     clicked_mic: false,
     model: '',
     pred_sql: '',
-    scroll_index: 0,
   };
 
   handleClickedMic = clicked => {
@@ -89,13 +88,6 @@ class App extends React.Component {
     });
   };
 
-  callbackAfterMsg = index => {
-    this.setState({
-      scroll_index: index
-    })
-    this.refreshStatusbar()
-  };
-
   refreshStatusbar = () => {
     this.botui.message.getMessageLengthCorrectPair ().then (len_msg_pair => {
       this.botui.setState ({
@@ -136,8 +128,7 @@ class App extends React.Component {
     const model = this.state.model;
     this.BotUICommunicator.exploreMessage (
       nlq,
-      queryTextToSQL (db_id, model, nlq, 'http://141.223.199.148:4000/service',
-      this.refreshStatusbar)
+      queryTextToSQL (db_id, model, nlq, 'http://141.223.199.148:4000/service')
     );
     this._initInput ();
   };
@@ -150,7 +141,7 @@ class App extends React.Component {
 
   incorrectClickAnalyzeCallback = (next_index, pred_sql) => {
     this.BotUICommunicator
-      .oneBotInsertMessage (next_index + 1, 'What is a correct query?')
+      .oneBotInsertMessage (next_index + 1, 'What is a correct query?', 100)
       .then (index => {
         this.BotUICommunicator.readyAnalyze (index);
         this.setState ({

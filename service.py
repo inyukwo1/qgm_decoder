@@ -97,7 +97,8 @@ def createSSHClient(server, port, user, password):
     return client
 
 
-ssh = createSSHClient('141.223.199.39', '2022', 'hjkim', 'sksmsdi!wkfTodrlszlaguswl33')
+# ssh = createSSHClient('141.223.199.39', '2022', 'hjkim', 'sksmsdi!wkfTodrlszlaguswl33')
+ssh = createSSHClient('141.223.199.39', '2022', 'ihna', 'Sook2303!@')
 scp = SCPClient(ssh.get_transport())
 
 
@@ -137,7 +138,7 @@ class Service(Resource):
                         'question': question}
             else:
                 scp.put(os.path.join(PLOTDIR, plot_filename),
-                        os.path.join('/data1/Benchmark_RA/irnet/web/public', plot_filename))
+                        os.path.join('/home/ihna/web/build', plot_filename))
                 return {'result': result_query,
                         'actions': actions,
                         'question': question,

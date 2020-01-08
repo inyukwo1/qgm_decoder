@@ -8,7 +8,7 @@ const makeStatusbarContent = (total_height, len_msg_pairs) => {
     (accumulator, currentvalue) => accumulator + currentvalue[0]
   , 0);
   for (const [len, msg] of len_msg_pairs) {
-    const classname = msg === 'Incorrect' ? 'incorrect' : 'correct';
+    const classname = msg === 'Incorrect' ? 'incorrect-bar' : 'correct-bar';
     const style = {
       height: total_height * len / sum_len + 'px',
     };
@@ -32,7 +32,7 @@ class MiddleInterfaces extends React.Component {
         <Botui ref={cmp => (this.botui = cmp)} />
         <div className="statusbar">
           <div className="padding" />
-          {makeStatusbarContent (480, this.state.len_msg_pairs)}  {/* hard coded - 500 is the height of bot ui window */}
+          {makeStatusbarContent (document.documentElement.clientHeight * 0.6 - 20, this.state.len_msg_pairs)}  {/* hard coded - the height of bot ui window */}
           <div className="padding" />
         </div>
       </div>

@@ -20,6 +20,10 @@
     height: 40vmin;
 }
 
+.botui-app-container {
+    height: 60vh;
+}
+
 .App-header {
     background-color: #c1d7f7;
     min-height: 10vh;
@@ -138,8 +142,4 @@
     position: relative;
     justify-content: center;
     align-items: center;
-}
-
-.botui-messages-container {
-    text-align: left;
 }

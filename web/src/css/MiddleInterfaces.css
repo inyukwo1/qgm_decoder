@@ -11,12 +11,12 @@
     width: 10px;
 }
 
-.incorrect {
+.incorrect-bar {
     background-color: red;
     width: 10px;
 }
 
-.correct {
+.correct-bar {
     width: 10px;
 }
 

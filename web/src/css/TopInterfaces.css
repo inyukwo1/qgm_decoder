@@ -24,11 +24,12 @@
 }
 
 .hiding-schema {
-    min-width: 86px;
+    min-width: 9.6vmin;
+    padding: 1vmin;
 }
 
 .schema_text {
     position: absolute;
-    top: 9px;
-    right: 9px;
+    top: 1vmin;
+    right: 1vmin;
 }
