@@ -210,100 +210,106 @@ class End2EndOurs(End2End):
                                origin='Root1(3) Root(5) Sel(0) N(0) A(3) C(0) T(0)')
         sql = result[0]
 
-        def is_number_tryexcept(s):
-            try:
-                float(s)
-                return True
-            except ValueError:
-                return False
-
-        def find_values(question_arg, question_arg_type, question_origin, mapper):
-            values = []
-            flag_double_q = False
-            flag_double_q_for_schema = False
-            cur_val = []
-            flag_single_q = False
-            flag_single_q_for_schema = False
-            flag_upper = False
-            cur_upper_val = []
-            for idx, (token, tag) in enumerate(zip(question_arg, question_arg_type)):
-                start_idx = mapper[idx][0]
-                end_idx = mapper[idx][1]
-                if len(token) == 0:
-                    continue
-                if flag_double_q:
-                    if '"' not in token[0]:
-                        cur_val.append(' '.join(question_origin[start_idx:end_idx]))
-                        if tag[0] in ('table', 'col'):
-                            flag_double_q_for_schema = True
-                        continue
-                if flag_single_q:
-                    if "'" not in token[0]:
-                        #                      for i, t in enumerate(token):
-                        #                          idx = first_substring( question_origin[start_idx:end_idx], t )
-                        #                          if idx != -1:
-                        #                              token[i]=question_origin[idx]
-                        cur_val.append(' '.join(question_origin[start_idx:end_idx]))
-                        if tag[0] in ('table', 'col'):
-                            flag_single_q_for_schema = True
-                        continue
-
-                if flag_upper:
-                    # If Jason 'Two ... separate
-                    if len(question_origin[start_idx]) > 0 and question_origin[start_idx][0].isupper() and tag[
-                        0] not in ('col', 'table'):
-                        cur_upper_val.append(' '.join(question_origin[start_idx:end_idx]))
-                        continue
-                    else:
-                        values.append(' '.join(cur_upper_val))
-                        cur_upper_val = []
-                        flag_upper = False
-
-                is_inserted_already = False
-                if len(token) == 1 and token[0] == 'year' and is_number_tryexcept(question_origin[start_idx]):
-                    is_inserted_already = True
-                    values.append(question_origin[start_idx])
-
-                if '"' in token[0]:
-                    if flag_double_q:
-                        is_inserted_already = True
-                        flag_double_q = False
-                        if not flag_double_q_for_schema:
-                            values.append(' '.join(cur_val))
-                        cur_val = []
-                        flag_double_q_for_schema = False
-                    elif len(token[0]) == 1:
-                        is_inserted_already = True
-                        flag_double_q = True
-                elif "'" in token[0]:
-                    if flag_single_q:
-                        is_inserted_already = True
-                        flag_single_q = False
-                        if not flag_single_q_for_schema:
-                            values.append(' '.join(cur_val))
-                        cur_val = []
-                        flag_single_q_for_schema = False
-                    elif len(token[0]) == 1:
-                        is_inserted_already = True
-                        flag_single_q = True
-
-                if (not is_inserted_already) and len(question_origin[start_idx]) > 0 and question_origin[start_idx][
-                    0].isupper() and start_idx != 0:
-                    if tag[0] not in ('col', 'table'):
-                        is_inserted_already = True
-                        flag_upper = True
-                        cur_upper_val.append(' '.join(question_origin[start_idx:end_idx]))
-                if (not is_inserted_already) and tag[0] in ('value', '*', 'db'):
-                    is_inserted_already = True
-                    values.append(' '.join(question_origin[start_idx:end_idx]))
-            return values
-
         print("question_arg: {} \n question_arg_type: {} \n original_question: {} \n mapper: {}".format(
             simple_json['question_arg'], simple_json['question_arg_type'],
             simple_json['origin_question_toks_for_value'], simple_json['mapper']))
-        sql_values = find_values(simple_json['question_arg'], simple_json['question_arg_type'],
+        sql_values = self._find_values(simple_json['question_arg'], simple_json['question_arg_type'],
                                  simple_json['origin_question_toks_for_value'], simple_json['mapper'])
         print(sql_values)
+        sql_with_value = self._exchange_values(sql, sql_values, ' 1')
+        print("End post processing {}".format(time.strftime("%Y%m%d-%H%M%S")))
+        return sql_with_value, None, entry["question_toks"]
+
+    def _is_number_tryexcept(self, s):
+        try:
+            float(s)
+            return True
+        except ValueError:
+            return False
+
+    def _find_values(self, question_arg, question_arg_type, question_origin, mapper):
+        values = []
+        flag_double_q = False
+        flag_double_q_for_schema = False
+        cur_val = []
+        flag_single_q = False
+        flag_single_q_for_schema = False
+        flag_upper = False
+        cur_upper_val = []
+        for idx, (token, tag) in enumerate(zip(question_arg, question_arg_type)):
+            start_idx = mapper[idx][0]
+            end_idx = mapper[idx][1]
+            if len(token) == 0:
+                continue
+            if flag_double_q:
+                if '"' not in token[0]:
+                    cur_val.append(' '.join(question_origin[start_idx:end_idx]))
+                    if tag[0] in ('table', 'col'):
+                        flag_double_q_for_schema = True
+                    continue
+            if flag_single_q:
+                if "'" not in token[0]:
+                    #                      for i, t in enumerate(token):
+                    #                          idx = first_substring( question_origin[start_idx:end_idx], t )
+                    #                          if idx != -1:
+                    #                              token[i]=question_origin[idx]
+                    cur_val.append(' '.join(question_origin[start_idx:end_idx]))
+                    if tag[0] in ('table', 'col'):
+                        flag_single_q_for_schema = True
+                    continue
+
+            if flag_upper:
+                # If Jason 'Two ... separate
+                if len(question_origin[start_idx]) > 0 and question_origin[start_idx][0].isupper() and tag[
+                    0] not in ('col', 'table'):
+                    cur_upper_val.append(' '.join(question_origin[start_idx:end_idx]))
+                    continue
+                else:
+                    values.append(' '.join(cur_upper_val))
+                    cur_upper_val = []
+                    flag_upper = False
+
+            is_inserted_already = False
+            if len(token) == 1 and token[0] == 'year' and self._is_number_tryexcept(question_origin[start_idx]):
+                is_inserted_already = True
+                values.append(question_origin[start_idx])
+
+            if '"' in token[0]:
+                if flag_double_q:
+                    is_inserted_already = True
+                    flag_double_q = False
+                    if not flag_double_q_for_schema:
+                        values.append(' '.join(cur_val))
+                    cur_val = []
+                    flag_double_q_for_schema = False
+                elif len(token[0]) == 1:
+                    is_inserted_already = True
+                    flag_double_q = True
+            elif "'" in token[0]:
+                if flag_single_q:
+                    is_inserted_already = True
+                    flag_single_q = False
+                    if not flag_single_q_for_schema:
+                        values.append(' '.join(cur_val))
+                    cur_val = []
+                    flag_single_q_for_schema = False
+                elif len(token[0]) == 1:
+                    is_inserted_already = True
+                    flag_single_q = True
+
+            if (not is_inserted_already) and len(question_origin[start_idx]) > 0 and question_origin[start_idx][
+                0].isupper() and start_idx != 0:
+                if tag[0] not in ('col', 'table'):
+                    is_inserted_already = True
+                    flag_upper = True
+                    cur_upper_val.append(' '.join(question_origin[start_idx:end_idx]))
+            if (not is_inserted_already) and tag[0] in ('value', '*', 'db'):
+                is_inserted_already = True
+                values.append(' '.join(question_origin[start_idx:end_idx]))
+        return values
+
+    def _exchange_values(self, sql, sql_values, value_tok):
+        sql = sql.replace(value_tok, ' 1')
         cur_index = sql.find(' 1')
         sql_with_value = ""
         before_index = 0
@@ -313,13 +319,13 @@ class End2EndOurs(End2End):
             if sql[cur_index - 1] in ('=', '>', '<'):
                 cur_value = sql_values[values_index]
                 values_index = values_index + 1
-                if not is_number_tryexcept(cur_value):
+                if not self._is_number_tryexcept(cur_value):
                     cur_value = '"' + cur_value + '"'
                 sql_with_value = sql_with_value + ' ' + cur_value
             elif cur_index - 3 > 0 and sql[cur_index - 4:cur_index] in ('like'):
                 cur_value = '%' + sql_values[values_index] + '%'
                 values_index = values_index + 1
-                if not is_number_tryexcept(cur_value):
+                if not self._is_number_tryexcept(cur_value):
                     cur_value = '"' + cur_value + '"'
                 sql_with_value = sql_with_value + ' ' + cur_value
             elif cur_index - 6 > 0 and sql[cur_index - 7:cur_index] in ('between'):
@@ -332,9 +338,9 @@ class End2EndOurs(End2End):
                     cur_value1 = sql_values[values_index]
                     cur_value2 = sql_values[values_index]
                     values_index = values_index + 1
-                if not is_number_tryexcept(cur_value1):
+                if not self._is_number_tryexcept(cur_value1):
                     cur_value1 = '1'
-                if not is_number_tryexcept(cur_value2):
+                if not self._is_number_tryexcept(cur_value2):
                     cur_value2 = '2'
                 sql_with_value = sql_with_value + ' ' + cur_value1 + ' AND ' + cur_value2
                 cur_index = cur_index + 6
@@ -344,5 +350,36 @@ class End2EndOurs(End2End):
             cur_index = sql.find(' 1', cur_index + 1)
         sql_with_value = sql_with_value + sql[before_index:]
         print(sql_with_value)
-        print("End post processing {}".format(time.strftime("%Y%m%d-%H%M%S")))
-        return sql_with_value, None, entry["question_toks"]
+        return sql_with_value
+
+    def value_predictor(self, db_id, sql, question, value_tok):
+        table = self.val_table_data[db_id]
+        tmp_col = []
+        for cc in [x[1] for x in table['column_names']]:
+            if cc not in tmp_col:
+                tmp_col.append(cc)
+        table['col_set'] = tmp_col
+        db_name = table['db_id']
+        table['schema_content'] = [col[1] for col in table['column_names']]
+        table['col_table'] = [col[0] for col in table['column_names']]
+
+        entry = {}
+        entry['db_id'] = db_id
+        entry["question"] = question
+        entry["question_toks"] = re.findall(r"[^,.:;\"`?! ]+|[,.:;\"?!]", question.replace("'", " '"))
+        entry['names'] = table['schema_content']
+        entry['table_names'] = table['table_names']
+        entry['col_set'] = table['col_set']
+        entry['col_table'] = table['col_table']
+        keys = {}
+        for kv in table['foreign_keys']:
+            keys[kv[0]] = kv[1]
+            keys[kv[1]] = kv[0]
+        for id_k in table['primary_keys']:
+            keys[id_k] = id_k
+        entry['keys'] = keys
+        print("Start preprocessing.. {}".format(time.strftime("%Y%m%d-%H%M%S")))
+        process_data_one_entry(entry, self.english_RelatedTo, self.english_IsA, self.db_values)
+        sql_values = self._find_values(entry['question_arg'], entry['question_arg_type'],
+                                       entry['origin_question_toks_for_value'], entry['mapper'])
+        return self._exchange_values(sql, sql_values, value_tok)

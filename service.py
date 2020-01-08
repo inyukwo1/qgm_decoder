@@ -130,6 +130,11 @@ class Service(Resource):
             else:
                 return
             result_query, actions, question = model.run_model(args["db_id"], args["question"])
+            if args['model'] == 'irnet':
+                result_query = ours_end2end['spider'].value_predictor(args["db_id"], result_query, args["question"], ' 1')
+            elif args['model'] == 'gnn':
+                result_query = ours_end2end['spider'].value_predictor(args["db_id"], result_query, args["question"], " ' value '")
+
             plot_filename = plot_execution(os.path.join("./data/{}/database".format("spider"), args["db_id"], args["db_id"] + ".sqlite"), result_query)
 
             if plot_filename == '':
