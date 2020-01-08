@@ -184,12 +184,14 @@ class IRNet(BasicModel):
             if src_encodings is None:
                 return None, None
 
-        utterance_encodings_sketch_linear = self.att_sketch_linear(src_encodings)
-        utterance_encodings_lf_linear = self.att_lf_linear(src_encodings)
-
+        #utterance_encodings_sketch_linear = self.att_sketch_linear(src_encodings)
+        #utterance_encodings_lf_linear = self.att_lf_linear(src_encodings)
+        src_encoding_att = self.att_sketch_linear(src_encodings)
         dec_init_vec = self.init_decoder_state(last_cell)
 
-        tmp = self.decoder.decode(src_encodings, table_embedding, schema_embedding, dec_init_vec)
+        qgm = None
+        self.decoder.set_variables(src_encodings, src_encoding_att, table_embedding, schema_embedding)
+        tmp = self.decoder.decode(dec_init_vec, qgm)
         return tmp
 
     def transformer_encode(self, batch: Batch):
@@ -342,13 +344,14 @@ class IRNet(BasicModel):
             if src_encodings is None:
                 return None, None
 
-        utterance_encodings_sketch_linear = self.att_sketch_linear(src_encodings)
-        utterance_encodings_lf_linear = self.att_lf_linear(src_encodings)
-
+        #utterance_encodings_sketch_linear = self.att_sketch_linear(src_encodings)
+        #utterance_encodings_lf_linear = self.att_lf_linear(src_encodings)
+        src_encoding_att = self.attn_sketch_linear(src_encodings)
         dec_init_vec = self.init_decoder_state(last_cell)
 
-        # Begin Decoding
-        tmp = self.decoder.decode(src_encodings, table_embedding, schema_embedding, dec_init_vec)
+        qgm = None
+        self.decoder.set_variables(src_encodings, src_encoding_att, table_embedding, schema_embedding)
+        tmp = self.decoder.decode(dec_init_vec, qgm)
         return tmp
 
     def step(self, x, h_tm1, src_encodings, src_encodings_att_linear, decoder, attention_func, src_token_mask=None,
