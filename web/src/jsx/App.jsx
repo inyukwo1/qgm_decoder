@@ -20,7 +20,7 @@ class App extends React.Component {
     this.BotUICommunicator.sequentialHumanBotMessage (
       [],
       [
-        'Welcome to SQLbot!',
+        'Welcome to EGA!',
         'This is a demo produced by the Database & Data Mining lab @POSTECH.',
         'Please select a database..',
       ]
