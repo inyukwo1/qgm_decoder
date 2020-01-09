@@ -65,15 +65,13 @@ def train(args):
 
         model.load_state_dict(pretrained_modeled)
 
-    model.word_emb = utils.load_word_emb(args.glove_embed_path)
-    #model.word_emb = None
-    # begin train
+    model.word_emb = utils.load_word_emb(args.glove_embed_path) if args.bert == -1 else None
 
     model_save_path = utils.init_log_checkpoint_path(args)
     utils.save_args(args, os.path.join(model_save_path, 'config.json'))
     best_dev_acc = .0
-    #
-    # try:
+
+
     with open(os.path.join(model_save_path, 'epoch.log'), 'w') as epoch_fd:
         for epoch in tqdm.tqdm(range(args.epoch)):
             if args.lr_scheduler:

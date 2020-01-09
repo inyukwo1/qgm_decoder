@@ -138,61 +138,6 @@ class IRNet(BasicModel):
         nn.init.xavier_normal_(self.type_embed.weight.data)
         nn.init.xavier_normal_(self.N_embed.weight.data)
         print('Use Column Pointer: ', True if self.use_column_pointer else False)
-        
-    def forward(self, examples):
-        args = self.args
-        # now should implement the examples
-        batch = Batch(examples, self.grammar, cuda=self.args.cuda)
-
-        table_appear_mask = batch.table_appear_mask
-
-        if args.bert == -1:
-            src_encodings, (last_state, last_cell) = self.encode(batch.src_sents, batch.src_sents_len, None)
-
-            src_encodings = self.dropout(src_encodings)
-
-            table_embedding = self.gen_x_batch(batch.table_sents)
-            src_embedding = self.gen_x_batch(batch.src_sents)
-            schema_embedding = self.gen_x_batch(batch.table_names)
-            # get emb differ
-            embedding_differ = self.embedding_cosine(src_embedding=src_embedding, table_embedding=table_embedding,
-                                                     table_unk_mask=batch.table_unk_mask)
-
-            schema_differ = self.embedding_cosine(src_embedding=src_embedding, table_embedding=schema_embedding,
-                                                  table_unk_mask=batch.schema_token_mask)
-
-            tab_ctx = (src_encodings.unsqueeze(1) * embedding_differ.unsqueeze(3)).sum(2)
-            schema_ctx = (src_encodings.unsqueeze(1) * schema_differ.unsqueeze(3)).sum(2)
-
-            table_embedding = table_embedding + tab_ctx
-
-            schema_embedding = schema_embedding + schema_ctx
-
-            col_type = self.input_type(batch.col_hot_type)
-
-            col_type_var = self.col_type(col_type)
-
-            tab_type = self.input_type(batch.tab_hot_type)
-
-            tab_type_var = self.tab_type(tab_type)
-
-            table_embedding = table_embedding + col_type_var
-
-            schema_embedding = schema_embedding + tab_type_var
-        else:
-            src_encodings, table_embedding, schema_embedding, last_cell = self.transformer_encode(batch)
-            if src_encodings is None:
-                return None, None
-
-        #utterance_encodings_sketch_linear = self.att_sketch_linear(src_encodings)
-        #utterance_encodings_lf_linear = self.att_lf_linear(src_encodings)
-        src_encoding_att = self.att_sketch_linear(src_encodings)
-        dec_init_vec = self.init_decoder_state(last_cell)
-
-        qgm = None
-        self.decoder.set_variables(src_encodings, src_encoding_att, table_embedding, schema_embedding)
-        tmp = self.decoder.decode(dec_init_vec, qgm)
-        return tmp
 
     def transformer_encode(self, batch: Batch):
         B = len(batch)
@@ -298,6 +243,63 @@ class IRNet(BasicModel):
 
         return src_encodings, table_embedding, schema_embedding, embedding[:,0,:]
 
+    def forward(self, examples):
+        args = self.args
+        # now should implement the examples
+        batch = Batch(examples, self.grammar, cuda=self.args.cuda)
+
+        table_appear_mask = batch.table_appear_mask
+
+        if args.bert == -1:
+            src_encodings, (last_state, last_cell) = self.encode(batch.src_sents, batch.src_sents_len, None)
+
+            src_encodings = self.dropout(src_encodings)
+
+            table_embedding = self.gen_x_batch(batch.table_sents)
+            src_embedding = self.gen_x_batch(batch.src_sents)
+            schema_embedding = self.gen_x_batch(batch.table_names)
+            # get emb differ
+            embedding_differ = self.embedding_cosine(src_embedding=src_embedding, table_embedding=table_embedding,
+                                                     table_unk_mask=batch.table_unk_mask)
+
+            schema_differ = self.embedding_cosine(src_embedding=src_embedding, table_embedding=schema_embedding,
+                                                  table_unk_mask=batch.schema_token_mask)
+
+            tab_ctx = (src_encodings.unsqueeze(1) * embedding_differ.unsqueeze(3)).sum(2)
+            schema_ctx = (src_encodings.unsqueeze(1) * schema_differ.unsqueeze(3)).sum(2)
+
+            table_embedding = table_embedding + tab_ctx
+
+            schema_embedding = schema_embedding + schema_ctx
+
+            col_type = self.input_type(batch.col_hot_type)
+
+            col_type_var = self.col_type(col_type)
+
+            tab_type = self.input_type(batch.tab_hot_type)
+
+            tab_type_var = self.tab_type(tab_type)
+
+            table_embedding = table_embedding + col_type_var
+
+            schema_embedding = schema_embedding + tab_type_var
+        else:
+            src_encodings, table_embedding, schema_embedding, last_cell = self.transformer_encode(batch)
+            if src_encodings is None:
+                return None, None
+
+        #utterance_encodings_sketch_linear = self.att_sketch_linear(src_encodings)
+        #utterance_encodings_lf_linear = self.att_lf_linear(src_encodings)
+        src_encoding_att = self.att_sketch_linear(src_encodings)
+        dec_init_vec = self.init_decoder_state(last_cell)
+        src_mask = batch.src_token_mask
+        b_indices = torch.arange(len(batch))
+
+        self.decoder.set_variables(src_encodings, src_encoding_att, table_embedding, schema_embedding, src_mask)
+        tmp = self.decoder.decode(b_indices, None, dec_init_vec, batch.qgm)
+        return tmp
+
+
     def parse(self, examples, beam_size=5):
         """
         one example a time
@@ -348,10 +350,11 @@ class IRNet(BasicModel):
         #utterance_encodings_lf_linear = self.att_lf_linear(src_encodings)
         src_encoding_att = self.attn_sketch_linear(src_encodings)
         dec_init_vec = self.init_decoder_state(last_cell)
+        src_mask = batch.src_token_mask
+        b_indices = torch.arange(len(batch))
 
-        qgm = None
-        self.decoder.set_variables(src_encodings, src_encoding_att, table_embedding, schema_embedding)
-        tmp = self.decoder.decode(dec_init_vec, qgm)
+        self.decoder.set_variables(src_encodings, src_encoding_att, table_embedding, schema_embedding, src_mask)
+        tmp = self.decoder.decode(b_indices, None, dec_init_vec, batch.qgm)
         return tmp
 
     def step(self, x, h_tm1, src_encodings, src_encodings_att_linear, decoder, attention_func, src_token_mask=None,

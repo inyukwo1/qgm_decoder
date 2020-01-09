@@ -79,7 +79,6 @@ def process_datas(datas, args):
                             if isinstance(val[0], str):
                                 value_set.add(str(val[0].lower()))
                                 value_set.add(lemma(str(val[0].lower())))
-
                     except:
                         print("not utf8 value")
                     if col in col_value_set:

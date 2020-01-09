@@ -44,7 +44,8 @@ def load_dataSets(args):
     for d in datas:
         d['names'] = tables[d['db_id']]['schema_content']
         d['table_names'] = tables[d['db_id']]['table_names']
-        d['col_set'] = tables[d['db_id']]['col_set']
+        #d['col_set'] = tables[d['db_id']]['col_set']
+        d['col_set'] = [item[1] for item in tables[d['db_id']]['column_names']]
         d['col_table'] = tables[d['db_id']]['col_table']
         keys = {}
         for kv in tables[d['db_id']]['foreign_keys']:

@@ -236,6 +236,7 @@ def process(sql, table):
     process_dict['col_iter'] = col_iter
     process_dict['table_names'] = table_names
     process_dict['tab_set_iter'] = tab_set_iter
+    process_dict['qgm'] = sql['qgm']
 
     return process_dict
 
@@ -259,7 +260,6 @@ def is_valid(rule_label, col_table_dict, sql):
 def to_batch_seq(sql_data, table_data, idxes, st, ed,
                  is_train=True):
     """
-
     :return:
     """
     examples = []
@@ -316,7 +316,8 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed,
             table_col_name=table_col_name,
             table_col_len=len(table_col_name),
             tokenized_src_sent=process_dict['col_set_type'],
-            tgt_actions=rule_label
+            tgt_actions=rule_label,
+            qgm=process_dict['qgm']
         )
         example.sql_json = copy.deepcopy(sql)
         example.db_id = sql['db_id']
@@ -343,10 +344,10 @@ def epoch_train(model, optimizer, bert_optimizer, batch_size, sql_data, table_da
     sql_data = new_sql_data
     perm=np.random.permutation(len(sql_data))
     cum_loss = 0.0
-    st = 0
     optimizer.zero_grad()
     if bert_optimizer:
         bert_optimizer.zero_grad()
+
     for st in tqdm(range(0, len(sql_data), batch_size)):
         ed = st+batch_size if st+batch_size < len(perm) else len(perm)
         examples = to_batch_seq(sql_data, table_data, perm, st, ed)
@@ -354,30 +355,24 @@ def epoch_train(model, optimizer, bert_optimizer, batch_size, sql_data, table_da
         score = model.forward(examples)
         if score[0] is None:
             continue
+
         loss_sketch = -score[0]
         loss_lf = -score[1]
 
         loss_sketch = torch.mean(loss_sketch)
         loss_lf = torch.mean(loss_lf)
 
-        #if epoch > loss_epoch_threshold:
-        #    loss = loss_lf + sketch_loss_coefficient * loss_sketch
-        #else:
-        #    loss = loss_lf + loss_sketch
-
         loss = loss_lf + loss_sketch
-        loss = loss / 3
         loss.backward()
         if args.clip_grad > 0.:
             grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad)
 
-        if epoch % 3 == 0:
-            optimizer.step()
-            if bert_optimizer:
-                bert_optimizer.step()
-            optimizer.zero_grad()
-            if bert_optimizer:
-                bert_optimizer.zero_grad()
+        optimizer.step()
+        if bert_optimizer:
+            bert_optimizer.step()
+        optimizer.zero_grad()
+        if bert_optimizer:
+            bert_optimizer.zero_grad()
 
         cum_loss += loss.data.cpu().numpy()*(ed - st)
     return cum_loss / len(sql_data)
@@ -446,7 +441,6 @@ def eval_acc(preds, sqls):
             print("GOLD: {}".format(sql['rule_label']))
             print("")
             '''
-
         tmp = ' '.join([t for t in pred['rule_label'].split(' ') if t.split('(')[0] not in ['A', 'C', 'T']])
         if pred['sketch_result'] == tmp:
             sketch_correct += 1
@@ -463,6 +457,17 @@ def load_data_new(sql_path, table_data, use_small=False):
         sql_data += data
 
     table_data_new = {table['db_id']: table for table in table_data}
+
+    # Filter data with qgm that has nested query
+    tmp = []
+    for data in sql_data:
+        flag = True
+        for box in data['qgm']:
+            if box['body']['quantifier_types'] and 's' in box['body']['quantifier_types']:
+                flag = False
+        if flag:
+            tmp += [data]
+    sql_data = tmp
 
     if use_small:
         return sql_data[:80], table_data_new
