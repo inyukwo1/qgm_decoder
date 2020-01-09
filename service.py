@@ -8,6 +8,8 @@ from ours.src.utils import process, schema_linking, get_col_table_dict, get_tabl
 from ours.src.dataset import Example
 from ours.sem2SQL import transform
 from ours.src.rule.sem_utils import alter_column0_one_entry, alter_inter_one_entry, alter_not_in_one_entry
+from validation.check_correctness import compare_two_queries, diff_two_queries 
+
 import os
 import pickle
 import re
@@ -97,8 +99,8 @@ def createSSHClient(server, port, user, password):
     return client
 
 
-# ssh = createSSHClient('141.223.199.39', '2022', 'hjkim', 'sksmsdi!wkfTodrlszlaguswl33')
-ssh = createSSHClient('141.223.199.39', '2022', 'ihna', 'Sook2303!@')
+ssh = createSSHClient('141.223.199.39', '2022', 'hjkim', 'sksmsdi!wkfTodrlszlaguswl33')
+# ssh = createSSHClient('141.223.199.39', '2022', 'ihna', 'Sook2303!@')
 scp = SCPClient(ssh.get_transport())
 
 
@@ -119,35 +121,57 @@ class Service(Resource):
             parser.add_argument('model', required=True, type=str)
             parser.add_argument('db_id', required=True, type=str)
             parser.add_argument('question', required=True, type=str)
+            parser.add_argument('mode', default='Explore', type=str)
+            parser.add_argument('gold_sql', default=None, type=str)
+            parser.add_argument('gen_sql', default=None, type=str)
             args = parser.parse_args()
 
-            if args['model'] == 'ours':
+            if args['mode'] == 'Explore':
+              if args['model'] == 'ours':
                 model = ours_end2end["spider"]
-            elif args['model'] == 'irnet':
+              elif args['model'] == 'irnet':
                 model = irnet_end2end["spider"]
-            elif args['model'] == 'gnn':
+              elif args['model'] == 'gnn':
                 model = gnn_end2end["spider"]
-            else:
+              else:
                 return
-            result_query, actions, question = model.run_model(args["db_id"], args["question"])
-            if args['model'] == 'irnet':
-                result_query = ours_end2end['spider'].value_predictor(args["db_id"], result_query, args["question"], ' 1')
-            elif args['model'] == 'gnn':
-                result_query = ours_end2end['spider'].value_predictor(args["db_id"], result_query, args["question"], " ' value '")
+               result_query, actions, question = model.run_model(args["db_id"], args["question"])
+               if args['model'] == 'irnet':
+                   result_query = ours_end2end['spider'].value_predictor(args["db_id"], result_query, args["question"], ' 1')
+               elif args['model'] == 'gnn':
+                   result_query = ours_end2end['spider'].value_predictor(args["db_id"], result_query, args["question"], " ' value '")
 
-            plot_filename = plot_execution(os.path.join("./data/{}/database".format("spider"), args["db_id"], args["db_id"] + ".sqlite"), result_query)
+               plot_filename = plot_execution(os.path.join("./data/{}/database".format("spider"), args["db_id"], args["db_id"] + ".sqlite"), result_query)
 
-            if plot_filename == '':
+              if plot_filename == '':
                 return {'result': result_query,
                         'actions': actions,
                         'question': question}
-            else:
+              else:
                 scp.put(os.path.join(PLOTDIR, plot_filename),
-                        os.path.join('/home/ihna/web/build', plot_filename))
+                        os.path.join('./web/public/', plot_filename))
                 return {'result': result_query,
                         'actions': actions,
                         'question': question,
                         'plot_filename': plot_filename}
+            elif args['mode'] == 'Analyze':
+              systems=["ours", "irnet", "gnn"]
+              result_query={}
+              result_query["ours"], _, _= ours_end2end["spider"].run_model(args["db_id"], args["question"])
+              result_query["irnet"], _, _= irnet_end2end["spider"].run_model(args["db_id"], args["question"])
+              result_query["gnn"], _, _= gnn_end2end["spider"].run_model(args["db_id"], args["question"])
+              gen_sql=args['gen_sql']
+              gold_sql=args['gold_sql']
+              #diff
+              diff=diff_two_queries(os.path.join("./data/{}/database".format("spider"), args["db_id"], args["db_id"] + ".sqlite"),args["db_id"], result_query[system], gold_sql) 
+              #check correctness
+              equi={}
+              for system in systems:
+                 equi[system]=compare_two_queries(os.path.join("./data/{}/database".format("spider"), args["db_id"], args["db_id"] + ".sqlite"),args["db_id"], result_query[system], gold_sql)
+              equi_class=[key for key, value in equi.items() if value == True]
+              return {'result': equi_class,
+                      'diff': diff}
+
         except Exception as e:
             print("done not well")
             return {'result': str(e)}
@@ -172,4 +196,4 @@ if __name__ == "__main__":
     CORS(app)
     api = Api(app)
     api.add_resource(Service, '/service')
-    app.run(host='141.223.199.148', port=4000, debug=False)
+    app.run(host='141.223.199.39', port=4000, debug=False)
