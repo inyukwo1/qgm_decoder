@@ -296,7 +296,7 @@ class IRNet(BasicModel):
         b_indices = torch.arange(len(batch))
 
         self.decoder.set_variables(src_encodings, src_encoding_att, table_embedding, schema_embedding, src_mask)
-        tmp = self.decoder.decode(b_indices, None, dec_init_vec, batch.qgm)
+        tmp = self.decoder.decode(b_indices, None, dec_init_vec, prev_box=None, gold_boxes=batch.qgm)
         return tmp
 
 
@@ -354,7 +354,7 @@ class IRNet(BasicModel):
         b_indices = torch.arange(len(batch))
 
         self.decoder.set_variables(src_encodings, src_encoding_att, table_embedding, schema_embedding, src_mask)
-        tmp = self.decoder.decode(b_indices, None, dec_init_vec, batch.qgm)
+        tmp = self.decoder.decode(b_indices, None, dec_init_vec, prev_box=None)
         return tmp
 
     def step(self, x, h_tm1, src_encodings, src_encodings_att_linear, decoder, attention_func, src_token_mask=None,
