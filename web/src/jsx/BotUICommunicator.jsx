@@ -70,7 +70,7 @@ class BotUICommunicator {
       return;
     }
     analysis_promise.then (analysis_result => {
-      const [pred_sql_wrong_parts, correct_models] = analysis_result;
+      const [correct_models, pred_sql_wrong_parts] = analysis_result;
       this.sequentialInsertHumanBotMessage (
         this.state.selected_index,
         [sqlFormatter (gold_sql)],

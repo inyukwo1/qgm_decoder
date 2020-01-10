@@ -37,7 +37,8 @@ class App extends React.Component {
     db_id: '',
     clicked_mic: false,
     model: '',
-    pred_sql: '',
+    analyze_sql: '',
+    analyze_nlq: ''
   };
 
   handleClickedMic = clicked => {
@@ -115,17 +116,19 @@ class App extends React.Component {
       return;
     }
     if (!this.TopInterfaces.exploreMode ()) {
-      const nlq = this.state.original_nlq;
+      const gold_sql = this.state.original_nlq;
       const db_id = this.state.db_id;
       const model = this.state.model;
-      const pred_sql = this.state.pred_sql;
+      const pred_sql = this.state.analyze_sql;
+      const analyze_nlq = this.state.analyze_nlq;
       this.BotUICommunicator.analyzeMessage (
-        nlq,
+        gold_sql,
         pred_sql,
         queryAnalysis( db_id,
           model,
           pred_sql,
-          nlq,
+          gold_sql,
+          analyze_nlq,
           'http://141.223.199.148:4001/service')
       );
       this._initInput ();
@@ -147,13 +150,14 @@ class App extends React.Component {
     });
   };
 
-  incorrectClickAnalyzeCallback = (next_index, pred_sql) => {
+  incorrectClickAnalyzeCallback = (next_index, pred_sql, nlq) => {
     this.BotUICommunicator
       .oneBotInsertMessage (next_index + 1, 'What is a correct query?', 100)
       .then (index => {
         this.BotUICommunicator.readyAnalyze (index);
         this.setState ({
-          pred_sql: pred_sql,
+          analyze_sql: pred_sql,
+          analyze_nlq: nlq
         });
       });
   };

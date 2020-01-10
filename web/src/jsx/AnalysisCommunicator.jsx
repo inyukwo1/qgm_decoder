@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const queryAnalysis = (db_id, model, gen_sql, gold_sql, url) =>
+const queryAnalysis = (db_id, model, gen_sql, gold_sql, nlq, url) =>
   axios
     .get (url, {
       headers: {
@@ -13,6 +13,7 @@ const queryAnalysis = (db_id, model, gen_sql, gold_sql, url) =>
         db_id: db_id,
         gen_sql: gen_sql,
         gold_sql: gold_sql,
+        question: nlq
       },
     })
     .then (response => {

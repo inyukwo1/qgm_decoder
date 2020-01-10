@@ -161,7 +161,7 @@ class Service(Resource):
               #check correctness
               equi={}
               for system in systems:
-                 equi[system]=compare_two_queries(os.path.join("./data/{}/database".format("spider"), args["db_id"], args["db_id"] + ".sqlite"),args["db_id"], result_query[system], gold_sql)
+                 equi[system]=compare_two_queries("sqlite:///" + os.path.join("./data/{}/database".format("spider"), args["db_id"], args["db_id"] + ".sqlite"),args["db_id"], result_query[system], gold_sql)
               equi_class=[key for key, value in equi.items() if value == True]
               return {'result': equi_class,
                       'diff': diff}
