@@ -156,7 +156,7 @@ class App extends React.Component {
       .then (index => {
         this.BotUICommunicator.readyAnalyze (index);
         this.setState ({
-          analyze_sql: pred_sql,
+          analyze_sql: pred_sql.replace (/<br \/>/gi, ''),
           analyze_nlq: nlq
         });
       });

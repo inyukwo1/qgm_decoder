@@ -134,8 +134,7 @@ class Service(Resource):
               elif args['model'] == 'gnn':
                    result_query = ours_end2end['spider'].value_predictor(args["db_id"], result_query, args["question"], " ' value '")
 
-              # plot_filename = plot_execution(os.path.join("./data/{}/database".format("spider"), args["db_id"], args["db_id"] + ".sqlite"), result_query)
-              plot_filename = ''
+              plot_filename = plot_execution(os.path.join("./data/{}/database".format("spider"), args["db_id"], args["db_id"] + ".sqlite"), result_query)
 
               if plot_filename == '':
                 return {'result': result_query,

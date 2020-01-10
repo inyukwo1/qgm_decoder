@@ -1,6 +1,7 @@
 .top_interfaces {
     display: flex;
     justify-content: flex-end;
+    margin-bottom: 1vh;
 }
 
 .showing-schema {
@@ -32,4 +33,54 @@
     position: absolute;
     top: 1vmin;
     right: 1vmin;
+}
+
+input[type="checkbox"] {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    margin: 0;
+}
+
+.explore_analyze {
+    position: relative;
+    left: -30.8vw;
+    display: flex;
+    padding: .5vmin 1vmin 0.5vmin 1.5vmin;
+    border-radius: 1vmin;
+    border-color: #000000;
+    background-color: #1c52a3;
+    color: #fff;
+    width: 13vmin;
+    vertical-align: bottom;
+    text-align: left;
+    font-size: calc(2.0vmin);
+    -webkit-transition: .4s;
+    transition: .4s;
+    height: 4vmin;
+    cursor: pointer
+}
+
+.explore_analyze:before {
+    position: absolute;
+    content: "";
+    height: calc(3.4vmin);
+    width: calc(3.4vmin);
+    border-radius: 0.8vmin;
+    background-color: #fff;
+    right: 0.3vmin;
+    bottom: 0.3vmin;
+    -webkit-transition: .4s;
+    transition: .4s;
+}
+
+input:checked+.explore_analyze {
+    background-color: #1c52a3;
+    flex-direction: row-reverse;
+}
+
+input:checked+.explore_analyze:before {
+    -webkit-transform: translateX(-9vmin);
+    -ms-transform: translateX(-9vmin);
+    transform: translateX(-9vmin);
 }

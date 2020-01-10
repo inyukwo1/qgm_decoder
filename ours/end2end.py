@@ -268,9 +268,11 @@ class End2EndOurs(End2End):
                     values.append(' '.join(cur_upper_val))
                     cur_upper_val = []
                     flag_upper = False
-
+            def is_year(tok):
+                if len(str(tok)) == 4 and str(tok).isdigit() and int(str(tok)[:2]) < 22 and int(str(tok)[:2]) > 15:
+                    return True
             is_inserted_already = False
-            if len(token) == 1 and token[0] == 'year' and self._is_number_tryexcept(question_origin[start_idx]):
+            if len(token) == 1 and is_year(token[0]) and self._is_number_tryexcept(question_origin[start_idx]):
                 is_inserted_already = True
                 values.append(question_origin[start_idx])
 

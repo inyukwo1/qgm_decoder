@@ -10,18 +10,24 @@ const sqlFormatter = sql => {
 };
 
 const unformatsql = formatted_sql => {
-  const sql = formatted_sql.replace ('<br />', '');
+  const sql = formatted_sql.replace (/<br \/>/gi, '');
   return sql;
 };
 
+String.prototype.insert = function (index, string) {
+  if (index > 0)
+    return this.substring(0, index) + string + this.substring(index, this.length);
+  
+  return string + this;
+};
+
 const sqlFormatterWithWrongParts = (formatted_sql, wrong_parts) => {
-  const sql = unformatsql (formatted_sql);
-  const sql_array = sql.split (' ');
+  var sql = unformatsql (formatted_sql);
   for (var [st, ed] of wrong_parts.reverse ()) {
-    sql_array.splice (ed, 0, '</font>');
-    sql_array.splice (st, 0, '<font color="red">');
+    sql = sql.insert (ed, '</font>');
+    sql = sql.insert (st, '<font color="red">');
   }
-  const re_formatted_sql = sqlFormatter (sql_array.join (' '));
+  const re_formatted_sql = sqlFormatter (sql);
   return re_formatted_sql;
 };
 
