@@ -62,23 +62,28 @@ class BotUICommunicator {
       );
   }
 
-  analyzeMessage (gold_sql, pred_sql, pred_sql_wrong_parts, correct_models) {
+  analyzeMessage (gold_sql, pred_sql, analysis_promise) {
     if (!this.state.ready_to_analyze) {
       this.oneBotMessage (
         '<b>Please click a message box which you want to analyze.</b>'
       );
       return;
     }
-    this.sequentialInsertHumanBotMessage (
-      this.state.selected_index,
-      [sqlFormatter (gold_sql)],
-      [
-        'Incorrectly predicted phrases are highlighted in red.',
-        sqlFormatterWithWrongParts (pred_sql, pred_sql_wrong_parts),
-        'The correct model is: <br /><b>' + correct_models.join (' ') + '</b>',
-      ]
-    );
-    this.state.ready_to_analyze = false;
+    analysis_promise.then (analysis_result => {
+      const [pred_sql_wrong_parts, correct_models] = analysis_result;
+      this.sequentialInsertHumanBotMessage (
+        this.state.selected_index,
+        [sqlFormatter (gold_sql)],
+        [
+          'Incorrectly predicted phrases are highlighted in red.',
+          sqlFormatterWithWrongParts (pred_sql, pred_sql_wrong_parts),
+          'The correct model is: <br /><b>' +
+            correct_models.join (' ') +
+            '</b>',
+        ]
+      );
+      this.state.ready_to_analyze = false;
+    });
   }
 
   exploreMessage (nlq, promise_result) {
@@ -90,7 +95,7 @@ class BotUICommunicator {
           .remove (-1)
           .then (_ =>
             this.botui.message.bot ({
-              content: sqlFormatter(pred_sql),
+              content: sqlFormatter (pred_sql),
               delay: 100,
               add_button: true,
               toggle_callback: this.callback,
@@ -98,11 +103,11 @@ class BotUICommunicator {
           )
           .then (_ => {
             if (plot_filename) {
-              this.botui.message.bot({
-                type: "embed",
+              this.botui.message.bot ({
+                type: 'embed',
                 content: plot_filename,
-                delay: 1000
-              })
+                delay: 1000,
+              });
             } else {
               return this.oneBotMessage (
                 'The generated SQL query is not executable.'
@@ -123,7 +128,7 @@ class BotUICommunicator {
       })
       .then (this.callback);
 
-  oneBotInsertMessage = (index, content, delay=1000) =>
+  oneBotInsertMessage = (index, content, delay = 1000) =>
     this.botui.message
       .insert (index, {
         content: content,

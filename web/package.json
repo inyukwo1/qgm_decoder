@@ -1,10 +1,10 @@
 {
-  "name": "web",
+  "name": "ega",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
     "@chentsulin/react-botui": "^0.1.2",
-    "axios": "^0.19.0",
+    "axios": "^0.19.1",
     "bootstrap": "^4.3.1",
     "botui": "git+https://github.com/inyukwo1/botui.git",
     "botui-react": "git+https://github.com/inyukwo1/botui-react.git",

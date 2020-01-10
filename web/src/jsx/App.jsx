@@ -11,6 +11,7 @@ import 'botui/build/botui-theme-default.css';
 import 'botui/build/botui.min.css';
 import '../css/App.css';
 import SpeechRecognition from 'react-speech-recognition';
+import queryAnalysis from './AnalysisCommunicator';
 
 class App extends React.Component {
   componentDidMount () {
@@ -114,11 +115,18 @@ class App extends React.Component {
       return;
     }
     if (!this.TopInterfaces.exploreMode ()) {
+      const nlq = this.state.original_nlq;
+      const db_id = this.state.db_id;
+      const model = this.state.model;
+      const pred_sql = this.state.pred_sql;
       this.BotUICommunicator.analyzeMessage (
-        this.state.original_nlq,
-        this.state.pred_sql,
-        [[0, 5]],
-        ['IRNet']
+        nlq,
+        pred_sql,
+        queryAnalysis( db_id,
+          model,
+          pred_sql,
+          nlq,
+          'http://141.223.199.148:4001/service')
       );
       this._initInput ();
       return;
@@ -128,7 +136,7 @@ class App extends React.Component {
     const model = this.state.model;
     this.BotUICommunicator.exploreMessage (
       nlq,
-      queryTextToSQL (db_id, model, nlq, 'http://141.223.199.148:4000/service')
+      queryTextToSQL (db_id, model, nlq, 'http://141.223.199.148:4001/service')
     );
     this._initInput ();
   };
