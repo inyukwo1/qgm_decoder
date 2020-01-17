@@ -157,5 +157,3 @@ class Batch(object):
     def src_token_mask(self):
         return nn_utils.length_array_to_mask_tensor(self.src_sents_len,
                                                     cuda=self.cuda)
-
-

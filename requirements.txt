@@ -1,7 +1,9 @@
-nltk==3.4
+nltk
 pattern
-numpy==1.14.0
-torch==1.0.1
-pytorch-pretrained-bert==0.5.1
-tqdm==4.31.1
+numpy
+torch
+torchvision
+tqdm
 transformers
+jsonnet
+scikit-learn

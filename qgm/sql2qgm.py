@@ -1,6 +1,6 @@
 import json
 import argparse
-from ops import WHERE_OPS, AGG_OPS, BOX_OPS
+from qgm.ops import WHERE_OPS, AGG_OPS, BOX_OPS
 
 def create_group_by_box(sql, info, schema):
     # Append group by box

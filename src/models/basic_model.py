@@ -40,7 +40,7 @@ class BasicModel(nn.Module):
             table_embedding.size(0),
             table_embedding.size(1),
             embedding_differ.size(2)
-        ), 0)
+        ).bool(), 0)
 
         return embedding_differ
 
@@ -80,7 +80,7 @@ class BasicModel(nn.Module):
             val_emb_array[i, :val_len[i], :] = values_list[i][:, :]
 
         val_inp = torch.from_numpy(val_emb_array)
-        if self.args.cuda:
+        if self.is_cuda:
             val_inp = val_inp.cuda()
         val_inp_var = Variable(val_inp)
         return val_inp_var
@@ -115,7 +115,7 @@ class BasicModel(nn.Module):
         for i, one_q in enumerate(q):
             if not is_list:
                 q_val = list(
-                    map(lambda x: self.word_emb.get(x, np.zeros(self.args.col_embed_size, dtype=np.float32)), one_q))
+                    map(lambda x: self.word_emb.get(x, np.zeros(self.h_params['col_embed_size'], dtype=np.float32)), one_q))
             else:
                 q_val = []
                 for ws in one_q:
@@ -134,12 +134,12 @@ class BasicModel(nn.Module):
             val_len[i] = len(q_val)
         max_len = max(val_len)
 
-        val_emb_array = np.zeros((B, max_len, self.args.col_embed_size), dtype=np.float32)
+        val_emb_array = np.zeros((B, max_len, self.h_params['col_embed_size']), dtype=np.float32)
         for i in range(B):
             for t in range(len(val_embs[i])):
                 val_emb_array[i, t, :] = val_embs[i][t]
         val_inp = torch.from_numpy(val_emb_array)
-        if self.args.cuda:
+        if self.is_cuda:
             val_inp = val_inp.cuda()
         return val_inp
 
@@ -149,7 +149,7 @@ class BasicModel(nn.Module):
             os.makedirs(dir_name)
 
         params = {
-            'args': self.args,
+            'h_params': self.h_params,
             'vocab': self.vocab,
             'grammar': self.grammar,
             'state_dict': self.state_dict()

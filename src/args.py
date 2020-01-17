@@ -14,7 +14,7 @@ import numpy as np
 def init_arg_parser():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('--seed', default=5783287, type=int, help='random seed')
-    arg_parser.add_argument('--cuda', action='store_true', help='use gpu')
+    #arg_parser.add_argument('--cuda', action='store_true', help='use gpu')
     arg_parser.add_argument('--lr_scheduler', action='store_true', help='use learning rate scheduler')
     arg_parser.add_argument('--milestones', default=[30, 50], type=list, help='milestones for lr scheduler')
     arg_parser.add_argument('--lr_scheduler_gammar', default=1e-1, type=float, help='decay rate of learning rate scheduler')
@@ -28,7 +28,7 @@ def init_arg_parser():
     arg_parser.add_argument('--lstm', choices=['lstm', 'lstm_with_dropout', 'parent_feed'], default='lstm')
 
     arg_parser.add_argument('--bert', type=int, default=-1)
-    arg_parser.add_argument('--load_model', default=None, type=str, help='load a pre-trained model')
+    #arg_parser.add_argument('--load_model', default=None, type=str, help='load a pre-trained model')
     arg_parser.add_argument('--glove_embed_path', default="glove.42B.300d.txt", type=str)
 
     arg_parser.add_argument('--batch_size', default=64, type=int, help='batch size')
@@ -51,9 +51,9 @@ def init_arg_parser():
     arg_parser.add_argument('--decode_max_time_step', default=40, type=int, help='maximum number of time steps used '
                                                                                  'in decoding and sampling')
 
-    arg_parser.add_argument('--save_to', default='model', type=str, help='save trained model to')
-    arg_parser.add_argument('--toy', action='store_true',
-                            help='If set, use small data; used for fast debugging.')
+    #arg_parser.add_argument('--save_to', default='model', type=str, help='save trained model to')
+    #arg_parser.add_argument('--toy', action='store_true',
+    #                        help='If set, use small data; used for fast debugging.')
     arg_parser.add_argument('--clip_grad', default=5., type=float, help='clip gradients')
     arg_parser.add_argument('--max_epoch', default=-1, type=int, help='maximum number of training epoches')
     arg_parser.add_argument('--optimizer', default='Adam', type=str, help='optimizer')

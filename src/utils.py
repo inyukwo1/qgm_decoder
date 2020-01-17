@@ -20,6 +20,7 @@ from tqdm import tqdm
 from src.dataset import Example
 from src.rule import lf
 from src.rule.semQL import Sup, Sel, Order, Root, Filter, A, N, C, T, Root1
+from qgm.utils import compare_boxes
 
 wordnet_lemmatizer = WordNetLemmatizer()
 
@@ -106,6 +107,7 @@ def get_table_colNames(tab_ids, tab_cols):
         result.append(table_col_dict[ci])
     return result
 
+
 def get_col_table_dict(tab_cols, tab_ids, sql):
     table_dict = {}
     for c_id, c_v in enumerate(sql['col_set']):
@@ -118,6 +120,10 @@ def get_col_table_dict(tab_cols, tab_ids, sql):
         for value in value_item:
             col_table_dict[value] = col_table_dict.get(value, []) + [key_item]
     col_table_dict[0] = [x for x in range(len(table_dict) - 1)]
+
+    # Modify
+    col_table_dict = {idx:[item] if item != -1 else list(range(max(tab_ids)+1)) for idx, item in enumerate(tab_ids)}
+
     return col_table_dict
 
 
@@ -330,11 +336,11 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed,
         return examples
 
 def epoch_train(model, optimizer, bert_optimizer, batch_size, sql_data, table_data,
-                args, epoch=0, loss_epoch_threshold=20, sketch_loss_coefficient=0.2):
+                H_PARAMS):
     model.train()
     # shuffle
     new_sql_data = []
-    if args.bert != -1:
+    if H_PARAMS['bert'] != -1:
         for sql in sql_data:
             if sql["db_id"] != "baseball_1":
                 new_sql_data.append(sql)
@@ -343,29 +349,35 @@ def epoch_train(model, optimizer, bert_optimizer, batch_size, sql_data, table_da
 
     sql_data = new_sql_data
     perm=np.random.permutation(len(sql_data))
-    cum_loss = 0.0
     optimizer.zero_grad()
     if bert_optimizer:
         bert_optimizer.zero_grad()
 
+    total_loss = {}
     for st in tqdm(range(0, len(sql_data), batch_size)):
         ed = st+batch_size if st+batch_size < len(perm) else len(perm)
         examples = to_batch_seq(sql_data, table_data, perm, st, ed)
 
-        score = model.forward(examples)
-        if score[0] is None:
-            continue
+        losses, pred_boxes = model.forward(examples)
 
-        loss_sketch = -score[0]
-        loss_lf = -score[1]
-
-        loss_sketch = torch.mean(loss_sketch)
-        loss_lf = torch.mean(loss_lf)
-
-        loss = loss_lf + loss_sketch
+        # Combine losses
+        loss_list = []
+        for loss in losses:
+            loss_sum = sum([item for key, item in loss.items()])
+            loss_list += [loss_sum]
+        loss = torch.mean(torch.stack(loss_list))
         loss.backward()
-        if args.clip_grad > 0.:
-            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad)
+
+        # Save loss
+        if not total_loss:
+            for key in losses[0].keys():
+                total_loss[key] = []
+        for loss in losses:
+            for key, item in loss.items():
+                total_loss[key] += [item]
+
+        if H_PARAMS['clip_grad'] > 0.:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), H_PARAMS['clip_grad'])
 
         optimizer.step()
         if bert_optimizer:
@@ -374,44 +386,32 @@ def epoch_train(model, optimizer, bert_optimizer, batch_size, sql_data, table_da
         if bert_optimizer:
             bert_optimizer.zero_grad()
 
-        cum_loss += loss.data.cpu().numpy()*(ed - st)
-    return cum_loss / len(sql_data)
+    # Average loss
+    for key in total_loss.keys():
+        total_loss[key] = sum(total_loss[key]) / len(total_loss[key])
+
+    return total_loss
 
 def epoch_acc(model, batch_size, sql_data, table_data, beam_size=3):
     model.eval()
     perm = list(range(len(sql_data)))
     st = 0
 
-    json_datas = []
+    pred_qgms = []
+    gold_qgms = []
     while st < len(sql_data):
         ed = st+batch_size if st+batch_size < len(perm) else len(perm)
-        examples = to_batch_seq(sql_data, table_data, perm, st, ed,
-                                                        is_train=False)
-        for example in examples:
-            try:
-                results_all = model.parse(example, beam_size=beam_size)
-                results = results_all[0]
-                list_preds = []
-
-                pred = " ".join([str(x) for x in results[0].actions])
-                for x in results:
-                    list_preds.append(" ".join(str(x.actions)))
-            except Exception as e:
-                # print('Epoch Acc: ', e)
-                # print(results)
-                # print(results_all)
-                pred = ""
-
-            simple_json = example.sql_json['pre_sql']
-
-            simple_json['sketch_result'] =  " ".join(str(x) for x in results_all[1])
-            simple_json['model_result'] = pred
-            #simple_json['col_set_type'] = example.col_hot_type
-            #simple_json['tab_set_type'] = example.tab_hot_type
-
-            json_datas.append(simple_json)
+        examples = to_batch_seq(sql_data, table_data, perm, st, ed, is_train=False)
+        for idx, example in enumerate(examples):
+            pred_qgm = model.parse([example], beam_size=beam_size)
+            pred_qgms += [pred_qgm[0]]
+            gold_qgms += [examples[idx].qgm]
         st = ed
-    return json_datas
+
+    # Calculate accur
+    total_acc = compare_boxes(pred_qgms, gold_qgms)
+
+    return total_acc
 
 def eval_acc(preds, sqls):
     sketch_correct, best_correct = 0, 0
