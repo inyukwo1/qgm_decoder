@@ -338,8 +338,8 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed,
 def epoch_train(model, optimizer, bert_optimizer, batch_size, sql_data, table_data,
                 H_PARAMS):
     model.train()
-    # shuffle
     new_sql_data = []
+    # Remove data with too big schema
     if H_PARAMS['bert'] != -1:
         for sql in sql_data:
             if sql["db_id"] != "baseball_1":
@@ -347,6 +347,7 @@ def epoch_train(model, optimizer, bert_optimizer, batch_size, sql_data, table_da
     else:
         new_sql_data = sql_data
 
+    # shuffle
     sql_data = new_sql_data
     perm=np.random.permutation(len(sql_data))
     optimizer.zero_grad()
@@ -395,20 +396,18 @@ def epoch_train(model, optimizer, bert_optimizer, batch_size, sql_data, table_da
 def epoch_acc(model, batch_size, sql_data, table_data, beam_size=3):
     model.eval()
     perm = list(range(len(sql_data)))
-    st = 0
 
     pred_qgms = []
     gold_qgms = []
-    while st < len(sql_data):
+    for st in tqdm(range(0, len(sql_data), batch_size)):
         ed = st+batch_size if st+batch_size < len(perm) else len(perm)
         examples = to_batch_seq(sql_data, table_data, perm, st, ed, is_train=False)
         for idx, example in enumerate(examples):
             pred_qgm = model.parse([example], beam_size=beam_size)
             pred_qgms += [pred_qgm[0]]
             gold_qgms += [examples[idx].qgm]
-        st = ed
 
-    # Calculate accur
+    # Calculate acc
     total_acc = compare_boxes(pred_qgms, gold_qgms)
 
     return total_acc

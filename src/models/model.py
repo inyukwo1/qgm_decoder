@@ -5,14 +5,12 @@
 # @File    : model.py
 # @Software: PyCharm
 """
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.utils
 from torch.autograd import Variable
 
-from src.beam import Beams, ActionInfo
 from src.dataset import Batch
 from src.models import nn_utils
 from src.models.basic_model import BasicModel

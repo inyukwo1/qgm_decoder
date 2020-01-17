@@ -91,8 +91,8 @@ if __name__ == '__main__':
         print('\nEpoch: {}  lr: {:.2e}  step: {}  Time: {}'.format(epoch, scheduler.optimizer.param_groups[0]['lr'],
                                         scheduler.optimizer._step_count, str(datetime.datetime.now()).split('.')[0]))
 
-        train_loss = utils.epoch_train(model, optimizer, bert_optimizer, H_PARAMS['batch_size'], sql_data, table_data, H_PARAMS)
         # Evaluation
+        train_loss = utils.epoch_train(model, optimizer, bert_optimizer, H_PARAMS['batch_size'], sql_data, table_data, H_PARAMS)
         if not epoch % H_PARAMS['eval_freq'] or epoch == H_PARAMS['epoch']:
             print('Evaluation:')
             train_total_acc = utils.epoch_acc(model, H_PARAMS['batch_size'], sql_data, table_data, beam_size=H_PARAMS['beam_size'])
@@ -106,9 +106,9 @@ if __name__ == '__main__':
             logging_to_tensorboard(summary_writer, 'dev_acc/', dev_total_acc, epoch)
 
             # Save if total_acc is higher
-            if best_dev_total_acc < dev_total_acc:
-                best_dev_total_acc = dev_total_acc
-                print('Saving new best model with acc: {}'.format(best_dev_total_acc))
+            if best_dev_total_acc < dev_total_acc['total']:
+                best_dev_total_acc = dev_total_acc['total']
+                print('Saving new best model with acc: {}'.format(best_dev_total_acc / len(val_sql_data)))
                 torch.save(model.state_dict(), os.path.join(log_model_path, 'best_model.pt'))
 
         # Change learning rate

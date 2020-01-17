@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-# @Time    : 2019/5/24
-# @Author  : Jiaqi&Zecheng
-# @File    : utils.py
-# @Software: PyCharm
-"""
 import os
 import json
 from pattern.en import lemma

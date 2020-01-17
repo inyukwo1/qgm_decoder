@@ -22,7 +22,7 @@
 "decode_max_time_step": 40,
 "clip_grad": 5,
 "lr_scheduler_gamma": 5e-1,
-"milestones": [30, 50],
+"milestones": [40, 70],
 
 # Options
 "lr_scheduler": true,
@@ -39,10 +39,11 @@
 
 # Training settings
 "toy": false,
-"lr": 1e-5,
-"bert_lr": 1e-6,
+"lr": 1e-3,
+"bert_lr": 1e-4,
 "bert": -1, # -1 is no bert.
-"batch_size": 2,
-"max_epoch": 50
+"batch_size": 128,
+"max_epoch": 100,
+"eval_freq": 1
 }
 

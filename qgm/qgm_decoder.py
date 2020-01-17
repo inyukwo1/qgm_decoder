@@ -577,10 +577,7 @@ class QGM_Decoder(nn.Module):
             body_emb = sum(tmp) / len(tmp) if tmp else torch.zeros(300)
 
             # Encode operator
-            try:
-                box_op_emb = self.box_op_emb(torch.tensor(box['operator']).cuda())
-            except:
-                stop = 1
+            box_op_emb = self.box_op_emb(torch.tensor(box['operator']).cuda())
 
             # Combine and encode
             embs = torch.cat([head_emb, body_emb, box_op_emb], 0)
@@ -596,7 +593,7 @@ class QGM_Decoder(nn.Module):
 
         # Masking
         if source_mask is not None:
-            weight_scores.data.masked_fill_(source_mask, -float('inf'))
+            weight_scores.data.masked_fill_(source_mask.bool(), -float('inf'))
 
         # Softmax
         weight_probs = torch.softmax(weight_scores, dim=-1)
