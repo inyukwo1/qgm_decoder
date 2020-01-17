@@ -1,0 +1,74 @@
+.mybotui {
+    display: flex;
+}
+
+.App-explore {
+    .botui-app-container {
+        background-color: #e3edfc;
+    }
+    .botui-container {
+        background-color: #e3edfc;
+    }
+    .botui-message-content {
+        color: #113b7a;
+        &.human {
+            background-color: #1c52a3;
+            color: #ffffff
+        }
+    }
+    // .botui-message-button {
+    //     background-color: #1c52a3;
+    // }
+}
+
+$analyze_darker:#117a3d;
+$analyze_dark: #1ca35f;
+$analyze_little_light: #c9f6d8;
+$analyze_light: #dff6ea;
+$analyze_lighter: #f0f5f2;
+$analyze_middle: #adf6cb;
+.App-analyze {
+    .botui-app-container {
+        background-color: $analyze_light;
+    }
+    .botui-container {
+        background-color: $analyze_light;
+    }
+    .botui-message-content {
+        color: $analyze_darker;
+        &.human {
+            background-color: $analyze_dark;
+            color: #ffffff
+        }
+    }
+    // .botui-message-button {
+    //     background-color: #a31c1c;
+    // }
+}
+
+iframe {
+    width: 35vw !important;
+}
+
+.botui-messages-container {
+    text-align: left;
+}
+
+.statusbar {
+    background-color: rgb(255, 255, 255);
+    width: 10px;
+}
+
+.incorrect-bar {
+    background-color: red;
+    width: 10px;
+}
+
+.correct-bar {
+    width: 10px;
+}
+
+.padding {
+    width: 10px;
+    height: 10px;
+}

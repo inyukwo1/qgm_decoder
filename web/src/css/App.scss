@@ -1,0 +1,189 @@
+@import url(https://fonts.googleapis.com/css?family=Open+Sans);
+@import url(https://fonts.googleapis.com/css?family=Righteous);
+@import url(https://fonts.googleapis.com/css?family=Baloo+Bhai);
+@import url(https://fonts.googleapis.com/css?family=BenchNine:700);
+.App-explore {
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+    font-family: "Open Sans";
+    background-color: #c1d7f7;
+    height: 100vh;
+    .App-header {
+        color: #1c52a3;
+    }
+    .button_pretty {
+        color: #1c52a3;
+        background-color: #e3edfc;
+        &:after,
+        &:before {
+            border-color: #1c52a3;
+        }
+        &:hover {
+            background-color: #1c52a3;
+        }
+    }
+    .button {
+        background: #e3edfc;
+        color: #1c52a3;
+    }
+    .scroll_examples {
+        background-color: #e3edfc;
+    }
+}
+
+$analyze_darker:#117a3d;
+$analyze_dark: #1ca35f;
+$analyze_little_light: #c9f6d8;
+$analyze_light: #dff6ea;
+$analyze_lighter: #f0f5f2;
+$analyze_middle: #adf6cb;
+.App-analyze {
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+    font-family: "Open Sans";
+    background-color: $analyze_middle;
+    height: 100vh;
+    .App-header {
+        color: $analyze_dark;
+    }
+    .button_pretty {
+        color: $analyze_dark;
+        background-color: $analyze_light;
+        &:after,
+        &:before {
+            border-color: $analyze_dark;
+        }
+        &:hover {
+            background-color: $analyze_dark;
+        }
+    }
+    .button {
+        background: $analyze_light;
+        color: $analyze_dark;
+    }
+    .scroll_examples {
+        background-color: $analyze_light;
+    }
+}
+
+.AppMain {
+    display: flex;
+    flex-direction: column;
+    margin: 0vh 10vw;
+}
+
+.App-logo {
+    height: 40vmin;
+}
+
+.botui-app-container {
+    height: 60vh;
+}
+
+.App-header {
+    min-height: 10vh;
+    width: 100%;
+    padding-top: calc(2vmin);
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    font-family: "Righteous";
+    letter-spacing: -1px;
+    font-size: calc(5vmin);
+}
+
+.scroll_examples {
+    height: 12.6vh;
+    margin-left: 0.5vw;
+    border: 0;
+    color: black;
+    flex: 2;
+}
+
+.example_content {
+    border: 0px;
+}
+
+.button_pretty {
+    border: none;
+    cursor: pointer;
+    display: inline-block;
+    font-family: 'Open Sans', Arial, sans-serif;
+    letter-spacing: -1px;
+    font-size: 1em;
+    font-size: calc(2vmin);
+    line-height: 1em;
+    margin: 0 0;
+    margin-left: calc(1vmin);
+    outline: none;
+    padding: calc(1vmin) calc(1vmin) calc(1vmin);
+    position: relative;
+    text-transform: uppercase;
+    font-weight: 700;
+}
+
+.button_pretty:before,
+.button_pretty:after {
+    border-color: transparent;
+    -webkit-transition: all 0.25s;
+    transition: all 0.25s;
+    border-style: solid;
+    border-width: 0;
+    content: "";
+    height: calc(2vmin);
+    position: absolute;
+    width: calc(2vmin);
+}
+
+.button_pretty:before {
+    border-right-width: 2px;
+    border-top-width: 2px;
+    right: calc(-0.5vmin);
+    top: calc(-0.5vmin);
+}
+
+.button_pretty:after {
+    border-bottom-width: 2px;
+    border-left-width: 2px;
+    bottom: calc(-0.5vmin);
+    left: calc(-0.5vmin);
+}
+
+.button_pretty:hover,
+.button_pretty.hover {
+    color: #fff;
+}
+
+.button_pretty:hover:before,
+.button_pretty.hover:before,
+.button_pretty:hover:after,
+.button_pretty.hover:after {
+    height: 100%;
+    width: 100%;
+}
+
+.reset {
+    margin: 1vh 10vw;
+    float: right;
+}
+
+.button {
+    border-radius: 4px;
+    align-items: center;
+    float: right;
+    padding: 5px;
+    font-size: calc(2vmin);
+}
+
+.nlq_textbox_and_mic {
+    background-color: white;
+    border: calc(0.5vmin) ridge #e3edfc;
+    flex: 1 2 100%;
+    display: flex;
+    position: relative;
+    justify-content: center;
+    align-items: center;
+}

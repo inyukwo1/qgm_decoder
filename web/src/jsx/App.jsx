@@ -9,7 +9,7 @@ import queryTextToSQL from './BackendCommunicator';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'botui/build/botui-theme-default.css';
 import 'botui/build/botui.min.css';
-import '../css/App.css';
+import '../css/App.scss';
 import SpeechRecognition from 'react-speech-recognition';
 import queryAnalysis from './AnalysisCommunicator';
 
@@ -21,12 +21,21 @@ class App extends React.Component {
     this.BotUICommunicator.sequentialHumanBotMessage (
       [],
       [
-        'Welcome to EGA!',
-        'This is a demo produced by the Database & Data Mining lab @POSTECH.',
+        'Welcome to EGA: Explore-Gather-Analyze Tool for NL to SQL!',
         'Please select a database..',
       ]
     );
   }
+
+  componentDidUpdate () {
+    const iframes = Array.from (document.getElementsByTagName ('iframe'));
+
+    iframes.forEach (iframe => {
+      iframe.style.height =
+        iframe.contentWindow.document.body.offsetHeight + 'px';
+    });
+  }
+
   componentWillMount () {
     const {recognition} = this.props;
     recognition.lang = 'en-US';
@@ -37,8 +46,10 @@ class App extends React.Component {
     db_id: '',
     clicked_mic: false,
     model: '',
+    file: '',
+    mode: 'Explore',
     analyze_sql: '',
-    analyze_nlq: ''
+    analyze_nlq: '',
   };
 
   handleClickedMic = clicked => {
@@ -84,6 +95,43 @@ class App extends React.Component {
     });
   };
 
+  _messageInvisible = () => {
+    const msgs = Array.from (document.getElementsByClassName ('botui-message'));
+    msgs.forEach (msg => {
+      msg.style.visibility = 'hidden';
+    });
+    const statusbar = document.getElementsByClassName ('statusbar');
+    statusbar[0].style.visibility = 'hidden';
+  };
+
+  _messageVisible = () => {
+    const msgs = Array.from (document.getElementsByClassName ('botui-message'));
+    msgs.forEach (msg => {
+      msg.style.visibility = 'visible';
+    });
+    const statusbar = document.getElementsByClassName ('statusbar');
+    statusbar[0].style.visibility = 'visible';
+    // document.getElementsByClassName ('bwTeTR')[0].innerText = 'IMDB';
+    // document.getElementsByClassName ('kGtLwg')[0].innerText = 'IRNet';
+  };
+
+  handleFileChange = val => {
+    if (val === 'load') {
+      this._messageInvisible ();
+      this.setState ({
+        db_id: '',
+        model: '',
+      });
+    } else {
+      this._messageVisible ();
+      this.setState ({
+        file: val,
+        db_id: 'imdb',
+        model: 'irnet',
+      });
+    }
+  };
+
   handleNLQChange = e => {
     this.setState ({
       original_nlq: e.target.value,
@@ -96,7 +144,7 @@ class App extends React.Component {
         len_msg_pairs: len_msg_pair,
       });
     });
-  }
+  };
 
   handleRunClicked = e => {
     if (this.state.db_id === '') {
@@ -124,12 +172,14 @@ class App extends React.Component {
       this.BotUICommunicator.analyzeMessage (
         gold_sql,
         pred_sql,
-        queryAnalysis( db_id,
+        queryAnalysis (
+          db_id,
           model,
           pred_sql,
           gold_sql,
           analyze_nlq,
-          'http://141.223.199.148:4001/service')
+          'http://141.223.199.148:4001/service'
+        )
       );
       this._initInput ();
       return;
@@ -157,7 +207,7 @@ class App extends React.Component {
         this.BotUICommunicator.readyAnalyze (index);
         this.setState ({
           analyze_sql: pred_sql.replace (/<br \/>/gi, ''),
-          analyze_nlq: nlq
+          analyze_nlq: nlq,
         });
       });
   };
@@ -167,8 +217,14 @@ class App extends React.Component {
       this.botui.message.enableIncorrectClick (
         this.incorrectClickAnalyzeCallback
       );
+      this.setState ({
+        mode: 'Analyze',
+      });
     } else {
       this.botui.message.disableIncorrectClick ();
+      this.setState ({
+        mode: 'Explore',
+      });
     }
   };
 
@@ -176,11 +232,16 @@ class App extends React.Component {
     if (!this.props.browserSupportsSpeechRecognition) {
       return null;
     }
+    const root_classname = this.state.mode === 'Explore'
+      ? 'App-explore'
+      : 'App-analyze';
     return (
-      <div className="App">
+      <div className={root_classname}>
         <div className="AppMain">
           <div className="App-header">
-            <span style={{color: '#1c52a3'}}><b>EGA</b></span>
+            <span>
+              <b>EGA</b>: Explore-Gather-Analyze Tool for NL to SQL
+            </span>
           </div>
           <TopInterfaces
             ref={cmp => {
@@ -200,10 +261,13 @@ class App extends React.Component {
             handleRunClicked={this.handleRunClicked}
             handleClickedMic={this.handleClickedMic}
             handleNLQChange={this.handleNLQChange}
+            handleFileChange={this.handleFileChange}
             db_id={this.state.db_id}
             model={this.state.model}
+            file={this.state.file}
             clicked_mic={this.state.clicked_mic}
             original_nlq={this.state.original_nlq}
+            hide_loading={this.state.mode === 'Explore'}
           />
           <Examples db_id={this.state.db_id} />
         </div>

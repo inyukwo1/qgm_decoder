@@ -16,8 +16,10 @@ const unformatsql = formatted_sql => {
 
 String.prototype.insert = function (index, string) {
   if (index > 0)
-    return this.substring(0, index) + string + this.substring(index, this.length);
-  
+    return (
+      this.substring (0, index) + string + this.substring (index, this.length)
+    );
+
   return string + this;
 };
 
@@ -75,25 +77,45 @@ class BotUICommunicator {
       );
       return;
     }
-    analysis_promise.then (analysis_result => {
-      const [correct_models, pred_sql_wrong_parts] = analysis_result;
-      this.sequentialInsertHumanBotMessage (
-        this.state.selected_index,
-        [sqlFormatter (gold_sql)],
-        [
-          'Incorrectly predicted phrases are highlighted in red.',
-          sqlFormatterWithWrongParts (pred_sql, pred_sql_wrong_parts),
-          'The correct model is: <br /><b>' +
-            correct_models.join (' ') +
-            '</b>',
-        ]
-      );
-      this.state.ready_to_analyze = false;
-    });
+    this.sequentialInsertHumanBotMessage (
+      this.state.selected_index,
+      [sqlFormatter (gold_sql)],
+      ['processing...']
+    )
+      .then (_ => analysis_promise)
+      .then (analysis_result => {
+        const [
+          correct_models,
+          pred_sql_wrong_parts,
+          similarity,
+        ] = analysis_result;
+        const recommendation = similarity === 100
+          ? 'Correct model list: <br /><b>' + correct_models.join (' ') + '</b>'
+          : 'There is no exactly correct model, but <b>' +
+              correct_models.join (' ') +
+              '</b> gives the most accurate answer(<b>' +
+              similarity.toFixed (2) +
+              '%</b>).';
+        this.botui.message
+          .update (this.state.selected_index + 1, {
+            content: 'Incorrectly predicted phrases are highlighted in red.',
+          })
+          .then (_ =>
+            this.sequentialInsertHumanBotMessage (
+              this.state.selected_index + 2,
+              [],
+              [
+                sqlFormatterWithWrongParts (pred_sql, pred_sql_wrong_parts),
+                recommendation,
+              ]
+            )
+          );
+        this.state.ready_to_analyze = false;
+      });
   }
 
   exploreMessage (nlq, promise_result) {
-    this.sequentialHumanBotMessage ([nlq], ['processing'])
+    this.sequentialHumanBotMessage ([nlq], ['processing...'])
       .then (_ => promise_result)
       .then (pred_sql_filename => {
         const [pred_sql, plot_filename] = pred_sql_filename;

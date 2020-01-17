@@ -13,13 +13,14 @@ const queryAnalysis = (db_id, model, gen_sql, gold_sql, nlq, url) =>
         db_id: db_id,
         gen_sql: gen_sql,
         gold_sql: gold_sql,
-        question: nlq
+        question: nlq,
       },
     })
     .then (response => {
       const correct_systems = response.data.result;
       const diff_points = response.data.diff;
-      return [correct_systems, diff_points];
+      const similarity = response.data.similarity;
+      return [correct_systems, diff_points, similarity];
     });
 
 export default queryAnalysis;

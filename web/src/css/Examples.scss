@@ -1,0 +1,46 @@
+.App-explore {
+    .examples {
+        background-color: #e3edfc;
+        color: #1c52a3;
+    }
+    .ex_item {
+        border-bottom: dashed 1px #1c52a3;
+        color: #1c52a3;
+    }
+}
+
+$analyze_darker:#117a3d;
+$analyze_dark: #1ca35f;
+$analyze_little_light: #c9f6d8;
+$analyze_light: #dff6ea;
+$analyze_lighter: #f0f5f2;
+$analyze_middle: #adf6cb;
+.App-analyze {
+    .examples {
+        background-color: $analyze_light;
+        color: $analyze_dark;
+    }
+    .ex_item {
+        border-bottom: dashed 1px $analyze_dark;
+        color: $analyze_dark;
+    }
+}
+
+.examples {
+    font-size: calc(2vmin);
+    margin: 1vh 0vw;
+    padding-bottom: 2vh;
+    padding-left: calc(1vmin);
+    padding-top: calc(1vmin);
+    display: flex;
+    justify-content: flex-end;
+}
+
+.ex_item {
+    font-family: "Open Sans";
+    display: flex;
+    font-size: calc(2vmin);
+    align-items: left;
+    flex-direction: column;
+    padding: calc(0.1vh) calc(0.1vw) calc(0.1vh);
+}

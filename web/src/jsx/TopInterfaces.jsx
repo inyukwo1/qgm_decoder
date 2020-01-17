@@ -47,8 +47,8 @@ class TopInterfaces extends React.Component {
         </div>;
     return (
       <div className="top_interfaces">
-        <label className="switch" >
-          <input type="checkbox"></input>
+        <label className="switch">
+          <input type="checkbox" />
           <span
             className="explore_analyze"
             onClick={this.handleExploreAnalyzeButtonClicked}

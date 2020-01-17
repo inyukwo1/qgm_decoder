@@ -1,6 +1,6 @@
 import React from 'react';
 import Select from 'react-styled-select';
-import {db_ids, models} from '../constants.js';
+import {db_ids, models, loading_files} from '../constants.js';
 import '../css/App.css';
 import '../css/BottomInterfaces.css';
 import Switch from 'react-switch';
@@ -23,6 +23,16 @@ const BottomInterfaces = props => {
         onChange={props.handleModelChange}
         value={props.model}
       />
+      {props.hide_loading
+        ? <div />
+        : <Select
+            className="select"
+            options={loading_files}
+            placeholder="Load..."
+            onChange={props.handleFileChange}
+            value={props.file}
+          />}
+
       <div className="nlq_textbox_and_mic">
         <input
           className="nlq_textbox"

@@ -10,6 +10,7 @@
     "botui-react": "git+https://github.com/inyukwo1/botui-react.git",
     "google-translate": "^3.0.0",
     "google-translate-api": "^2.3.0",
+    "node-sass": "^4.13.0",
     "plotly.js": "^1.51.2",
     "react": "^16.12.0",
     "react-bootstrap-table": "^4.3.1",
