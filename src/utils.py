@@ -20,7 +20,7 @@ from tqdm import tqdm
 from src.dataset import Example
 from src.rule import lf
 from src.rule.semQL import Sup, Sel, Order, Root, Filter, A, N, C, T, Root1
-from qgm.utils import compare_boxes
+from qgm.utils import compare_boxes, filter_datas
 
 wordnet_lemmatizer = WordNetLemmatizer()
 
@@ -263,11 +263,7 @@ def is_valid(rule_label, col_table_dict, sql):
     return flag is False
 
 
-def to_batch_seq(sql_data, table_data, idxes, st, ed,
-                 is_train=True):
-    """
-    :return:
-    """
+def to_batch_seq(sql_data, table_data, idxes, st, ed):
     examples = []
 
     for i in range(st, ed):
@@ -296,15 +292,6 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed,
 
         process_dict['col_set_iter'][0] = ['count', 'number', 'many']
 
-        rule_label = None
-        if 'rule_label' in sql and is_train:
-            # handle the subquery on From cause
-            if 'from' in sql['rule_label']:
-                continue
-            rule_label = [eval(x) for x in sql['rule_label'].strip().split(' ')]
-            if is_valid(rule_label, col_table_dict=col_table_dict, sql=sql) is False:
-                continue
-
         example = Example(
             src_sent=process_dict['question_arg'],
             col_num=len(process_dict['col_set_iter']),
@@ -322,18 +309,15 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed,
             table_col_name=table_col_name,
             table_col_len=len(table_col_name),
             tokenized_src_sent=process_dict['col_set_type'],
-            tgt_actions=rule_label,
             qgm=process_dict['qgm']
         )
+
         example.sql_json = copy.deepcopy(sql)
         example.db_id = sql['db_id']
         examples.append(example)
 
-    if is_train:
-        examples.sort(key=lambda e: -len(e.src_sent))
-        return examples
-    else:
-        return examples
+    examples.sort(key=lambda e: -len(e.src_sent))
+    return examples
 
 def epoch_train(model, optimizer, bert_optimizer, batch_size, sql_data, table_data,
                 H_PARAMS):
@@ -393,7 +377,7 @@ def epoch_train(model, optimizer, bert_optimizer, batch_size, sql_data, table_da
 
     return total_loss
 
-def epoch_acc(model, batch_size, sql_data, table_data, beam_size=3):
+def epoch_acc(model, batch_size, sql_data, table_data):
     model.eval()
     perm = list(range(len(sql_data)))
 
@@ -401,9 +385,14 @@ def epoch_acc(model, batch_size, sql_data, table_data, beam_size=3):
     gold_qgms = []
     for st in tqdm(range(0, len(sql_data), batch_size)):
         ed = st+batch_size if st+batch_size < len(perm) else len(perm)
-        examples = to_batch_seq(sql_data, table_data, perm, st, ed, is_train=False)
+        examples = to_batch_seq(sql_data, table_data, perm, st, ed)
+        '''
+        pred_qgm = model.parse(examples)
+        pred_qgms += pred_qgm
+        gold_qgms += [example.qgm for example in examples]
+        '''
         for idx, example in enumerate(examples):
-            pred_qgm = model.parse([example], beam_size=beam_size)
+            pred_qgm = model.parse([example])
             pred_qgms += [pred_qgm[0]]
             gold_qgms += [examples[idx].qgm]
 
@@ -458,15 +447,7 @@ def load_data_new(sql_path, table_data, use_small=False):
     table_data_new = {table['db_id']: table for table in table_data}
 
     # Filter data with qgm that has nested query
-    tmp = []
-    for data in sql_data:
-        flag = True
-        for box in data['qgm']:
-            if box['body']['quantifier_types'] and 's' in box['body']['quantifier_types']:
-                flag = False
-        if flag:
-            tmp += [data]
-    sql_data = tmp
+    sql_data = filter_datas(sql_data)
 
     if use_small:
         return sql_data[:80], table_data_new
@@ -480,6 +461,7 @@ def load_dataset(dataset_dir, use_small=False):
     TABLE_PATH = os.path.join(dataset_dir, "tables.json")
     TRAIN_PATH = os.path.join(dataset_dir, "train.json")
     DEV_PATH = os.path.join(dataset_dir, "dev.json")
+
     with open(TABLE_PATH) as inf:
         print("Loading data from %s"%TABLE_PATH)
         table_data = json.load(inf)

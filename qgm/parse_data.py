@@ -9,11 +9,16 @@ from process_sql import get_sql
 
 data_type = 'dev'
 data_type = 'train'
-sql_path = 'data/{}_real_original.json'.format(data_type)
-db_dir = 'data/database/'
-output_file = 'data/{}_original.json'.format(data_type)
-table_file = 'data/tables.json'
+#dataset_name = 'spider'
+dataset_name = 'patients'
+#dataset_name = 'wikisql'
+#dataset_name = 'wikitablequestions'
 
+data_path = 'data/{}/'.format(dataset_name)
+sql_path = data_path + '{}_real_original.json'.format(data_type)
+db_dir = data_path + 'database/'
+output_file = data_path + '{}_original.json'.format(data_type)
+table_file = data_path + 'tables.json'
 
 class Schema:
     """

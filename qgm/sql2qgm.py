@@ -1,6 +1,6 @@
 import json
 import argparse
-from qgm.ops import WHERE_OPS, AGG_OPS, BOX_OPS
+from ops import WHERE_OPS, AGG_OPS, BOX_OPS
 
 def create_group_by_box(sql, info, schema):
     # Append group by box
@@ -127,6 +127,7 @@ def create_select_box(sql, info, schema):
         # Operand1
         col_id = where_unit[2][1][1]
         table_id = schema['column_names'][col_id][0]
+
         assert table_id in quantifiers
 
         # Operator

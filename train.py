@@ -1,7 +1,6 @@
 import os
 import json
 import copy
-import tqdm
 import _jsonnet
 import argparse
 import datetime
@@ -11,7 +10,6 @@ import torch.optim as optim
 
 from src import utils
 from src.models.model import IRNet
-from src.rule import semQL
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -32,11 +30,13 @@ if __name__ == '__main__':
     # Load Training Info
     H_PARAMS = json.loads(_jsonnet.evaluate_file(args.train_config))
 
-    grammar = semQL.Grammar()
     sql_data, table_data, val_sql_data,\
     val_table_data= utils.load_dataset(H_PARAMS['data_path'], use_small=H_PARAMS['toy'])
 
-    model = IRNet(H_PARAMS, grammar, args.cuda != -1)
+    print('train data length: {}'.format(len(sql_data)))
+    print('dev data length: {}'.format(len(val_sql_data)))
+
+    model = IRNet(H_PARAMS, is_qgm=True, is_cuda=args.cuda != -1)
 
     if args.cuda != -1:
         torch.cuda.set_device(args.cuda)
@@ -95,8 +95,8 @@ if __name__ == '__main__':
         train_loss = utils.epoch_train(model, optimizer, bert_optimizer, H_PARAMS['batch_size'], sql_data, table_data, H_PARAMS)
         if not epoch % H_PARAMS['eval_freq'] or epoch == H_PARAMS['epoch']:
             print('Evaluation:')
-            train_total_acc = utils.epoch_acc(model, H_PARAMS['batch_size'], sql_data, table_data, beam_size=H_PARAMS['beam_size'])
-            dev_total_acc = utils.epoch_acc(model, H_PARAMS['batch_size'], val_sql_data, val_table_data, beam_size=H_PARAMS['beam_size'])
+            train_total_acc = utils.epoch_acc(model, H_PARAMS['batch_size'], sql_data, table_data)
+            dev_total_acc = utils.epoch_acc(model, H_PARAMS['batch_size'], val_sql_data, val_table_data)
             print('Train Acc: {}'.format(train_total_acc['total']))
             print('Dev Acc: {}'.format(dev_total_acc['total']))
 

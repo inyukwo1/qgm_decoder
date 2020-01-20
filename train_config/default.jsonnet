@@ -2,7 +2,7 @@
 "seed": 90,
 
 # Path
-"data_path": "./data",
+"data_path": "./data/spider",
 "glove_embed_path": "./data/glove.42B.300d.txt",
 "log_path": "./logs/",
 "log_key": "testing",

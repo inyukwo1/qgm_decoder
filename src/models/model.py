@@ -7,17 +7,15 @@
 """
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.nn.utils
 from torch.autograd import Variable
 
 from src.dataset import Batch
 from src.models import nn_utils
 from src.models.basic_model import BasicModel
-from src.models.pointer_net import PointerNet
-from src.rule import semQL as define_rule
-from transformers import *
 from qgm.qgm_decoder import QGM_Decoder
+from semql.semql_decoder import SemQL_Decoder
+from transformers import *
 
 
 # Transformers has a unified API
@@ -37,12 +35,11 @@ MODELS = [(BertModel,       BertTokenizer,       'bert-large-uncased', 1024),
 
 
 class IRNet(BasicModel):
-    
-    def __init__(self, H_PARAMS, grammar, is_cuda=False):
+    def __init__(self, H_PARAMS, is_qgm=True, is_cuda=False):
         super(IRNet, self).__init__()
         self.h_params = H_PARAMS
         self.is_cuda = is_cuda
-        self.grammar = grammar
+        self.is_qgm = is_qgm
         self.use_column_pointer = H_PARAMS['column_pointer']
         self.use_sentence_features = H_PARAMS['sentence_features']
 
@@ -62,63 +59,25 @@ class IRNet(BasicModel):
         self.encoder_lstm = nn.LSTM(H_PARAMS['embed_size'], H_PARAMS['hidden_size'] // 2, bidirectional=True,
                                     batch_first=True)
 
-
-        att_vec_size = self.h_params['att_vec_size']
         action_embed_size = self.h_params['action_embed_size']
         col_embed_size = self.h_params['col_embed_size']
         hidden_size = self.h_params['hidden_size']
-        input_dim = self.h_params['action_embed_size'] + self.h_params['att_vec_size'] + self.h_params['type_embed_size']
 
-        self.lf_decoder_lstm = nn.LSTMCell(input_dim, hidden_size)
-
-        self.sketch_decoder_lstm = nn.LSTMCell(input_dim, hidden_size)
-
-        # initialize the decoder's state and cells with encoder hidden states
+        self.att_linear = nn.Linear(hidden_size, hidden_size, bias=False)
         self.decoder_cell_init = nn.Linear(hidden_size, hidden_size)
-
-        self.att_sketch_linear = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.att_lf_linear = nn.Linear(hidden_size, hidden_size, bias=False)
-
-        self.sketch_att_vec_linear = nn.Linear(hidden_size + hidden_size, att_vec_size, bias=False)
-        self.lf_att_vec_linear = nn.Linear(hidden_size + hidden_size, att_vec_size, bias=False)
-
-        self.prob_att = nn.Linear(att_vec_size, 1)
-        self.prob_len = nn.Linear(1, 1)
 
         self.col_type = nn.Linear(9, col_embed_size)
         self.tab_type = nn.Linear(5, col_embed_size)
         self.sketch_encoder = nn.LSTM(action_embed_size, action_embed_size // 2, bidirectional=True,
                                       batch_first=True)
 
-        self.production_embed = nn.Embedding(len(grammar.prod2id), action_embed_size)
-        self.type_embed = nn.Embedding(len(grammar.type2id), self.h_params['type_embed_size'])
-        self.production_readout_b = nn.Parameter(torch.FloatTensor(len(grammar.prod2id)).zero_())
-
-        self.att_project = nn.Linear(hidden_size + self.h_params['type_embed_size'], hidden_size)
-
-        self.N_embed = nn.Embedding(len(define_rule.N._init_grammar()), action_embed_size)
-
-        self.read_out_act = torch.tanh if self.h_params['readout'] == 'non_linear' else nn_utils.identity
-
-        self.query_vec_to_action_embed = nn.Linear(att_vec_size, action_embed_size,
-                                                   bias=self.h_params['readout'] == 'non_linear')
-
-        self.production_readout = lambda q: F.linear(self.read_out_act(self.query_vec_to_action_embed(q)),
-                                                     self.production_embed.weight, self.production_readout_b)
-
-        self.q_att = nn.Linear(hidden_size, self.h_params['embed_size'])
-
-        self.column_rnn_input = nn.Linear(col_embed_size, action_embed_size, bias=False)
-        self.table_rnn_input = nn.Linear(col_embed_size, action_embed_size, bias=False)
-
         self.dropout = nn.Dropout(self.h_params['dropout'])
 
-        self.column_pointer_net = PointerNet(hidden_size, col_embed_size, attention_type=self.h_params['column_att'])
-
-        self.table_pointer_net = PointerNet(hidden_size, col_embed_size, attention_type=self.h_params['column_att'])
-
         # QGM Decoer
-        self.decoder = QGM_Decoder()
+        if self.is_qgm:
+            self.decoder = QGM_Decoder(self.h_params['embed_size'])
+        else:
+            self.decoder = SemQL_Decoder()
 
         self.without_bert_params = list(self.parameters(recurse=True))
         if self.h_params['bert'] != -1:
@@ -132,12 +91,6 @@ class IRNet(BasicModel):
 
             self.h_params['hidden_size'] = dim
             self.h_params['col_embed_size'] = dim
-
-        # initial the embedding layers
-        nn.init.xavier_normal_(self.production_embed.weight.data)
-        nn.init.xavier_normal_(self.type_embed.weight.data)
-        nn.init.xavier_normal_(self.N_embed.weight.data)
-        print('Use Column Pointer: ', True if self.use_column_pointer else False)
 
     def transformer_encode(self, batch: Batch):
         B = len(batch)
@@ -245,9 +198,7 @@ class IRNet(BasicModel):
 
     def forward(self, examples):
         # now should implement the examples
-        batch = Batch(examples, self.grammar, cuda=self.is_cuda)
-
-        table_appear_mask = batch.table_appear_mask
+        batch = Batch(examples, is_cuda=self.is_cuda)
 
         if self.h_params['bert'] == -1:
             src_encodings, (last_state, last_cell) = self.encode(batch.src_sents, batch.src_sents_len, None)
@@ -287,24 +238,25 @@ class IRNet(BasicModel):
             if src_encodings is None:
                 return None, None
 
-        #utterance_encodings_sketch_linear = self.att_sketch_linear(src_encodings)
-        #utterance_encodings_lf_linear = self.att_lf_linear(src_encodings)
-        src_encoding_att = self.att_sketch_linear(src_encodings)
-        dec_init_vec = self.init_decoder_state(last_cell)
-        src_mask = batch.src_token_mask
-        col_mask = batch.table_token_mask
-        tab_mask = batch.schema_token_mask
-        col_tab_dic = batch.col_table_dict
-        b_indices = torch.arange(len(batch)).cuda()
+        if self.is_qgm:
+            src_encoding_att = self.att_linear(src_encodings)
+            dec_init_vec = self.init_decoder_state(last_cell)
+            src_mask = batch.src_token_mask
+            col_mask = batch.table_token_mask
+            tab_mask = batch.schema_token_mask
+            col_tab_dic = batch.col_table_dict
+            b_indices = torch.arange(len(batch)).cuda()
 
-        self.decoder.set_variables(src_encodings, src_encoding_att, table_embedding, schema_embedding, src_mask, col_mask, tab_mask, col_tab_dic)
-        _, losses, pred_boxes = self.decoder.decode(b_indices, None, dec_init_vec, prev_box=None, gold_boxes=batch.qgm)
+            self.decoder.set_variables(src_encodings, src_encoding_att, table_embedding, schema_embedding, src_mask, col_mask, tab_mask, col_tab_dic)
+            _, losses, pred_boxes = self.decoder.decode(b_indices, None, dec_init_vec, prev_box=None, gold_boxes=batch.qgm)
 
-        return losses, pred_boxes
+            return losses, pred_boxes
+        else:
+            something = self.decoder(examples, batch, src_encodings, table_embedding, schema_embedding, last_cell)
+            return something
 
-
-    def parse(self, examples, beam_size=5):
-        batch = Batch(examples, self.grammar, cuda=self.is_cuda)
+    def parse(self, examples):
+        batch = Batch(examples, is_cuda=self.is_cuda)
         if self.h_params['bert'] == -1:
             src_encodings, (last_state, last_cell) = self.encode(batch.src_sents, batch.src_sents_len, None)
 
@@ -343,20 +295,22 @@ class IRNet(BasicModel):
             if src_encodings is None:
                 return None, None
 
-        #utterance_encodings_sketch_linear = self.att_sketch_linear(src_encodings)
-        #utterance_encodings_lf_linear = self.att_lf_linear(src_encodings)
-        src_encoding_att = self.att_sketch_linear(src_encodings)
-        dec_init_vec = self.init_decoder_state(last_cell)
-        src_mask = batch.src_token_mask
-        col_mask = batch.table_token_mask
-        tab_mask = batch.schema_token_mask
-        col_tab_dic = batch.col_table_dict
-        b_indices = torch.arange(len(batch)).cuda()
+        if self.is_qgm:
+            src_encoding_att = self.att_linear(src_encodings)
+            dec_init_vec = self.init_decoder_state(last_cell)
+            src_mask = batch.src_token_mask
+            col_mask = batch.table_token_mask
+            tab_mask = batch.schema_token_mask
+            col_tab_dic = batch.col_table_dict
+            b_indices = torch.arange(len(batch)).cuda()
 
-        self.decoder.set_variables(src_encodings, src_encoding_att, table_embedding, schema_embedding, src_mask, col_mask, tab_mask, col_tab_dic)
-        _, losses, pred_boxes = self.decoder.decode(b_indices, None, dec_init_vec, prev_box=None, gold_boxes=batch.qgm)
+            self.decoder.set_variables(src_encodings, src_encoding_att, table_embedding, schema_embedding, src_mask, col_mask, tab_mask, col_tab_dic)
+            _, losses, pred_boxes = self.decoder.decode(b_indices, None, dec_init_vec, prev_box=None, gold_boxes=None)
 
-        return pred_boxes
+            return pred_boxes
+        else:
+            something = self.decoder(batch, src_encodings, table_embedding, schema_embedding, last_cell, beam_size=5)
+            return something
 
     def step(self, x, h_tm1, src_encodings, src_encodings_att_linear, decoder, attention_func, src_token_mask=None,
              return_att_weight=False):
@@ -380,3 +334,4 @@ class IRNet(BasicModel):
         h_0 = torch.tanh(h_0)
 
         return h_0, Variable(self.new_tensor(h_0.size()).zero_())
+
