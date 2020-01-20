@@ -3,7 +3,7 @@
 devices=$1
 save_name=$2
 
-CUDA_VISIBLE_DEVICES=$devices python -u train.py --dataset ./data \
+CUDA_VISIBLE_DEVICES=$devices python -u train.py --dataset ./data/spider/ours/ \
 --glove_embed_path ./data/glove.42B.300d.txt \
 --cuda \
 --epoch 150 \
