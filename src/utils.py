@@ -419,12 +419,15 @@ def epoch_train(
         transformer_learner = meta_transformer.clone()
         sampled_db_tasks = random.sample(db_ids, 3)
 
-        iteration_error = 0.0
+        examples_dict = dict()
         for db_id in sampled_db_tasks:
-            sampled_sqls = random.sample(sql_per_dbs[db_id], 3)
-            examples = to_batch_seq(sampled_sqls, table_data, range(3), 0, 3)
-            for _ in range(5):
-                score = model.forward(examples, transformer_encoder)
+            examples_dict[db_id] = to_batch_seq(
+                random.sample(sql_per_dbs[db_id], 3), table_data, range(3), 0, 3
+            )
+        for _ in range(5):
+            iteration_error = 0.0
+            for db_id in sampled_db_tasks:
+                score = model.forward(examples_dict[db_id], transformer_encoder)
                 if score[0] is None:
                     continue
                 loss_sketch = -score[0]
@@ -448,7 +451,7 @@ def epoch_train(
                     else len(sql_per_dbs[db_id])
                 )
                 examples = to_batch_seq(
-                    sql_per_dbs[db_id][st:ed], table_data, range(ed - st), 0, ed - st
+                    sql_per_dbs[db_id][st:ed], table_data, range(ed - st), 0, ed - st,
                 )
                 score = model.forward(examples, transformer_encoder)
                 if score[0] is None:
@@ -461,12 +464,12 @@ def epoch_train(
                 loss = loss_lf + loss_sketch
                 loss = loss / 3
                 iteration_error += loss
-        optimizer.zero_grad()
-        bert_optimizer.zero_grad()
-        iteration_error.backward()
-        optimizer.step()
-        bert_optimizer.step()
-        total_loss += iteration_error.item()
+            optimizer.zero_grad()
+            bert_optimizer.zero_grad()
+            iteration_error.backward()
+            optimizer.step()
+            bert_optimizer.step()
+            total_loss += iteration_error.item()
 
     return total_loss / len(sql_data)
 
