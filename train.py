@@ -55,6 +55,7 @@ def train(args):
 
     if args.cuda:
         model.cuda()
+        transformer_encoder.cuda()
 
     # now get the optimizer
     optimizer_cls = eval("torch.optim.%s" % args.optimizer)

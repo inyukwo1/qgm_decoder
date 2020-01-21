@@ -24,7 +24,7 @@ from transformers import *
 # for 8 transformer architectures and 30 pretrained weights.
 #          Model          | Tokenizer          | Pretrained weights shortcut
 MODELS = [
-    (BertModel, BertTokenizer, "bert-large-uncased", 1024),
+    (BertModel, BertTokenizer, "bert-base-uncased", 768),
     (OpenAIGPTModel, OpenAIGPTTokenizer, "openai-gpt"),
     (GPT2Model, GPT2Tokenizer, "gpt2"),
     (CTRLModel, CTRLTokenizer, "ctrl"),

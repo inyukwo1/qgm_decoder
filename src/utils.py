@@ -414,10 +414,10 @@ def epoch_train(
     for sql in sql_data:
         sql_per_dbs[sql["db_id"]].append(sql)
     total_loss = 0.0
-    for iteration in range(len(sql_data) // 12):
+    for iteration in tqdm(range(len(sql_data) // 100)):
         learner = meta_model.clone()
         transformer_learner = meta_transformer.clone()
-        sampled_db_tasks = random.sample(db_ids, 4)
+        sampled_db_tasks = random.sample(db_ids, 3)
 
         iteration_error = 0.0
         for db_id in sampled_db_tasks:
@@ -438,11 +438,15 @@ def epoch_train(
                     grad_norm = torch.nn.utils.clip_grad_norm_(
                         model.parameters(), args.clip_grad
                     )
-                learner.adapt(loss)
-                transformer_learner.adapt(loss)
+                learner.adapt(loss, allow_unused=True, first_order=True)
+                transformer_learner.adapt(loss, allow_unused=True, first_order=True)
 
-            for st in range(0, len(sql_per_dbs[db_id]), 3):
-                ed = st + 3 if st + 3 < len(sql_per_dbs[db_id]) else len(sql_per_dbs)
+            for st in random.sample(range(len(sql_per_dbs[db_id])), 5):
+                ed = (
+                    st + 2
+                    if st + 2 < len(sql_per_dbs[db_id])
+                    else len(sql_per_dbs[db_id])
+                )
                 examples = to_batch_seq(
                     sql_per_dbs[db_id][st:ed], table_data, range(ed - st), 0, ed - st
                 )
@@ -457,12 +461,12 @@ def epoch_train(
                 loss = loss_lf + loss_sketch
                 loss = loss / 3
                 iteration_error += loss
-            optimizer.zero_grad()
-            bert_optimizer.zero_grad()
-            iteration_error.backward()
-            optimizer.step()
-            bert_optimizer.step()
-            total_loss += iteration_error.item()
+        optimizer.zero_grad()
+        bert_optimizer.zero_grad()
+        iteration_error.backward()
+        optimizer.step()
+        bert_optimizer.step()
+        total_loss += iteration_error.item()
 
     return total_loss / len(sql_data)
 
@@ -505,8 +509,8 @@ def epoch_acc(
             loss_lf = torch.mean(loss_lf)
             loss = loss_lf + loss_sketch
             loss = loss / 3
-            model_per_dbs[db_id][0].adapt(loss)
-            model_per_dbs[db_id][1].adapt(loss)
+            model_per_dbs[db_id][0].adapt(loss, allow_unused=True)
+            model_per_dbs[db_id][1].adapt(loss, allow_unused=True)
 
     for sql in sql_data:
         sql_per_dbs[sql["db_id"]].append(sql)
