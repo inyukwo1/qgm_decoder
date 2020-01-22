@@ -9,13 +9,13 @@ db_with_error = [{'db_id': 'scholar', 'correct_table_names': ["venue", "author",
 		{'db_id': 'store_1', 'correct_table_names': ['artists', 'sqlite sequence', 'albums', 'employees', 'customers', 'genres', 'invoices', 'media types', 'tracks', 'invoice lines', 'playlists', 'playlist tracks']},
 		{'db_id': 'formula_1', 'correct_table_names': ['circuits', 'races', 'drivers', 'status', 'seasons', 'constructors', 'constructor standings', 'results', 'driver standings', 'constructor results', 'qualifying', 'pitstops', 'laptimes']}]
 
-path = '../data/spider'
 # File paths
+path = '../data/spider'
 infile_path = 'tables_original.json'
 outfile_path = 'tables.json'
 
+### Fix tables.json
 dbs = json.load(open(os.path.join(path, infile_path)))
-
 for error_info in db_with_error:
     correct_table_names = error_info['correct_table_names']
     for db in dbs:
@@ -46,30 +46,27 @@ for error_info in db_with_error:
             assert len(new_column_names) == len(column_names)
             for idx in range(len(column_names)):
                 assert new_column_names[idx][0] == db['column_names_original'][idx][0], '{} : {} : {}'.format(idx, new_column_names[idx], db['column_names_original'][idx])
- 
+
             # Change
             db['table_names'] = correct_table_names
             db['column_names'] = new_column_names
 
             print('Done editing!\n')
-
-# Write
+# Save
 with open(os.path.join(path, outfile_path), 'w') as f:
    json.dump(dbs, f)
 print('Editing tables.json Done!')
 
 
-# Fix dev_gold.sql
-print('\nNow fix dev_gold.sql')
+### Fix dev_gold.sql
 # Path
 in_path = 'dev_gold_original.sql'
 out_path = 'dev_gold.sql'
 # Info
 ori = 'SELECT T2.name FROM Friend AS T1 JOIN Highschooler AS T2 ON T1.student_id  =  T2.id INTERSECT SELECT T2.name FROM Likes AS T1 JOIN Highschooler AS T2 ON T1.liked_id  =  T2.id\tnetwork_1\n'
 new = 'SELECT T2.name FROM Friend AS T1 JOIN Highschooler AS T2 ON T1.student_id  =  T2.id INTERSECT SELECT T2.name FROM Likes AS T3 JOIN Highschooler AS T2 ON T3.liked_id  =  T2.id\tnetwork_1\n'
-# Read in
-lines = open(os.path.join(path, in_path), 'r').readlines()
 # Change
+lines = open(os.path.join(path, in_path), 'r').readlines()
 new_lines = [new if line == ori else line for line in lines]
 # Save
 with open(os.path.join(path, out_path), 'w') as f:
