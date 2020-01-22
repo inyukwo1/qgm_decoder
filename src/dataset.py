@@ -7,23 +7,17 @@
 """
 
 import copy
-import random
 
 import src.rule.semQL as define_rule
 from src.models import nn_utils
-from src import utils
 
 class Example:
-    """
-
-    """
-    def __init__(self, src_sent, vis_seq=None, tab_cols=None, tab_iter=None, col_num=None, sql=None,
+    def __init__(self, src_sent, tgt_actions=None, vis_seq=None, tab_cols=None, tab_iter=None, col_num=None, sql=None,
                  one_hot_type=None, col_hot_type=None, tab_hot_type=None, schema_len=None, tab_ids=None,
                  table_names=None, table_len=None, col_table_dict=None, cols=None,
                  table_col_name=None, table_col_len=None,
                   col_pred=None, tokenized_src_sent=None, qgm=None
         ):
-
         self.src_sent = src_sent
         self.tokenized_src_sent = tokenized_src_sent
         self.vis_seq = vis_seq
@@ -43,7 +37,15 @@ class Example:
         self.table_col_name = table_col_name
         self.table_col_len = table_col_len
         self.col_pred = col_pred
+        self.tgt_actions = tgt_actions
+        self.truth_actions = copy.deepcopy(tgt_actions)
         self.qgm = qgm
+        self.sketch = list()
+        if self.truth_actions:
+            for ta in self.truth_actions:
+                if isinstance(ta, define_rule.C) or isinstance(ta, define_rule.T) or isinstance(ta, define_rule.A):
+                    continue
+                self.sketch.append(ta)
 
 
 class cached_property(object):
@@ -69,6 +71,9 @@ class Batch(object):
     def __init__(self, examples, grammar=None, is_cuda=False):
         self.examples = examples
 
+        if examples[0].tgt_actions:
+            self.max_action_num = max(len(e.tgt_actions) for e in self.examples)
+            self.max_sketch_num = max(len(e.sketch) for e in self.examples)
         self.src_sents = [e.src_sent for e in self.examples]
         self.src_sents_len = [len(e.src_sent) for e in self.examples]
         self.tokenized_src_sents = [e.tokenized_src_sent for e in self.examples]

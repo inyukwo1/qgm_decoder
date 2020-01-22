@@ -175,13 +175,13 @@ def compare_boxes(pred_qgm, gold_qgm):
         acc['quantifier_num'] = is_correct_quantifier_num
 
         # Compare body - quantifier - col
-        is_correct_quantifier_col = is_correct_quantifier_num
+        is_correct_quantifier_tab = is_correct_quantifier_num
         if is_correct_quantifier_num:
             for idx in range(min(pred_quantifier_num, gold_quantifier_num)):
-                pred_quantifier_col = pred_boxes[0]['body']['quantifiers'][idx]
-                gold_quantifier_col = pred_boxes[0]['body']['quantifiers'][idx]
-                is_correct_quantifier_col = is_correct_quantifier_col and (pred_quantifier_col == gold_quantifier_col)
-        acc['quantifier_col'] = is_correct_quantifier_col
+                pred_quantifier_tab = pred_boxes[0]['body']['quantifiers'][idx]
+                gold_quantifier_tab = pred_boxes[0]['body']['quantifiers'][idx]
+                is_correct_quantifier_tab = is_correct_quantifier_tab and (pred_quantifier_tab == gold_quantifier_tab)
+        acc['quantifier_tab'] = is_correct_quantifier_tab
 
         # Compare body - local predicate numbers
         pred_local_predicate_num = len(pred_boxes[0]['body']['local_predicates'])

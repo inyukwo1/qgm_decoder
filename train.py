@@ -1,12 +1,14 @@
 import os
 import json
 import copy
+import random
 import _jsonnet
 import argparse
 import datetime
 
 import torch
 import torch.optim as optim
+import numpy as np
 
 from src import utils
 from src.models.model import IRNet
@@ -30,13 +32,25 @@ if __name__ == '__main__':
     # Load Training Info
     H_PARAMS = json.loads(_jsonnet.evaluate_file(args.train_config))
 
+    # Set random seed
+    torch.manual_seed(H_PARAMS['seed'])
+    if args.cuda:
+        torch.cuda.manual_seed(H_PARAMS['seed'])
+    np.random.seed(H_PARAMS['seed'])
+    random.seed(H_PARAMS['seed'])
+
     sql_data, table_data, val_sql_data,\
     val_table_data= utils.load_dataset(H_PARAMS['data_path'], use_small=H_PARAMS['toy'])
+
+    # Remove one data for bert
+    if H_PARAMS['bert'] != -1:
+        sql_data = [data for data in sql_data if data['db_id'] != 'baseball_1']
+        val_sql_data = [data for data in val_sql_data if data['db_id'] != 'baseball_1']
 
     print('train data length: {}'.format(len(sql_data)))
     print('dev data length: {}'.format(len(val_sql_data)))
 
-    model = IRNet(H_PARAMS, is_qgm=True, is_cuda=args.cuda != -1)
+    model = IRNet(H_PARAMS, is_qgm=H_PARAMS['is_qgm'], is_cuda=args.cuda != -1)
 
     if args.cuda != -1:
         torch.cuda.set_device(args.cuda)
@@ -92,11 +106,12 @@ if __name__ == '__main__':
                                         scheduler.optimizer._step_count, str(datetime.datetime.now()).split('.')[0]))
 
         # Evaluation
-        train_loss = utils.epoch_train(model, optimizer, bert_optimizer, H_PARAMS['batch_size'], sql_data, table_data, H_PARAMS)
+        train_loss = utils.epoch_train(model, optimizer, bert_optimizer, H_PARAMS['batch_size'], sql_data, table_data,
+                                       H_PARAMS['clip_grad'], is_qgm=H_PARAMS['is_qgm'])
         if not epoch % H_PARAMS['eval_freq'] or epoch == H_PARAMS['epoch']:
             print('Evaluation:')
-            train_total_acc = utils.epoch_acc(model, H_PARAMS['batch_size'], sql_data, table_data)
-            dev_total_acc = utils.epoch_acc(model, H_PARAMS['batch_size'], val_sql_data, val_table_data)
+            train_total_acc = utils.epoch_acc(model, H_PARAMS['batch_size'], sql_data, table_data, is_qgm=H_PARAMS['is_qgm'])
+            dev_total_acc = utils.epoch_acc(model, H_PARAMS['batch_size'], val_sql_data, val_table_data, is_qgm=H_PARAMS['is_qgm'])
             print('Train Acc: {}'.format(train_total_acc['total']))
             print('Dev Acc: {}'.format(dev_total_acc['total']))
 
@@ -108,7 +123,7 @@ if __name__ == '__main__':
             # Save if total_acc is higher
             if best_dev_total_acc < dev_total_acc['total']:
                 best_dev_total_acc = dev_total_acc['total']
-                print('Saving new best model with acc: {}'.format(best_dev_total_acc / len(val_sql_data)))
+                print('Saving new best model with acc: {}'.format(best_dev_total_acc))
                 torch.save(model.state_dict(), os.path.join(log_model_path, 'best_model.pt'))
 
         # Change learning rate

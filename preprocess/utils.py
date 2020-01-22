@@ -1,11 +1,19 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
 # -*- coding: utf-8 -*-
-import os
+"""
+# @Time    : 2019/5/24
+# @Author  : Jiaqi&Zecheng
+# @File    : utils.py
+# @Software: PyCharm
+"""
 import json
 from pattern.en import lemma
 from nltk.stem import WordNetLemmatizer
 
 VALUE_FILTER = ['what', 'how', 'list', 'give', 'show', 'find', 'id', 'order', 'when']
-AGG = ['average', 'sum', 'max', 'min', 'minimum', 'maximum', 'between', 'many']
+AGG = ['average', 'sum', 'max', 'min', 'minimum', 'maximum', 'between']
 
 wordnet_lemmatizer = WordNetLemmatizer()
 
@@ -28,6 +36,7 @@ def load_dataSets(args):
             if cc not in tmp_col:
                 tmp_col.append(cc)
         table['col_set'] = tmp_col
+        table['col'] = [x[1] for x in table['column_names']]
         db_name = table['db_id']
         tabel_name.add(db_name)
         table['schema_content'] = [col[1] for col in table['column_names']]
@@ -38,8 +47,8 @@ def load_dataSets(args):
     for d in datas:
         d['names'] = tables[d['db_id']]['schema_content']
         d['table_names'] = tables[d['db_id']]['table_names']
-        #d['col_set'] = tables[d['db_id']]['col_set']
-        d['col_set'] = [item[1] for item in tables[d['db_id']]['column_names']]
+        d['col_set'] = tables[d['db_id']]['col_set']
+        d['col'] = tables[d['db_id']]['col']
         d['col_table'] = tables[d['db_id']]['col_table']
         keys = {}
         for kv in tables[d['db_id']]['foreign_keys']:
@@ -71,21 +80,18 @@ def partial_header(toks, idx, header_toks):
     def check_in(list_one, list_two):
         if len(set(list_one) & set(list_two)) == len(list_one) and (len(list_two) <= 3):
             return True
-    headers = []
-
     for endIdx in reversed(range(idx + 1, len(toks))):
         sub_toks = toks[idx: min(endIdx, len(toks))]
         if len(sub_toks) > 1:
             flag_count = 0
             tmp_heads = None
-            for head_idx, heads in enumerate(header_toks):
+            for heads in header_toks:
                 if check_in(sub_toks, heads):
                     flag_count += 1
                     tmp_heads = heads
-                    headers.append(heads)
-            if flag_count > 0:
-                return endIdx, tmp_heads, headers
-    return idx, None, None
+            if flag_count == 1:
+                return endIdx, tmp_heads
+    return idx, None
 
 def symbol_filter(questions):
     question_tmp_q = []
@@ -106,18 +112,6 @@ def symbol_filter(questions):
             question_tmp_q += [q_val]
     return question_tmp_q
 
-
-def group_db(toks, idx, num_toks, col_value_set):
-    cols = []
-    for endIdx in reversed(range(idx + 1, num_toks + 1)):
-        sub_toks = toks[idx: endIdx]
-        sub_toks = " ".join(sub_toks)
-        for col in col_value_set:
-            if sub_toks.lower() in col_value_set[col] or lemma(sub_toks.lower()) in col_value_set[col]:
-                cols.append(col)
-        if cols:
-            return endIdx, sub_toks, cols
-    return idx, None, cols
 
 def group_values(toks, idx, num_toks):
     def check_isupper(tok_lists):

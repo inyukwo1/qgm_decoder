@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
 # -*- coding: utf-8 -*-
 """
 # @Time    : 2019/5/24
@@ -10,12 +13,9 @@ import argparse
 import nltk
 import os
 import pickle
-import sqlite3
-from utils import symbol_filter, re_lemma, fully_part_header, group_header, partial_header, num2year, group_symbol, group_values, group_digital, group_db
+from utils import symbol_filter, re_lemma, fully_part_header, group_header, partial_header, num2year, group_symbol, group_values, group_digital
 from utils import AGG, wordnet_lemmatizer
 from utils import load_dataSets
-from pattern.en import lemma
-import re
 
 def process_datas(datas, args):
     """
@@ -29,70 +29,17 @@ def process_datas(datas, args):
     with open(os.path.join(args.conceptNet, 'english_IsA.pkl'), 'rb') as f:
         english_IsA = pickle.load(f)
 
-    db_values = dict()
-
-    with open(args.table_path) as f:
-        schema_tables = json.load(f)
-    schema_dict = dict()
-    for one_schema in schema_tables:
-        schema_dict[one_schema["db_id"]] = one_schema
-        schema_dict[one_schema["db_id"]]["only_cnames"] = [c_name.lower() for tid, c_name in one_schema["column_names_original"]]
     # copy of the origin question_toks
     for d in datas:
         if 'origin_question_toks' not in d:
             d['origin_question_toks'] = d['question_toks']
 
     for entry in datas:
-        db_id = entry['db_id']
-        if db_id not in db_values:
-            schema_json = schema_dict[db_id]
-            primary_foreigns = set()
-            for f, p in schema_json["foreign_keys"]:
-                primary_foreigns.add(f)
-                primary_foreigns.add(p)
-
-            conn = sqlite3.connect("../data/database/{}/{}.sqlite".format(db_id, db_id))
-            # conn.text_factory = bytes
-            cursor = conn.cursor()
-
-            schema = {}
-
-            # fetch table names
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-            tables = [str(table[0].lower()) for table in cursor.fetchall()]
-
-            # fetch table info
-            for table in tables:
-                cursor.execute("PRAGMA table_info({})".format(table))
-                schema[table] = [str(col[1].lower()) for col in cursor.fetchall()]
-            col_value_set = dict()
-            for table in tables:
-                for col in schema[table]:
-                    col_idx = schema_json["only_cnames"].index(col)
-                    if col_idx in primary_foreigns and schema_json["column_types"][col_idx] == "number":
-                        continue
-                    cursor.execute("SELECT \"{}\" FROM \"{}\"".format(col, table))
-                    col = entry["names"][col_idx]
-                    value_set = set()
-                    try:
-                        for val in cursor.fetchall():
-                            if isinstance(val[0], str):
-                                value_set.add(str(val[0].lower()))
-                                value_set.add(lemma(str(val[0].lower())))
-                    except:
-                        print("not utf8 value")
-                    if col in col_value_set:
-                        col_value_set[col] |= value_set
-                    else:
-                        col_value_set[col] = value_set
-            db_values[db_id] = col_value_set
-
-
         entry['question_toks'] = symbol_filter(entry['question_toks'])
-        origin_question_toks = [x.lower() for x in re.findall(r"[^,.():;\"`?! ]+|[,.():;\"?!]", entry['question'].replace("'", " ' "))]
-        question_toks = [wordnet_lemmatizer.lemmatize(x) for x in origin_question_toks]
+        origin_question_toks = symbol_filter([x for x in entry['origin_question_toks'] if x.lower() != 'the'])
+        question_toks = [wordnet_lemmatizer.lemmatize(x.lower()) for x in entry['question_toks'] if x.lower() != 'the']
 
-        entry['question_toks'] = origin_question_toks
+        entry['question_toks'] = question_toks
 
         table_names = []
         table_names_pattern = []
@@ -123,6 +70,7 @@ def process_datas(datas, args):
         tok_concol = []
         type_concol = []
         nltk_result = nltk.pos_tag(question_toks)
+
         while idx < num_toks:
 
             # fully header
@@ -150,12 +98,13 @@ def process_datas(datas, args):
                 continue
 
             # check for partial column
-            end_idx, tname, headers = partial_header(question_toks, idx, header_toks_list)
+            end_idx, tname = partial_header(question_toks, idx, header_toks_list)
             if tname:
                 tok_concol.append(tname)
-                type_concol.append(["col"] + headers)
+                type_concol.append(["col"])
                 idx = end_idx
                 continue
+
             # check for aggregation
             end_idx, agg = group_header(question_toks, idx, num_toks, AGG)
             if agg:
@@ -214,40 +163,20 @@ def process_datas(datas, args):
 
             end_idx, values = group_values(origin_question_toks, idx, num_toks)
             if values and (len(values) > 1 or question_toks[idx - 1] not in ['?', '.']):
-                tmp_toks = [wordnet_lemmatizer.lemmatize(x) for x in question_toks[idx: end_idx]]
-                assert len(tmp_toks) > 0, print(question_toks[idx: end_idx], values, question_toks, idx, end_idx)
-                pro_result = get_concept_result(tmp_toks, english_IsA)
-                if pro_result is None:
-                    pro_result = get_concept_result(tmp_toks, english_RelatedTo)
-                if pro_result is None:
-                    pro_result = "NONE"
-                for tmp in tmp_toks:
-                    tok_concol.append([tmp])
-                    type_concol.append([pro_result])
-                    pro_result = "NONE"
-                idx = end_idx
-                continue
-
-            end_idx, values, cols = group_db(origin_question_toks, idx, num_toks, db_values[db_id])
-            if end_idx == idx + 1 and (nltk_result[idx][1] == 'VBZ'
-                                       or nltk_result[idx][1] == 'IN'
-                                       or nltk_result[idx][1] == 'CC'
-                                       or nltk_result[idx][1] == 'DT'
-                                       or origin_question_toks[idx] == "'"
-                                       or (nltk_result[idx][1] == 'VBP' and origin_question_toks[idx] == 'are')
-                                       or (nltk_result[idx][1] == 'VBP' and origin_question_toks[idx] == 'do')
-                                       or (nltk_result[idx][1] == 'VBP' and origin_question_toks[idx] == 'doe')
-                                       or (nltk_result[idx][1] == 'VBP' and origin_question_toks[idx] == 'does')):
-                tok_concol.append([origin_question_toks[idx]])
-                type_concol.append(['NONE'])
-                idx += 1
-                continue
-            if values:
-                tok_concol.append(question_toks[idx: end_idx])
-
-                type_concol.append(["db"] + cols)
-                idx = end_idx
-                continue
+                tmp_toks = [wordnet_lemmatizer.lemmatize(x) for x in question_toks[idx: end_idx] if x.isalnum() is True]
+                #assert len(tmp_toks) > 0, print(question_toks[idx: end_idx], values, question_toks, idx, end_idx)
+                if len(tmp_toks) > 0:
+                    pro_result = get_concept_result(tmp_toks, english_IsA)
+                    if pro_result is None:
+                        pro_result = get_concept_result(tmp_toks, english_RelatedTo)
+                    if pro_result is None:
+                        pro_result = "NONE"
+                    for tmp in tmp_toks:
+                        tok_concol.append([tmp])
+                        type_concol.append([pro_result])
+                        pro_result = "NONE"
+                    idx = end_idx
+                    continue
 
             result = group_digital(question_toks, idx)
             if result is True:
@@ -258,7 +187,7 @@ def process_datas(datas, args):
             if question_toks[idx] == ['ha']:
                 question_toks[idx] = ['have']
 
-            tok_concol.append([origin_question_toks[idx]])
+            tok_concol.append([question_toks[idx]])
             type_concol.append(['NONE'])
             idx += 1
             continue
@@ -285,6 +214,5 @@ if __name__ == '__main__':
     process_result = process_datas(datas, args)
 
     with open(args.output, 'w') as f:
-        json.dump(datas, f, indent=4)
-
+        json.dump(datas, f)
 

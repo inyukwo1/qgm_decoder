@@ -11,7 +11,6 @@ import torch.nn.utils
 from torch.autograd import Variable
 
 from src.dataset import Batch
-from src.models import nn_utils
 from src.models.basic_model import BasicModel
 from qgm.qgm_decoder import QGM_Decoder
 from semql.semql_decoder import SemQL_Decoder
@@ -63,13 +62,11 @@ class IRNet(BasicModel):
         col_embed_size = self.h_params['col_embed_size']
         hidden_size = self.h_params['hidden_size']
 
-        self.att_linear = nn.Linear(hidden_size, hidden_size, bias=False)
         self.decoder_cell_init = nn.Linear(hidden_size, hidden_size)
 
         self.col_type = nn.Linear(9, col_embed_size)
         self.tab_type = nn.Linear(5, col_embed_size)
-        self.sketch_encoder = nn.LSTM(action_embed_size, action_embed_size // 2, bidirectional=True,
-                                      batch_first=True)
+        self.sketch_encoder = nn.LSTM(action_embed_size, action_embed_size // 2, bidirectional=True, batch_first=True)
 
         self.dropout = nn.Dropout(self.h_params['dropout'])
 
@@ -77,7 +74,7 @@ class IRNet(BasicModel):
         if self.is_qgm:
             self.decoder = QGM_Decoder(self.h_params['embed_size'])
         else:
-            self.decoder = SemQL_Decoder()
+            self.decoder = SemQL_Decoder(H_PARAMS, is_cuda)
 
         self.without_bert_params = list(self.parameters(recurse=True))
         if self.h_params['bert'] != -1:
@@ -238,100 +235,84 @@ class IRNet(BasicModel):
             if src_encodings is None:
                 return None, None
 
+        dec_init_vec = self.init_decoder_state(last_cell)
+
         if self.is_qgm:
-            src_encoding_att = self.att_linear(src_encodings)
-            dec_init_vec = self.init_decoder_state(last_cell)
             src_mask = batch.src_token_mask
             col_mask = batch.table_token_mask
             tab_mask = batch.schema_token_mask
             col_tab_dic = batch.col_table_dict
             b_indices = torch.arange(len(batch)).cuda()
 
-            self.decoder.set_variables(src_encodings, src_encoding_att, table_embedding, schema_embedding, src_mask, col_mask, tab_mask, col_tab_dic)
+            self.decoder.set_variables(src_encodings, table_embedding, schema_embedding, src_mask, col_mask, tab_mask, col_tab_dic)
             _, losses, pred_boxes = self.decoder.decode(b_indices, None, dec_init_vec, prev_box=None, gold_boxes=batch.qgm)
 
             return losses, pred_boxes
         else:
-            something = self.decoder(examples, batch, src_encodings, table_embedding, schema_embedding, last_cell)
-            return something
+            sketch_prob_var, lf_prob_var = self.decoder.decode_forward(examples, batch, src_encodings, table_embedding, schema_embedding, dec_init_vec)
+            return sketch_prob_var, lf_prob_var
 
     def parse(self, examples):
-        batch = Batch(examples, is_cuda=self.is_cuda)
-        if self.h_params['bert'] == -1:
-            src_encodings, (last_state, last_cell) = self.encode(batch.src_sents, batch.src_sents_len, None)
+        with torch.no_grad():
+            batch = Batch(examples, is_cuda=self.is_cuda)
+            if self.h_params['bert'] == -1:
+                src_encodings, (last_state, last_cell) = self.encode(batch.src_sents, batch.src_sents_len, None)
 
-            src_encodings = self.dropout(src_encodings)
+                src_encodings = self.dropout(src_encodings)
 
-            table_embedding = self.gen_x_batch(batch.table_sents)
-            src_embedding = self.gen_x_batch(batch.src_sents)
-            schema_embedding = self.gen_x_batch(batch.table_names)
-            # get emb differ
-            embedding_differ = self.embedding_cosine(src_embedding=src_embedding, table_embedding=table_embedding,
-                                                     table_unk_mask=batch.table_unk_mask)
+                table_embedding = self.gen_x_batch(batch.table_sents)
+                src_embedding = self.gen_x_batch(batch.src_sents)
+                schema_embedding = self.gen_x_batch(batch.table_names)
+                # get emb differ
+                embedding_differ = self.embedding_cosine(src_embedding=src_embedding, table_embedding=table_embedding,
+                                                         table_unk_mask=batch.table_unk_mask)
 
-            schema_differ = self.embedding_cosine(src_embedding=src_embedding, table_embedding=schema_embedding,
-                                                  table_unk_mask=batch.schema_token_mask)
+                schema_differ = self.embedding_cosine(src_embedding=src_embedding, table_embedding=schema_embedding,
+                                                      table_unk_mask=batch.schema_token_mask)
 
-            tab_ctx = (src_encodings.unsqueeze(1) * embedding_differ.unsqueeze(3)).sum(2)
-            schema_ctx = (src_encodings.unsqueeze(1) * schema_differ.unsqueeze(3)).sum(2)
+                tab_ctx = (src_encodings.unsqueeze(1) * embedding_differ.unsqueeze(3)).sum(2)
+                schema_ctx = (src_encodings.unsqueeze(1) * schema_differ.unsqueeze(3)).sum(2)
 
-            table_embedding = table_embedding + tab_ctx
+                table_embedding = table_embedding + tab_ctx
 
-            schema_embedding = schema_embedding + schema_ctx
+                schema_embedding = schema_embedding + schema_ctx
 
-            col_type = self.input_type(batch.col_hot_type)
+                col_type = self.input_type(batch.col_hot_type)
 
-            col_type_var = self.col_type(col_type)
+                col_type_var = self.col_type(col_type)
 
-            tab_type = self.input_type(batch.tab_hot_type)
+                tab_type = self.input_type(batch.tab_hot_type)
 
-            tab_type_var = self.tab_type(tab_type)
+                tab_type_var = self.tab_type(tab_type)
 
-            table_embedding = table_embedding + col_type_var
+                table_embedding = table_embedding + col_type_var
 
-            schema_embedding = schema_embedding + tab_type_var
-        else:
-            src_encodings, table_embedding, schema_embedding, last_cell = self.transformer_encode(batch)
-            if src_encodings is None:
-                return None, None
+                schema_embedding = schema_embedding + tab_type_var
+            else:
+                src_encodings, table_embedding, schema_embedding, last_cell = self.transformer_encode(batch)
+                if src_encodings is None:
+                    return None, None
 
-        if self.is_qgm:
-            src_encoding_att = self.att_linear(src_encodings)
             dec_init_vec = self.init_decoder_state(last_cell)
-            src_mask = batch.src_token_mask
-            col_mask = batch.table_token_mask
-            tab_mask = batch.schema_token_mask
-            col_tab_dic = batch.col_table_dict
-            b_indices = torch.arange(len(batch)).cuda()
 
-            self.decoder.set_variables(src_encodings, src_encoding_att, table_embedding, schema_embedding, src_mask, col_mask, tab_mask, col_tab_dic)
-            _, losses, pred_boxes = self.decoder.decode(b_indices, None, dec_init_vec, prev_box=None, gold_boxes=None)
+            if self.is_qgm:
+                src_mask = batch.src_token_mask
+                col_mask = batch.table_token_mask
+                tab_mask = batch.schema_token_mask
+                col_tab_dic = batch.col_table_dict
+                b_indices = torch.arange(len(batch)).cuda()
 
-            return pred_boxes
-        else:
-            something = self.decoder(batch, src_encodings, table_embedding, schema_embedding, last_cell, beam_size=5)
-            return something
+                self.decoder.set_variables(src_encodings, table_embedding, schema_embedding, src_mask, col_mask, tab_mask, col_tab_dic)
+                _, losses, pred_boxes = self.decoder.decode(b_indices, None, dec_init_vec, prev_box=None, gold_boxes=None)
 
-    def step(self, x, h_tm1, src_encodings, src_encodings_att_linear, decoder, attention_func, src_token_mask=None,
-             return_att_weight=False):
-        # h_t: (batch_size, hidden_size)
-        h_t, cell_t = decoder(x, h_tm1)
-
-        ctx_t, alpha_t = nn_utils.dot_prod_attention(h_t,
-                                                     src_encodings, src_encodings_att_linear,
-                                                     mask=src_token_mask)
-
-        att_t = torch.tanh(attention_func(torch.cat([h_t, ctx_t], 1)))
-        att_t = self.dropout(att_t)
-
-        if return_att_weight:
-            return (h_t, cell_t), att_t, alpha_t
-        else:
-            return (h_t, cell_t), att_t
+                return pred_boxes
+            else:
+                completed_beams, _ = self.decoder.decode_parse(batch, src_encodings, table_embedding, schema_embedding, dec_init_vec, beam_size=5)
+                highest_prob_actions = completed_beams[0].actions
+                return highest_prob_actions
 
     def init_decoder_state(self, enc_last_cell):
         h_0 = self.decoder_cell_init(enc_last_cell)
         h_0 = torch.tanh(h_0)
 
         return h_0, Variable(self.new_tensor(h_0.size()).zero_())
-

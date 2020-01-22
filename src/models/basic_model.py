@@ -15,8 +15,6 @@ import torch.nn.utils
 from torch.autograd import Variable
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
-from src.rule import semQL as define_rule
-
 
 class BasicModel(nn.Module):
 
@@ -84,26 +82,6 @@ class BasicModel(nn.Module):
             val_inp = val_inp.cuda()
         val_inp_var = Variable(val_inp)
         return val_inp_var
-
-    def padding_sketch(self, sketch):
-        padding_result = []
-        for action in sketch:
-            padding_result.append(action)
-            if type(action) == define_rule.N:
-                for _ in range(action.id_c + 1):
-                    padding_result.append(define_rule.A(0))
-                    padding_result.append(define_rule.C(0))
-                    padding_result.append(define_rule.T(0))
-            elif type(action) == define_rule.Filter and 'A' in action.production:
-                padding_result.append(define_rule.A(0))
-                padding_result.append(define_rule.C(0))
-                padding_result.append(define_rule.T(0))
-            elif type(action) == define_rule.Order or type(action) == define_rule.Sup:
-                padding_result.append(define_rule.A(0))
-                padding_result.append(define_rule.C(0))
-                padding_result.append(define_rule.T(0))
-
-        return padding_result
 
     def gen_x_batch(self, q):
         B = len(q)

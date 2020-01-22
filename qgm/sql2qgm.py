@@ -126,7 +126,10 @@ def create_select_box(sql, info, schema):
 
         # Operand1
         col_id = where_unit[2][1][1]
-        table_id = schema['column_names'][col_id][0]
+        try:
+            table_id = schema['column_names'][col_id][0]
+        except:
+            stop = 1
 
         assert table_id in quantifiers
 

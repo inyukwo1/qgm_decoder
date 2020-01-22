@@ -58,6 +58,7 @@ class Grammar(object):
 
 class Action(object):
     def __init__(self):
+        self.is_sketch = False
         self.pt = 0
         self.production = None
         self.children = list()
@@ -181,6 +182,7 @@ class C(Action):
     """
     def __init__(self, id_c, parent=None):
         super(C, self).__init__()
+        self.is_sketch = True
         self.parent = parent
         self.id_c = id_c
         self.production = 'C T'
@@ -199,7 +201,7 @@ class T(Action):
     """
     def __init__(self, id_c, parent=None):
         super(T, self).__init__()
-
+        self.is_sketch = True
         self.parent = parent
         self.id_c = id_c
         self.production = 'T min'
@@ -218,7 +220,7 @@ class A(Action):
     """
     def __init__(self, id_c, parent=None):
         super(A, self).__init__()
-
+        self.is_sketch = True
         self.parent = parent
         self.id_c = id_c
         self._init_grammar()

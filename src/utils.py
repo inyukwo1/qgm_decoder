@@ -1,11 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-# @Time    : 2019/5/25
-# @Author  : Jiaqi&Zecheng
-# @File    : utils.py
-# @Software: PyCharm
-"""
-
 import json
 import time
 import pickle
@@ -108,9 +101,10 @@ def get_table_colNames(tab_ids, tab_cols):
     return result
 
 
-def get_col_table_dict(tab_cols, tab_ids, sql):
+def get_col_table_dict(tab_cols, tab_ids, sql, is_qgm=True):
     table_dict = {}
-    for c_id, c_v in enumerate(sql['col_set']):
+    cols = sql['col'] if is_qgm else sql['col_set']
+    for c_id, c_v in enumerate(cols):
         for cor_id, cor_val in enumerate(tab_cols):
             if c_v == cor_val:
                 table_dict[tab_ids[cor_id]] = table_dict.get(tab_ids[cor_id], []) + [c_id]
@@ -122,7 +116,9 @@ def get_col_table_dict(tab_cols, tab_ids, sql):
     col_table_dict[0] = [x for x in range(len(table_dict) - 1)]
 
     # Modify
-    col_table_dict = {idx:[item] if item != -1 else list(range(max(tab_ids)+1)) for idx, item in enumerate(tab_ids)}
+    if is_qgm:
+        col_table_dict = {idx:[item] if item != -1 else list(range(max(tab_ids)+1)) for idx, item in enumerate(tab_ids)}
+
 
     return col_table_dict
 
@@ -194,7 +190,7 @@ def schema_linking(question_arg, question_arg_type, one_hot_type, col_set_type, 
                         if sql['col_set'][col_set_idx] == col_probase:
                             col_set_type[col_set_idx][3] += 1
 
-def process(sql, table):
+def process(sql, table, is_qgm=True):
 
     process_dict = {}
 
@@ -206,7 +202,8 @@ def process(sql, table):
     tab_cols = [col[1] for col in table['column_names']]
     tab_ids = [col[0] for col in table['column_names']]
 
-    col_set_iter = [[wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(' ')] for x in sql['col_set']]
+    cols = sql['col'] if is_qgm else sql['col_set']
+    col_set_iter = [[wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(' ')] for x in cols]
     tab_set_iter = [[wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(' ')] for x in sql['table_names']]
     col_iter = [[wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")] for x in tab_cols]
     q_iter_small = [wordnet_lemmatizer.lemmatize(x).lower() for x in origin_sql]
@@ -246,7 +243,7 @@ def process(sql, table):
 
     return process_dict
 
-def is_valid(rule_label, col_table_dict, sql):
+def is_valid(rule_label, col_set_table_dict, sql):
     try:
         lf.build_tree(copy.copy(rule_label))
     except:
@@ -256,21 +253,21 @@ def is_valid(rule_label, col_table_dict, sql):
     for r_id, rule in enumerate(rule_label):
         if type(rule) == C:
             try:
-                assert rule_label[r_id + 1].id_c in col_table_dict[rule.id_c], print(sql['question'])
+                assert rule_label[r_id + 1].id_c in col_set_table_dict[rule.id_c], print(sql['question'])
             except:
                 flag = True
                 print(sql['question'])
     return flag is False
 
 
-def to_batch_seq(sql_data, table_data, idxes, st, ed):
+def to_batch_seq(sql_data, table_data, idxes, st, ed, is_qgm=True):
     examples = []
 
     for i in range(st, ed):
         sql = sql_data[idxes[i]]
         table = table_data[sql['db_id']]
 
-        process_dict = process(sql, table)
+        process_dict = process(sql, table, is_qgm=is_qgm)
 
         for c_id, col_ in enumerate(process_dict['col_set_iter']):
             for q_id, ori in enumerate(process_dict['q_iter_small']):
@@ -287,17 +284,26 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed):
                        process_dict['tab_set_type'], process_dict['table_names'],
                        sql)
 
-        col_table_dict = get_col_table_dict(process_dict['tab_cols'], process_dict['tab_ids'], sql)
+        col_table_dict = get_col_table_dict(process_dict['tab_cols'], process_dict['tab_ids'], sql, is_qgm)
         table_col_name = get_table_colNames(process_dict['tab_ids'], process_dict['col_iter'])
 
         process_dict['col_set_iter'][0] = ['count', 'number', 'many']
+
+        rule_label = None
+        if 'rule_label' in sql and not is_qgm:
+            # handle the subquery on From cause
+            if 'from' in sql['rule_label']:
+                continue
+            rule_label = [eval(x) for x in sql['rule_label'].strip().split(' ')]
+            if is_valid(rule_label, col_set_table_dict=col_table_dict, sql=sql) is False:
+                continue
 
         example = Example(
             src_sent=process_dict['question_arg'],
             col_num=len(process_dict['col_set_iter']),
             vis_seq=(sql['question'], process_dict['col_set_iter'], sql['query']),
-            tab_cols=process_dict['col_set_iter'],
-            tab_iter=process_dict['tab_set_iter'],
+            tab_cols=process_dict['col_set_iter'],   # col for encoding
+            tab_iter=process_dict['tab_set_iter'],   # tab for encoding
             sql=sql['query'],
             one_hot_type=process_dict['one_hot_type'],
             col_hot_type=process_dict['col_set_type'],
@@ -309,6 +315,7 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed):
             table_col_name=table_col_name,
             table_col_len=len(table_col_name),
             tokenized_src_sent=process_dict['col_set_type'],
+            tgt_actions=rule_label,
             qgm=process_dict['qgm']
         )
 
@@ -319,20 +326,9 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed):
     examples.sort(key=lambda e: -len(e.src_sent))
     return examples
 
-def epoch_train(model, optimizer, bert_optimizer, batch_size, sql_data, table_data,
-                H_PARAMS):
+def epoch_train(model, optimizer, bert_optimizer, batch_size, sql_data, table_data, clip_grad, is_qgm=True):
     model.train()
-    new_sql_data = []
-    # Remove data with too big schema
-    if H_PARAMS['bert'] != -1:
-        for sql in sql_data:
-            if sql["db_id"] != "baseball_1":
-                new_sql_data.append(sql)
-    else:
-        new_sql_data = sql_data
-
     # shuffle
-    sql_data = new_sql_data
     perm=np.random.permutation(len(sql_data))
     optimizer.zero_grad()
     if bert_optimizer:
@@ -341,28 +337,46 @@ def epoch_train(model, optimizer, bert_optimizer, batch_size, sql_data, table_da
     total_loss = {}
     for st in tqdm(range(0, len(sql_data), batch_size)):
         ed = st+batch_size if st+batch_size < len(perm) else len(perm)
-        examples = to_batch_seq(sql_data, table_data, perm, st, ed)
+        examples = to_batch_seq(sql_data, table_data, perm, st, ed, is_qgm=is_qgm)
 
-        losses, pred_boxes = model.forward(examples)
+        result = model.forward(examples)
+        if is_qgm:
+            losses, pred_boxes = result
 
-        # Combine losses
-        loss_list = []
-        for loss in losses:
-            loss_sum = sum([item for key, item in loss.items()])
-            loss_list += [loss_sum]
-        loss = torch.mean(torch.stack(loss_list))
+            # Combine losses
+            loss_list = []
+            for loss in losses:
+                loss_sum = sum([item for key, item in loss.items()])
+                loss_list += [loss_sum]
+
+            # Save loss
+            if not total_loss:
+                for key in losses[0].keys():
+                    total_loss[key] = []
+            for b_loss in losses:
+                for key, item in b_loss.items():
+                    total_loss[key] += [int(item)]
+
+            loss = torch.mean(torch.stack(loss_list))
+
+        else:
+            sketch_prob_var, lf_prob_var = result
+
+            # Save loss
+            if not total_loss:
+                total_loss['sketch'] = []
+                total_loss['detail'] = []
+            for sketch_loss in sketch_prob_var:
+                total_loss['sketch'] += [int(sketch_loss)]
+            for detail_loss in lf_prob_var:
+                total_loss['detail'] += [int(detail_loss)]
+
+            loss = torch.mean(sketch_prob_var) + torch.mean(lf_prob_var)
+
         loss.backward()
 
-        # Save loss
-        if not total_loss:
-            for key in losses[0].keys():
-                total_loss[key] = []
-        for loss in losses:
-            for key, item in loss.items():
-                total_loss[key] += [item]
-
-        if H_PARAMS['clip_grad'] > 0.:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), H_PARAMS['clip_grad'])
+        if clip_grad > 0.:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
 
         optimizer.step()
         if bert_optimizer:
@@ -377,28 +391,24 @@ def epoch_train(model, optimizer, bert_optimizer, batch_size, sql_data, table_da
 
     return total_loss
 
-def epoch_acc(model, batch_size, sql_data, table_data):
+def epoch_acc(model, batch_size, sql_data, table_data, is_qgm=True):
     model.eval()
     perm = list(range(len(sql_data)))
-
-    pred_qgms = []
-    gold_qgms = []
+    pred = []
+    gold = []
     for st in tqdm(range(0, len(sql_data), batch_size)):
         ed = st+batch_size if st+batch_size < len(perm) else len(perm)
-        examples = to_batch_seq(sql_data, table_data, perm, st, ed)
-        '''
-        pred_qgm = model.parse(examples)
-        pred_qgms += pred_qgm
-        gold_qgms += [example.qgm for example in examples]
-        '''
-        for idx, example in enumerate(examples):
-            pred_qgm = model.parse([example])
-            pred_qgms += [pred_qgm[0]]
-            gold_qgms += [examples[idx].qgm]
+        examples = to_batch_seq(sql_data, table_data, perm, st, ed, is_qgm=is_qgm)
+        if is_qgm:
+            pred += model.parse(examples)
+            gold += [example.qgm for example in examples]
+        else:
+            for example in examples:
+                pred += [model.parse([example])]
+                gold += [example.tgt_actions]
 
     # Calculate acc
-    total_acc = compare_boxes(pred_qgms, gold_qgms)
-
+    total_acc = model.decoder.get_accuracy(pred, gold)
     return total_acc
 
 def eval_acc(preds, sqls):
@@ -406,29 +416,11 @@ def eval_acc(preds, sqls):
     for q_idx in range(len(preds)):
         pred = preds[q_idx]
         sql = sqls[q_idx]
-        print("query idx: {}".format(q_idx))
-        print("QUESTION: {}".format(sql['question_arg']))
-        print("PRED: {}".format(pred['model_result']))
-        print("GOLD: {}".format(sql['rule_label']))
-        print("QUERY:{}".format(sql['query']))
         if pred['model_result'] == sql['rule_label']:
             best_correct += 1
             print('CORRECT!')
         else:
             print('WRONG!')
-            '''
-            print("DB ID: {}".format(sql['db_id']))
-            print("QUESTION: {}".format(sql['question_arg']))
-            print("QUESTION: {}".format(sql['question_arg_type']))
-            print("QUERY: {}".format(sql["query"]))
-            print("tables: {}".format(list(zip(range(len(sql["table_names"])), sql["table_names"]))))
-            #print("{}".format(pred["tab_set_type"].transpose((1, 0))))
-            print("col set: {}".format(list(zip(range(len(sql["col_set"])), sql["col_set"]))))
-            #print("{}".format(pred["col_set_type"].transpose((1, 0))))
-            print("PRED: {}".format(pred['model_result']))
-            print("GOLD: {}".format(sql['rule_label']))
-            print("")
-            '''
         tmp = ' '.join([t for t in pred['rule_label'].split(' ') if t.split('(')[0] not in ['A', 'C', 'T']])
         if pred['sketch_result'] == tmp:
             sketch_correct += 1

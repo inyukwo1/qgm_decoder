@@ -4,7 +4,8 @@ from qgm.ops import WHERE_OPS, BOX_OPS, AGG_OPS, IUEN
 from qgm.utils import get_iue_box_op, split_boxes, get_is_box_info, get_quantifier_num_with_type, \
                       get_quantifier_with_type, get_local_predicate_num, get_local_predicate_agg_with_idx, \
                       get_local_predicate_col_with_idx, get_local_predicate_op_with_idx, to_tensor, \
-                      get_head_num, get_head_col, get_head_agg_with_idx, get_limit_num, get_is_asc, get_box_with_op_type
+                      get_head_num, get_head_col, get_head_agg_with_idx, get_limit_num, get_is_asc, \
+                      get_box_with_op_type, compare_boxes
 
 
 class QGM_Decoder(nn.Module):
@@ -12,7 +13,8 @@ class QGM_Decoder(nn.Module):
         super(QGM_Decoder, self).__init__()
         att_vec_dim = emb_dim
         input_dim = emb_dim + att_vec_dim
-
+        # Prev
+        self.att_linear = nn.Linear(emb_dim, emb_dim, bias=False)
         # Embeddings
         self.emb_dim = emb_dim
         self.p_op_emb = nn.Embedding(len(WHERE_OPS), emb_dim)
@@ -111,20 +113,27 @@ class QGM_Decoder(nn.Module):
         self.encoded_tab = None
 
 
-    def set_variables(self, encoded_src, encoded_src_att, encoded_col, encoded_tab, src_mask, col_mask, tab_mask, col_tab_dic):
+    def set_variables(self, encoded_src, encoded_col, encoded_tab, src_mask, col_mask, tab_mask, col_tab_dic):
         self.encoded_src = encoded_src
-        self.encoded_src_att = encoded_src_att
+        self.encoded_src_att = self.att_linear(encoded_src)
         self.encoded_col = encoded_col
         self.encoded_tab = encoded_tab
         self.src_mask = src_mask
         self.col_mask = col_mask
         self.tab_mask = tab_mask
         self.col_tab_dic = col_tab_dic
-
+        self.tab_col_dic = []
+        for b_idx in range(len(col_tab_dic)):
+            tmp = []
+            tab_len = len(col_tab_dic[b_idx][0])
+            for t_idx in range(tab_len):
+                tmp += [idx for idx in range(len(col_tab_dic[b_idx])) if t_idx in col_tab_dic[b_idx][idx]]
+            self.tab_col_dic += [tmp]
 
     def decode(self, b_indices, att, state_vector, prev_box=None, gold_boxes=None):
         b_size = len(b_indices)
 
+        # att_linear
         x = self.compute_context_vector(b_indices, None, state_vector) if att else torch.zeros(b_size, self.lstm.input_size).cuda()
         state_vector, att = self.compute_context_vector(b_indices, x, state_vector)
 
@@ -189,7 +198,7 @@ class QGM_Decoder(nn.Module):
 
         # Add loss for op
         for idx in range(b_size):
-            losses[idx]['operator'] = op_selected_prob[idx]
+            losses[idx]['operator'] = -op_selected_prob[idx]
 
         return state_vector, losses, pred_boxes
 
@@ -307,8 +316,8 @@ class QGM_Decoder(nn.Module):
 
         # Add is_group_by, is_order_by
         for idx in range(b_size):
-            losses[idx]['is_group_by'] = group_selected_prob[idx]
-            losses[idx]['is_order_by'] = order_selected_prob[idx]
+            losses[idx]['is_group_by'] = -group_selected_prob[idx]
+            losses[idx]['is_order_by'] = -order_selected_prob[idx]
 
         return state_vector, losses, pred_boxes
 
@@ -371,6 +380,11 @@ class QGM_Decoder(nn.Module):
         for idx in range(b_size):
             pred_boxes[idx]['body']['quantifiers'] = selected_qf_idx[idx]
             pred_boxes[idx]['body']['quantifier_types'] = ['f'] * len(selected_qf_idx[idx])
+
+        # Create new column mask from prediction based on quantifiers
+        stop = 1
+        # use tab_col_dic
+
 
         if box_type != 'order':
             # Predict local predicate Num
@@ -462,7 +476,6 @@ class QGM_Decoder(nn.Module):
 
         # Predict Head column
         column_prob = self.get_attention_weights(self.encoded_col[b_indices], att, col_masks, is_log_softmax=True)
-        # Mask out those not in quantifiers
         if self.training:
             selected_head_col_idx = get_head_col(gold_box)
             selected_head_col_prob = []
@@ -638,3 +651,7 @@ class QGM_Decoder(nn.Module):
         # Encode Box
         encoded_box = self.encode_box(b_indices, box) if box else torch.zeros(len(att), self.emb_dim).cuda()
         return torch.cat([encoded_box, att], 1)
+
+
+    def get_accuracy(self, pred_qgms, gold_qgms):
+        return compare_boxes(pred_qgms, gold_qgms)
