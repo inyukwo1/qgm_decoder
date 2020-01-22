@@ -105,6 +105,10 @@ if __name__ == "__main__":
     # Save outputs from train
     assert len(train_pred) == len(train_gold) and len(train_gold) == len(train_list)
     with open(train_out_path, "w") as f:
+        f.write("Data len: {}\n\n".format(len(train_gold)))
+        for key, value in train_total_acc.items():
+            f.write("acc {}: {}\n".format(key, value))
+        f.write("\n")
         for idx in range(len(train_gold)):
             pred = train_pred[idx]
             gold = train_gold[idx]
@@ -127,6 +131,10 @@ if __name__ == "__main__":
     # Save outputs from dev
     assert len(dev_pred) == len(dev_gold) and len(dev_gold) == len(dev_list)
     with open(dev_out_path, "w") as f:
+        f.write("Data len: {}\n\n".format(len(dev_gold)))
+        for key, value in dev_total_acc.items():
+            f.write("acc {}: {}\n".format(key, value))
+        f.write("\n")
         for idx in range(len(dev_gold)):
             pred = dev_pred[idx]
             gold = dev_gold[idx]
