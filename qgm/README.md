@@ -31,7 +31,7 @@ step 5. Parse QGM
 
 step 6. Parse SemQL
 
- - run ../preprocess/run_me.sh to semQL to dev.json
+ - run ../preprocess/run_me.sh to append semQL to dev.json
    
- - run ../preprocess/run_me.sh to semQL to train.json   
+ - run ../preprocess/run_me.sh to append semQL to train.json   
  
