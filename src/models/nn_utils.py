@@ -12,6 +12,7 @@ import torch
 from torch.autograd import Variable
 from six.moves import xrange
 
+
 def dot_prod_attention(h_t, src_encoding, src_encoding_att_linear, mask=None):
     """
     :param h_t: (batch_size, hidden_size)
@@ -22,7 +23,7 @@ def dot_prod_attention(h_t, src_encoding, src_encoding_att_linear, mask=None):
     # (batch_size, src_sent_len)
     att_weight = torch.bmm(src_encoding_att_linear, h_t.unsqueeze(2)).squeeze(2)
     if mask is not None:
-        att_weight.data.masked_fill_(mask.bool(), float('-inf'))
+        att_weight.data.masked_fill_(mask.bool(), float("-inf"))
     att_weight = F.softmax(att_weight, dim=-1)
 
     att_view = (att_weight.size(0), 1, att_weight.size(1))
@@ -50,7 +51,7 @@ def length_array_to_mask_tensor(length_array, cuda=False, value=None):
     return mask.cuda() if cuda else mask
 
 
-def table_dict_to_mask_tensor(length_array, table_dict, cuda=False ):
+def table_dict_to_mask_tensor(length_array, table_dict, cuda=False):
     max_len = max(length_array)
     batch_size = len(table_dict)
 
@@ -83,6 +84,7 @@ def appear_to_mask_tensor(length_array, cuda=False, value=None):
     mask = np.zeros((batch_size, max_len), dtype=np.float32)
     return mask
 
+
 def pred_col_mask(value, max_len):
     max_len = max(max_len)
     batch_size = len(value)
@@ -105,9 +107,19 @@ def input_transpose(sents, pad_token):
     masks = []
     for e_id in range(batch_size):
         if type(sents[0][0]) != list:
-            sents_t.append([sents[e_id][i] if len(sents[e_id]) > i else pad_token for i in range(max_len)])
+            sents_t.append(
+                [
+                    sents[e_id][i] if len(sents[e_id]) > i else pad_token
+                    for i in range(max_len)
+                ]
+            )
         else:
-            sents_t.append([sents[e_id][i] if len(sents[e_id]) > i else [pad_token] for i in range(max_len)])
+            sents_t.append(
+                [
+                    sents[e_id][i] if len(sents[e_id]) > i else [pad_token]
+                    for i in range(max_len)
+                ]
+            )
 
         masks.append([1 if len(sents[e_id]) > i else 0 for i in range(max_len)])
 
@@ -119,7 +131,7 @@ def word2id(sents, vocab):
         if type(sents[0][0]) != list:
             return [[vocab[w] for w in s] for s in sents]
         else:
-            return [[[vocab[w] for w in s] for s in v] for v in sents ]
+            return [[[vocab[w] for w in s] for s in v] for v in sents]
     else:
         return [vocab[w] for w in sents]
 
@@ -137,7 +149,7 @@ def to_input_variable(sequences, vocab, cuda=False, training=True):
     return a tensor of shape (max_sent_len, batch_size)
     """
     word_ids = word2id(sequences, vocab)
-    sents_t, masks = input_transpose(word_ids, vocab['<pad>'])
+    sents_t, masks = input_transpose(word_ids, vocab["<pad>"])
 
     if type(sents_t[0][0]) != list:
         with torch.no_grad():
@@ -161,7 +173,7 @@ def batch_iter(examples, batch_size, shuffle=False):
 
     batch_num = int(np.ceil(len(examples) / float(batch_size)))
     for batch_id in xrange(batch_num):
-        batch_ids = index_arr[batch_size * batch_id: batch_size * (batch_id + 1)]
+        batch_ids = index_arr[batch_size * batch_id : batch_size * (batch_id + 1)]
         batch_examples = [examples[i] for i in batch_ids]
 
         yield batch_examples
@@ -224,7 +236,12 @@ def pad_matrix(matrixs, cuda=False):
     for s, m in zip(shape, matrixs):
         delta = max_shape - s
         if s > 0:
-            tensors.append(torch.as_tensor(np.pad(m, [(0, delta), (0, delta)], mode='constant'), dtype=torch.float))
+            tensors.append(
+                torch.as_tensor(
+                    np.pad(m, [(0, delta), (0, delta)], mode="constant"),
+                    dtype=torch.float,
+                )
+            )
         else:
             tensors.append(torch.as_tensor(m, dtype=torch.float))
     tensors = torch.stack(tensors)

@@ -11,13 +11,32 @@ import copy
 import src.rule.semQL as define_rule
 from src.models import nn_utils
 
+
 class Example:
-    def __init__(self, src_sent, tgt_actions=None, vis_seq=None, tab_cols=None, tab_iter=None, col_num=None, sql=None,
-                 one_hot_type=None, col_hot_type=None, tab_hot_type=None, schema_len=None, tab_ids=None,
-                 table_names=None, table_len=None, col_table_dict=None, cols=None,
-                 table_col_name=None, table_col_len=None,
-                  col_pred=None, tokenized_src_sent=None, qgm=None
-        ):
+    def __init__(
+        self,
+        src_sent,
+        tgt_actions=None,
+        vis_seq=None,
+        tab_cols=None,
+        tab_iter=None,
+        col_num=None,
+        sql=None,
+        one_hot_type=None,
+        col_hot_type=None,
+        tab_hot_type=None,
+        schema_len=None,
+        tab_ids=None,
+        table_names=None,
+        table_len=None,
+        col_table_dict=None,
+        cols=None,
+        table_col_name=None,
+        table_col_len=None,
+        col_pred=None,
+        tokenized_src_sent=None,
+        qgm=None,
+    ):
         self.src_sent = src_sent
         self.tokenized_src_sent = tokenized_src_sent
         self.vis_seq = vis_seq
@@ -25,7 +44,7 @@ class Example:
         self.tab_iter = tab_iter
         self.col_num = col_num
         self.sql = sql
-        self.one_hot_type=one_hot_type
+        self.one_hot_type = one_hot_type
         self.col_hot_type = col_hot_type
         self.tab_hot_type = tab_hot_type
         self.schema_len = schema_len
@@ -43,7 +62,11 @@ class Example:
         self.sketch = list()
         if self.truth_actions:
             for ta in self.truth_actions:
-                if isinstance(ta, define_rule.C) or isinstance(ta, define_rule.T) or isinstance(ta, define_rule.A):
+                if (
+                    isinstance(ta, define_rule.C)
+                    or isinstance(ta, define_rule.T)
+                    or isinstance(ta, define_rule.A)
+                ):
                     continue
                 self.sketch.append(ta)
 
@@ -57,7 +80,7 @@ class cached_property(object):
         """
 
     def __init__(self, func):
-        self.__doc__ = getattr(func, '__doc__')
+        self.__doc__ = getattr(func, "__doc__")
         self.func = func
 
     def __get__(self, obj, cls):
@@ -79,9 +102,13 @@ class Batch(object):
         self.tokenized_src_sents = [e.tokenized_src_sent for e in self.examples]
         self.tokenized_src_sents_len = [len(e.tokenized_src_sent) for e in examples]
         self.src_sents_word = [e.src_sent for e in self.examples]
-        self.table_sents_word = [[" ".join(x) for x in e.tab_cols] for e in self.examples]
+        self.table_sents_word = [
+            [" ".join(x) for x in e.tab_cols] for e in self.examples
+        ]
 
-        self.schema_sents_word = [[" ".join(x) for x in e.table_names] for e in self.examples]
+        self.schema_sents_word = [
+            [" ".join(x) for x in e.table_names] for e in self.examples
+        ]
 
         self.src_type = [e.one_hot_type for e in self.examples]
         self.col_hot_type = [e.col_hot_type for e in self.examples]
@@ -104,9 +131,10 @@ class Batch(object):
     def __len__(self):
         return len(self.examples)
 
-
     def table_dict_mask(self, table_dict):
-        return nn_utils.table_dict_to_mask_tensor(self.table_len, table_dict, cuda=self.cuda)
+        return nn_utils.table_dict_to_mask_tensor(
+            self.table_len, table_dict, cuda=self.cuda
+        )
 
     @cached_property
     def pred_col_mask(self):
@@ -126,9 +154,10 @@ class Batch(object):
 
     @cached_property
     def table_unk_mask(self):
-        return nn_utils.length_array_to_mask_tensor(self.col_num, cuda=self.cuda, value=None)
+        return nn_utils.length_array_to_mask_tensor(
+            self.col_num, cuda=self.cuda, value=None
+        )
 
     @cached_property
     def src_token_mask(self):
-        return nn_utils.length_array_to_mask_tensor(self.src_sents_len,
-                                                    cuda=self.cuda)
+        return nn_utils.length_array_to_mask_tensor(self.src_sents_len, cuda=self.cuda)

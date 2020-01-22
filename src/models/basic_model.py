@@ -17,7 +17,6 @@ from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
 
 class BasicModel(nn.Module):
-
     def __init__(self):
         super(BasicModel, self).__init__()
         pass
@@ -26,19 +25,24 @@ class BasicModel(nn.Module):
         embedding_differ = []
         for i in range(table_embedding.size(1)):
             one_table_embedding = table_embedding[:, i, :]
-            one_table_embedding = one_table_embedding.unsqueeze(1).expand(table_embedding.size(0),
-                                                                          src_embedding.size(1),
-                                                                          table_embedding.size(2))
+            one_table_embedding = one_table_embedding.unsqueeze(1).expand(
+                table_embedding.size(0), src_embedding.size(1), table_embedding.size(2)
+            )
 
             topk_val = F.cosine_similarity(one_table_embedding, src_embedding, dim=-1)
 
             embedding_differ.append(topk_val)
         embedding_differ = torch.stack(embedding_differ).transpose(1, 0)
-        embedding_differ.data.masked_fill_(table_unk_mask.unsqueeze(2).expand(
-            table_embedding.size(0),
-            table_embedding.size(1),
-            embedding_differ.size(2)
-        ).bool(), 0)
+        embedding_differ.data.masked_fill_(
+            table_unk_mask.unsqueeze(2)
+            .expand(
+                table_embedding.size(0),
+                table_embedding.size(1),
+                embedding_differ.size(2),
+            )
+            .bool(),
+            0,
+        )
 
         return embedding_differ
 
@@ -54,9 +58,13 @@ class BasicModel(nn.Module):
         if q_onehot_project is not None:
             src_token_embed = torch.cat([src_token_embed, q_onehot_project], dim=-1)
 
-        packed_src_token_embed = pack_padded_sequence(src_token_embed, src_sents_len, batch_first=True)
+        packed_src_token_embed = pack_padded_sequence(
+            src_token_embed, src_sents_len, batch_first=True
+        )
         # src_encodings: (tgt_query_len, batch_size, hidden_size)
-        src_encodings, (last_state, last_cell) = self.encoder_lstm(packed_src_token_embed)
+        src_encodings, (last_state, last_cell) = self.encoder_lstm(
+            packed_src_token_embed
+        )
         src_encodings, _ = pad_packed_sequence(src_encodings, batch_first=True)
         # src_encodings: (batch_size, tgt_query_len, hidden_size)
         # src_encodings = src_encodings.permute(1, 0, 2)
@@ -73,9 +81,11 @@ class BasicModel(nn.Module):
             val_len.append(len(value))
         max_len = max(val_len)
         # for the Begin and End
-        val_emb_array = np.zeros((B, max_len, values_list[0].shape[1]), dtype=np.float32)
+        val_emb_array = np.zeros(
+            (B, max_len, values_list[0].shape[1]), dtype=np.float32
+        )
         for i in range(B):
-            val_emb_array[i, :val_len[i], :] = values_list[i][:, :]
+            val_emb_array[i, : val_len[i], :] = values_list[i][:, :]
 
         val_inp = torch.from_numpy(val_emb_array)
         if self.is_cuda:
@@ -93,14 +103,21 @@ class BasicModel(nn.Module):
         for i, one_q in enumerate(q):
             if not is_list:
                 q_val = list(
-                    map(lambda x: self.word_emb.get(x, np.zeros(self.h_params['col_embed_size'], dtype=np.float32)), one_q))
+                    map(
+                        lambda x: self.word_emb.get(
+                            x,
+                            np.zeros(self.h_params["col_embed_size"], dtype=np.float32),
+                        ),
+                        one_q,
+                    )
+                )
             else:
                 q_val = []
                 for ws in one_q:
                     emb_list = []
                     ws_len = len(ws)
                     for w in ws:
-                        emb_list.append(self.word_emb.get(w, self.word_emb['unk']))
+                        emb_list.append(self.word_emb.get(w, self.word_emb["unk"]))
                     if ws_len == 0:
                         raise Exception("word list should not be empty!")
                     elif ws_len == 1:
@@ -112,7 +129,9 @@ class BasicModel(nn.Module):
             val_len[i] = len(q_val)
         max_len = max(val_len)
 
-        val_emb_array = np.zeros((B, max_len, self.h_params['col_embed_size']), dtype=np.float32)
+        val_emb_array = np.zeros(
+            (B, max_len, self.h_params["col_embed_size"]), dtype=np.float32
+        )
         for i in range(B):
             for t in range(len(val_embs[i])):
                 val_emb_array[i, t, :] = val_embs[i][t]
@@ -127,9 +146,9 @@ class BasicModel(nn.Module):
             os.makedirs(dir_name)
 
         params = {
-            'h_params': self.h_params,
-            'vocab': self.vocab,
-            'grammar': self.grammar,
-            'state_dict': self.state_dict()
+            "h_params": self.h_params,
+            "vocab": self.vocab,
+            "grammar": self.grammar,
+            "state_dict": self.state_dict(),
         }
         torch.save(params, path)
