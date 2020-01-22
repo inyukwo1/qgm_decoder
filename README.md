@@ -19,5 +19,16 @@ Run `train.py` to train the model.
 
 ##### Arguments
 
-* `--train_config:` Path for jsonnet file that contains training settings  
-* `--cuda:` GPU number
+* `--train_config:` Path to jsonnet file that contains training settings  
+* `--cuda:` GPU number  
+
+#### Testing
+
+Run `eval.py` to evaluate the model
+
+##### Arguments
+
+* `--train_config:` Path to jsonnet file that contains training settings  
+* `--cuda:` GPU number  
+* `--load_model` Path to trained model  
+

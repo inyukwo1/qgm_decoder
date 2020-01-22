@@ -453,14 +453,18 @@ def epoch_train(
     return total_loss
 
 
-def epoch_acc(model, batch_size, sql_data, table_data, is_qgm=True):
+def epoch_acc(
+    model, batch_size, sql_data, table_data, is_qgm=True, return_output=False
+):
     model.eval()
     perm = list(range(len(sql_data)))
     pred = []
     gold = []
+    example_list = []
     for st in tqdm(range(0, len(sql_data), batch_size)):
         ed = st + batch_size if st + batch_size < len(perm) else len(perm)
         examples = to_batch_seq(sql_data, table_data, perm, st, ed, is_qgm=is_qgm)
+        example_list += examples
         if is_qgm:
             pred += model.parse(examples)
             gold += [example.qgm for example in examples]
@@ -471,30 +475,11 @@ def epoch_acc(model, batch_size, sql_data, table_data, is_qgm=True):
 
     # Calculate acc
     total_acc = model.decoder.get_accuracy(pred, gold)
-    return total_acc
 
-
-def eval_acc(preds, sqls):
-    sketch_correct, best_correct = 0, 0
-    for q_idx in range(len(preds)):
-        pred = preds[q_idx]
-        sql = sqls[q_idx]
-        if pred["model_result"] == sql["rule_label"]:
-            best_correct += 1
-            print("CORRECT!")
-        else:
-            print("WRONG!")
-        tmp = " ".join(
-            [
-                t
-                for t in pred["rule_label"].split(" ")
-                if t.split("(")[0] not in ["A", "C", "T"]
-            ]
-        )
-        if pred["sketch_result"] == tmp:
-            sketch_correct += 1
-
-    return best_correct / len(preds), sketch_correct / len(preds)
+    if return_output:
+        return total_acc, pred, gold, example_list
+    else:
+        return total_acc
 
 
 def load_data_new(sql_path, table_data, use_small=False):

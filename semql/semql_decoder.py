@@ -889,6 +889,8 @@ class SemQL_Decoder(nn.Module):
 
         completed_beams.sort(key=lambda hyp: -hyp.score)
 
+        if not completed_beams:
+            stop = 1
         return [completed_beams, sketch_actions]
 
     def padding_sketch(self, sketch):

@@ -414,7 +414,9 @@ class IRNet(BasicModel):
                     dec_init_vec,
                     beam_size=5,
                 )
-                highest_prob_actions = completed_beams[0].actions
+                highest_prob_actions = (
+                    completed_beams[0].actions if completed_beams else []
+                )
                 return highest_prob_actions
 
     def init_decoder_state(self, enc_last_cell):

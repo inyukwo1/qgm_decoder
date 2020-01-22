@@ -47,7 +47,7 @@ if __name__ == "__main__":
         H_PARAMS["data_path"], use_small=H_PARAMS["toy"]
     )
 
-    # Remove one data for bert
+    # Filter data for bert
     if H_PARAMS["bert"] != -1:
         sql_data = [data for data in sql_data if data["db_id"] != "baseball_1"]
         val_sql_data = [data for data in val_sql_data if data["db_id"] != "baseball_1"]
@@ -176,7 +176,8 @@ if __name__ == "__main__":
                 best_dev_total_acc = dev_total_acc["total"]
                 print("Saving new best model with acc: {}".format(best_dev_total_acc))
                 torch.save(
-                    model.state_dict(), os.path.join(log_model_path, "best_model.pt")
+                    model.state_dict(),
+                    os.path.join(log_model_path, "{}_best_model.pt".format(epoch)),
                 )
 
         # Change learning rate
