@@ -11,7 +11,6 @@ import numpy as np
 from src import utils
 from src.models.model import IRNet
 
-
 if __name__ == "__main__":
     # Parse arguments
     parser = argparse.ArgumentParser()
@@ -71,22 +70,28 @@ if __name__ == "__main__":
     # Evaluation
     print("Evaluation:")
 
-    train_total_acc, train_pred, train_gold, train_list = utils.epoch_acc(
+    (
+        train_total_acc,
+        train_is_correct,
+        train_pred,
+        train_gold,
+        train_list,
+    ) = utils.epoch_acc(
         model,
         H_PARAMS["batch_size"],
         sql_data,
         table_data,
         is_qgm=H_PARAMS["is_qgm"],
-        return_output=True,
+        return_details=True,
     )
 
-    dev_total_acc, dev_pred, dev_gold, dev_list = utils.epoch_acc(
+    dev_total_acc, dev_is_correct, dev_pred, dev_gold, dev_list = utils.epoch_acc(
         model,
         H_PARAMS["batch_size"],
         val_sql_data,
         val_table_data,
         is_qgm=H_PARAMS["is_qgm"],
-        return_output=True,
+        return_details=True,
     )
 
     print("Train Acc: {}".format(train_total_acc["total"]))
@@ -104,52 +109,17 @@ if __name__ == "__main__":
 
     # Save outputs from train
     assert len(train_pred) == len(train_gold) and len(train_gold) == len(train_list)
-    with open(train_out_path, "w") as f:
-        f.write("Data len: {}\n\n".format(len(train_gold)))
-        for key, value in train_total_acc.items():
-            f.write("acc {}: {}\n".format(key, value))
-        f.write("\n")
-        for idx in range(len(train_gold)):
-            pred = train_pred[idx]
-            gold = train_gold[idx]
-            sql_json = train_list[idx].sql_json
-
-            if H_PARAMS["is_qgm"]:
-                pred = sorted(pred)
-                gold = sorted(gold)
-
-            f.write("db_id: {}\n".format(sql_json["db_id"]))
-            f.write("query: {}\n".format(sql_json["query"]))
-            f.write("question: {}\n".format(str(sql_json["question_arg"])))
-            f.write("que_type: {}\n".format(str(sql_json["question_arg_type"])))
-            f.write("table   : {}\n".format(str(sql_json["table_names"])))
-            f.write("column  : {}\n".format(str(sql_json["col_set"])))
-            f.write("gold: {}\n".format(gold))
-            f.write("pred: {}\n".format(pred))
-            f.write("\n")
+    utils.write_eval_result_as(
+        train_out_path,
+        train_list,
+        train_is_correct,
+        train_total_acc,
+        train_pred,
+        train_gold,
+    )
 
     # Save outputs from dev
     assert len(dev_pred) == len(dev_gold) and len(dev_gold) == len(dev_list)
-    with open(dev_out_path, "w") as f:
-        f.write("Data len: {}\n\n".format(len(dev_gold)))
-        for key, value in dev_total_acc.items():
-            f.write("acc {}: {}\n".format(key, value))
-        f.write("\n")
-        for idx in range(len(dev_gold)):
-            pred = dev_pred[idx]
-            gold = dev_gold[idx]
-            sql_json = dev_list[idx].sql_json
-
-            if H_PARAMS["is_qgm"]:
-                pred = sorted(pred)
-                gold = sorted(gold)
-
-            f.write("db_id: {}\n".format(sql_json["db_id"]))
-            f.write("query: {}\n".format(sql_json["query"]))
-            f.write("question: {}\n".format(str(sql_json["question_arg"])))
-            f.write("que_type: {}\n".format(str(sql_json["question_arg_type"])))
-            f.write("table   : {}\n".format(str(sql_json["table_names"])))
-            f.write("column  : {}\n".format(str(sql_json["col_set"])))
-            f.write("gold: {}\n".format(gold))
-            f.write("pred: {}\n".format(pred))
-            f.write("\n")
+    utils.write_eval_result_as(
+        dev_out_path, dev_list, dev_is_correct, dev_total_acc, dev_pred, dev_gold
+    )

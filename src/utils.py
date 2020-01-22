@@ -454,7 +454,7 @@ def epoch_train(
 
 
 def epoch_acc(
-    model, batch_size, sql_data, table_data, is_qgm=True, return_output=False
+    model, batch_size, sql_data, table_data, is_qgm=True, return_details=False
 ):
     model.eval()
     perm = list(range(len(sql_data)))
@@ -474,10 +474,10 @@ def epoch_acc(
                 gold += [example.tgt_actions]
 
     # Calculate acc
-    total_acc = model.decoder.get_accuracy(pred, gold)
+    total_acc, is_correct_list = model.decoder.get_accuracy(pred, gold)
 
-    if return_output:
-        return total_acc, pred, gold, example_list
+    if return_details:
+        return total_acc, is_correct_list, pred, gold, example_list
     else:
         return total_acc
 
@@ -538,3 +538,80 @@ def init_log_checkpoint_path(args):
     if os.path.exists(save_path) is False:
         os.makedirs(save_path)
     return save_path
+
+
+def write_eval_result_as(file_name, datas, is_corrects, accs, preds, golds):
+    def sort_dic(dic):
+        if isinstance(dic, dict):
+            dic = {key: sort_dic(dic[key]) for key in sorted(dic.keys())}
+        elif isinstance(dic, list):
+            for idx in range(len(dic)):
+                dic[idx] = sort_dic(dic[idx])
+        return dic
+
+    with open(file_name, "w") as f:
+        # Length
+        f.write("Data len: {}\n\n".format(len(golds)))
+
+        # Accuracy
+        for key, value in accs.items():
+            f.write("acc {}:{}{}\n".format(key, (20 - len(key)) * " ", value))
+        f.write("\n")
+
+        # Results
+        for idx in range(len(golds)):
+            pred = preds[idx]
+            gold = golds[idx]
+            sql_json = datas[idx].sql_json
+
+            # Sort for pretty print
+            pred = sort_dic(pred)
+            gold = sort_dic(gold)
+            ans = "Correct" if is_corrects[idx] else "Wrong"
+
+            f.write("idx:    {}\n".format(idx))
+            f.write("ans:    {}\n".format(ans))
+            f.write("db_id:  {}\n".format(sql_json["db_id"]))
+            f.write("SQL:    {}\n".format(sql_json["query"]))
+            # Pretty print question and question type
+            q_list = []
+            q_type_list = []
+            for idx in range(len(sql_json["question_arg"])):
+                q = " ".join(sql_json["question_arg"][idx])
+                q_type = " ".join(sql_json["question_arg_type"][idx])
+                q_pad_len = max(len(q), len(q_type)) - len(q)
+                q_type_pad_len = max(len(q), len(q_type)) - len(q_type)
+                q_pad = " " * (q_pad_len // 2)
+                q_pad_extra = " " if q_pad_len % 2 else ""
+                q_type_pad = " " * (q_type_pad_len // 2)
+                q_type_pad_extra = " " if q_type_pad_len % 2 else ""
+                q_list += ["{}{}{}{}".format(q_pad, q, q_pad, q_pad_extra)]
+                q_type_list += [
+                    "{}{}{}{}".format(q_type_pad, q_type, q_type_pad, q_type_pad_extra)
+                ]
+            f.write("q:      {}\n".format(q_list))
+            f.write("q_type: {}\n".format(q_type_list))
+
+            f.write(
+                "table:  {}\n".format(
+                    str(
+                        [
+                            (idx, sql_json["table_names"][idx])
+                            for idx in range(len(sql_json["table_names"]))
+                        ]
+                    )
+                )
+            )
+            f.write(
+                "column: {}\n".format(
+                    str(
+                        [
+                            (idx, sql_json["col_set"][idx])
+                            for idx in range(len(sql_json["col_set"]))
+                        ]
+                    )
+                )
+            )
+            f.write("gold:   {}\n".format(gold))
+            f.write("pred:   {}\n".format(pred))
+            f.write("\n")

@@ -888,9 +888,6 @@ class SemQL_Decoder(nn.Module):
                 break
 
         completed_beams.sort(key=lambda hyp: -hyp.score)
-
-        if not completed_beams:
-            stop = 1
         return [completed_beams, sketch_actions]
 
     def padding_sketch(self, sketch):
@@ -944,6 +941,7 @@ class SemQL_Decoder(nn.Module):
             len(pred_semql), len(gold_semql)
         )
 
+        acc_list = []
         acc = {"total": 0.0, "sketch": 0.0, "detail": 0.0}
         for idx in range(len(gold_semql)):
             pred_sketch = []
@@ -971,10 +969,12 @@ class SemQL_Decoder(nn.Module):
             acc["detail"] += detail_is_correct
 
             # Total acc
-            acc["total"] += sketch_is_correct and detail_is_correct
+            is_correct = sketch_is_correct and detail_is_correct
+            acc["total"] += is_correct
+            acc_list += [is_correct]
 
         # To percentage
         for key in acc.keys():
             acc[key] /= len(gold_semql)
 
-        return acc
+        return acc, acc_list

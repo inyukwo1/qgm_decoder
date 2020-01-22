@@ -151,6 +151,7 @@ def compare_boxes(pred_qgm, gold_qgm):
     b_size = len(gold_qgm)
 
     total_acc = {}
+    is_correct_list = []
     for b_idx in range(b_size):
         acc = {}
         pred_boxes = pred_qgm[b_idx]
@@ -273,10 +274,14 @@ def compare_boxes(pred_qgm, gold_qgm):
         # Compare nested box
         pass
 
-        # If this example is correct
-        acc["total"] = True
+        # Everything is right
+        is_correct = True
         for key in acc.keys():
-            acc["total"] = acc["total"] and int(acc[key])
+            is_correct = is_correct and int(acc[key])
+
+        # Save
+        acc["total"] = is_correct
+        is_correct_list += [is_correct]
 
         if total_acc:
             for key in total_acc.keys():
@@ -288,7 +293,7 @@ def compare_boxes(pred_qgm, gold_qgm):
     for key in total_acc.keys():
         total_acc[key] = total_acc[key] / len(gold_qgm)
 
-    return total_acc
+    return total_acc, is_correct_list
 
 
 def filter_datas(sql_data):
