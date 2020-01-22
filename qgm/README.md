@@ -15,7 +15,7 @@ Step 2.  Naming files
   
 Step 3. Fix errors
 
- - run fix_data.py to fix erros in tables.json  
+ - run fix_data.py to fix erros in tables.json and dev_gold.sql
 
 Step 4. Parse SQL
 
