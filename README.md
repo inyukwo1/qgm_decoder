@@ -35,4 +35,4 @@ Run `eval.py` to evaluate the model
 #### tensorboard
 
 * After running train.py, run `tensorboard --logdir ./logs --bind_all` in terminal
-* check http://[ip]:6066
+* check http://[ip]:6006
