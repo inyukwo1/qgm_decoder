@@ -1,7 +1,7 @@
 # Spider
 echo "convert spider dev"
 python sql2qgm.py --db ../data/spider/tables.json --source ../data/spider/dev.json --destin ../data/spider/dev.json
-echo "convert spider train"
+echo "\nconvert spider train"
 python sql2qgm.py --db ../data/spider/tables.json --source ../data/spider/train.json --destin ../data/spider/train.json
 
 <<C

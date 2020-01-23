@@ -4,6 +4,12 @@ data=$1
 table_data=$2
 output=$3
 
+<<C
+data="../data/spider/dev.json"
+table_data="../data/spider/tables.json"
+output="../data/spider/dev.json"
+C
+
 echo "Start download NLTK data"
 python download_nltk.py
 

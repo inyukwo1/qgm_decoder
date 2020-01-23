@@ -174,6 +174,9 @@ def create_select_box(sql, info, schema):
         "local_predicates": local_predicates,
     }
     # Create Box
+    if heads and isinstance(heads[0], list):
+        print("error!!!!")
+        print(heads)
     box = {"head": heads, "body": body, "operator": BOX_OPS.index("select")}
 
     return box
