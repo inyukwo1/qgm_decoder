@@ -43,7 +43,7 @@ def create_group_by_box(sql, info, schema):
         body = {
             "quantifiers": quantifiers,
             "quantifier_types": quantifier_types,
-            "join_predicates": None,
+            "join_predicates": [],
             "local_predicates": local_predicates,
         }
         box = {"head": heads, "body": body, "operator": BOX_OPS.index("groupBy")}
@@ -76,8 +76,8 @@ def create_order_by_box(sql, info, schema, group_by_box):
         body = {
             "quantifiers": quantifiers,
             "quantifier_types": quantifier_types,
-            "join_predicates": None,
-            "local_predicates": None,
+            "join_predicates": [],
+            "local_predicates": [],
             "is_asc": is_asc,
             "limit_num": limit_num,
         }
