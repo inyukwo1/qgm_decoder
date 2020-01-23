@@ -94,10 +94,6 @@ class SemQL_Decoder(nn.Module):
             torch.FloatTensor(len(self.grammar.prod2id)).zero_()
         )
 
-        self.att_project = nn.Linear(
-            hidden_size + self.h_params["type_embed_size"], hidden_size
-        )
-
         self.N_embed = nn.Embedding(
             len(define_rule.N._init_grammar()), action_embed_size
         )
@@ -160,8 +156,6 @@ class SemQL_Decoder(nn.Module):
 
         zero_action_embed = Variable(self.new_tensor(self.action_embed_size).zero_())
         zero_type_embed = Variable(self.new_tensor(self.type_embed_size).zero_())
-
-        sketch_attention_history = list()
 
         for t in range(batch.max_sketch_num):
             if t == 0:
@@ -233,7 +227,6 @@ class SemQL_Decoder(nn.Module):
                 src_token_mask=src_mask,
                 return_att_weight=True,
             )
-            sketch_attention_history.append(att_t)
 
             # get the Root possibility
             apply_rule_prob = torch.softmax(self.production_readout(att_t), dim=-1)

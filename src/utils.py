@@ -550,6 +550,8 @@ def write_eval_result_as(file_name, datas, is_corrects, accs, preds, golds):
     def sort_dic(dic):
         if isinstance(dic, dict):
             dic = {key: sort_dic(dic[key]) for key in sorted(dic.keys())}
+            if "local_predicates" in dic.keys():
+                del dic["local_predicates"]
         elif isinstance(dic, list):
             for idx in range(len(dic)):
                 dic[idx] = sort_dic(dic[idx])

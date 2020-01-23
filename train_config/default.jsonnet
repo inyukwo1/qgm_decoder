@@ -45,5 +45,5 @@
 "batch_size": 128,
 "max_epoch": 100,
 "eval_freq": 1,
-"is_qgm": false
+"is_qgm": true
 }
