@@ -39,8 +39,8 @@
 
 # Training settings
 "toy": false,
-"lr": 1e-4,
-"bert_lr": 1e-5,
+"lr": 1e-5,
+"bert_lr": 1e-6,
 "bert": 5, # -1 is no bert.
 "batch_size": 1,
 "max_epoch": 100,

@@ -400,6 +400,9 @@ def epoch_train(
         ed = st + batch_size if st + batch_size < len(perm) else len(perm)
         examples = to_batch_seq(sql_data, table_data, perm, st, ed, is_qgm=is_qgm)
 
+        if st == 74:
+            stop = 1
+
         result = model.forward(examples)
         if is_qgm:
             losses, pred_boxes = result
@@ -430,7 +433,10 @@ def epoch_train(
             for sketch_loss in sketch_prob_var:
                 total_loss["sketch"] += [int(sketch_loss)]
             for detail_loss in lf_prob_var:
-                total_loss["detail"] += [int(detail_loss)]
+                try:
+                    total_loss["detail"] += [int(detail_loss)]
+                except:
+                    stop = 1
 
             loss = torch.mean(sketch_prob_var) + torch.mean(lf_prob_var)
 

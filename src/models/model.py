@@ -311,7 +311,6 @@ class IRNet(BasicModel):
             _, losses, pred_boxes = self.decoder.decode(
                 b_indices, None, dec_init_vec, prev_box=None, gold_boxes=batch.qgm
             )
-
             return losses, pred_boxes
         else:
             sketch_prob_var, lf_prob_var = self.decoder.decode_forward(

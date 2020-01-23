@@ -32,3 +32,7 @@ Run `eval.py` to evaluate the model
 * `--cuda:` GPU number  
 * `--load_model` Path to trained model  
 
+#### tensorboard
+
+* After running train.py, run `tensorboard --logdir ./logs --bind_all` in terminal
+* check http://[ip]:6066

@@ -146,15 +146,16 @@ class QGM_Decoder(nn.Module):
         self.col_tab_dic = col_tab_dic
         self.tab_col_dic = []
         for b_idx in range(len(col_tab_dic)):
-            tmp = []
+            b_tmp = []
             tab_len = len(col_tab_dic[b_idx][0])
             for t_idx in range(tab_len):
-                tmp += [
+                tab_tmp = [
                     idx
                     for idx in range(len(col_tab_dic[b_idx]))
                     if t_idx in col_tab_dic[b_idx][idx]
                 ]
-            self.tab_col_dic += [tmp]
+                b_tmp += [tab_tmp]
+            self.tab_col_dic += [b_tmp]
 
     def decode(self, b_indices, att, state_vector, prev_box=None, gold_boxes=None):
         b_size = len(b_indices)
@@ -493,8 +494,15 @@ class QGM_Decoder(nn.Module):
             )
 
         # Create new column mask from prediction based on quantifiers
-        stop = 1
         # use tab_col_dic
+        col_masks = torch.ones_like(col_masks).cuda()
+        for b_idx in range(b_size):
+            tmp = []
+            for item in selected_qf_idx[b_idx]:
+                tmp += self.tab_col_dic[b_idx][item]
+            tmp = list(set(tmp))
+            tmp = torch.tensor(tmp).cuda()
+            col_masks[b_idx][tmp] = 0
 
         if box_type != "order":
             # Predict local predicate Num
