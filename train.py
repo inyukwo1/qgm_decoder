@@ -45,7 +45,10 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     sql_data, table_data, val_sql_data, val_table_data = utils.load_dataset(
-        H_PARAMS["data_path"], use_small=H_PARAMS["toy"]
+        H_PARAMS["data_path"],
+        use_small=H_PARAMS["toy"],
+        is_simple_query=H_PARAMS["is_simple_query"],
+        is_single_table=H_PARAMS["is_single_table"],
     )
 
     # Filter data for bert

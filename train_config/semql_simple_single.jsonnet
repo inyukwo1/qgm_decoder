@@ -1,11 +1,11 @@
 {
-"seed": 90,
+"seed": 100,
 
 # Path
-"data_path": "./data/spider",
+"data_path": "./data/spider/",
 "glove_embed_path": "./data/glove.42B.300d.txt",
 "log_path": "./logs/",
-"log_key": "testing",
+"log_key": "semql_simple_single",
 
 # Hyper-parameters
 "beam_size": 5,
@@ -45,5 +45,7 @@
 "batch_size": 128,
 "max_epoch": 100,
 "eval_freq": 1,
-"is_qgm": true
+"is_qgm": false,
+"is_simple_query": true,
+"is_single_table": true
 }
