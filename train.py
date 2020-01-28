@@ -49,7 +49,15 @@ if __name__ == "__main__":
 
     # Filter data for bert
     if H_PARAMS["bert"] != -1:
-        sql_data = [data for data in sql_data if data["db_id"] != "baseball_1"]
+        sql_data = [
+            data
+            for data in sql_data
+            if data["db_id"] != "baseball_1"
+            and data["db_id"] != "cre_Drama_Workshop_Groups"
+            and data["db_id"] != "sakila_1"
+            and data["db_id"] != "formula_1"
+            and data["db_id"] != "soccer_1"
+        ]
         val_sql_data = [data for data in val_sql_data if data["db_id"] != "baseball_1"]
 
     print("train data length: {}".format(len(sql_data)))
@@ -156,6 +164,17 @@ if __name__ == "__main__":
                 table_data,
                 is_qgm=H_PARAMS["is_qgm"],
             )
+            dev_loss = utils.epoch_train(
+                model,
+                optimizer,
+                bert_optimizer,
+                H_PARAMS["batch_size"],
+                val_sql_data,
+                val_table_data,
+                H_PARAMS["clip_grad"],
+                is_qgm=H_PARAMS["is_qgm"],
+                is_train=False,
+            )
             dev_total_acc = utils.epoch_acc(
                 model,
                 H_PARAMS["batch_size"],
@@ -169,6 +188,7 @@ if __name__ == "__main__":
             # Logging to tensorboard
             logging_to_tensorboard(summary_writer, "train_loss/", train_loss, epoch)
             logging_to_tensorboard(summary_writer, "train_acc/", train_total_acc, epoch)
+            logging_to_tensorboard(summary_writer, "dev_loss/", dev_loss, epoch)
             logging_to_tensorboard(summary_writer, "dev_acc/", dev_total_acc, epoch)
 
             # Save if total_acc is higher

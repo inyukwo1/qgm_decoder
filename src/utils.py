@@ -387,8 +387,12 @@ def epoch_train(
     table_data,
     clip_grad,
     is_qgm=True,
+    is_train=True,
 ):
-    model.train()
+    if is_train:
+        model.train()
+    else:
+        model.eval()
     # shuffle
     perm = np.random.permutation(len(sql_data))
     optimizer.zero_grad()
@@ -439,18 +443,18 @@ def epoch_train(
                     stop = 1
 
             loss = torch.mean(sketch_prob_var) + torch.mean(lf_prob_var)
-
-        loss.backward()
+        if is_train:
+            loss.backward()
 
         if clip_grad > 0.0:
             torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
-
-        optimizer.step()
-        if bert_optimizer:
-            bert_optimizer.step()
-        optimizer.zero_grad()
-        if bert_optimizer:
-            bert_optimizer.zero_grad()
+        if is_train:
+            optimizer.step()
+            if bert_optimizer:
+                bert_optimizer.step()
+            optimizer.zero_grad()
+            if bert_optimizer:
+                bert_optimizer.zero_grad()
 
     # Average loss
     for key in total_loss.keys():

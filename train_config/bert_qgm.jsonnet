@@ -41,8 +41,8 @@
 "toy": false,
 "lr": 1e-4,
 "bert_lr": 1e-5,
-"bert": 5, # -1 is no bert.
-"batch_size": 1,
+"bert": 0, # -1 is no bert.
+"batch_size": 3,
 "max_epoch": 100,
 "eval_freq": 1,
 "is_qgm": true

@@ -6,6 +6,14 @@ GROUP_IDX = BOX_OPS.index("groupBy")
 ORDER_IDX = BOX_OPS.index("orderBy")
 
 
+def assert_dim(tensor, dim):
+    size = list(tensor.size())
+    for i, d in enumerate(dim):
+        if d is None:
+            dim[i] = size[i]
+    assert dim == size
+
+
 def get_limit_num(boxes):
     nums = [box["limit_num"] for box in boxes]
     return nums
@@ -324,9 +332,10 @@ def filter_datas(sql_data):
             # single table only
             if len(box["body"]["quantifier_types"]) > 1:
                 flag = False
-            for item in box["body"]["local_predicates"]:
-                if item[0] != AGG_OPS.index("none"):
-                    flag = False
+            if box["body"]["local_predicates"]:
+                for item in box["body"]["local_predicates"]:
+                    if item[0] != AGG_OPS.index("none"):
+                        flag = False
         # only really simple queries
         if len(data["qgm"]) > 1:
             flag = False
