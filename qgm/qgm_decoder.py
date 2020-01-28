@@ -19,14 +19,79 @@ from qgm.utils import (
     get_is_asc,
     get_box_with_op_type,
     compare_boxes,
+    assert_dim,
 )
+
+
+class SequentialSelector(nn.Module):
+    def __init__(self, emb_dim):
+        super(SequentialSelector, self).__init__()
+        self.emb_dim = emb_dim
+        self.lstm = nn.LSTM(
+            emb_dim, emb_dim, 2, batch_first=True, dropout=0.2, bidirectional=False
+        )
+        self.sos = nn.Parameter(torch.zeros(emb_dim))
+        self.eos = nn.Parameter(torch.zeros(emb_dim))
+
+    def decode_train(self, context, batch_tensors, batch_selected_items):
+        B = len(batch_tensors)
+        assert_dim(batch_tensors, [B, None, self.emb_dim])
+        batch_selected_items_len = [len(items) for items in batch_selected_items]
+
+        batch_input = torch.zeros((B, max(batch_selected_items_len) + 1, self.emb_dim))
+        for b_idx in range(B):
+            items = batch_selected_items[b_idx]
+            batch_input[b_idx, 0] = self.sos
+            for i, item in enumerate(items):
+                batch_input[b_idx, i + 1] = batch_tensors[b_idx, item]
+        out, _ = self.lstm(batch_input, (context, torch.zeros(B, self.emb_dim)))
+        eos_appended_tensors = torch.cat(
+            (batch_tensors, self.eos.unsqueeze(0, 1).expand(B, -1, -1)), dim=1
+        )
+        out = torch.nn.bmm(out, eos_appended_tensors.transpose(1, 2))
+        out = torch.log_softmax(out, dim=-1)
+        negative_losses = []
+        for b_idx in range(B):
+            negative_loss = 0
+            items = batch_selected_items[b_idx]
+            for i, item in enumerate(items):
+                negative_loss += out[b_idx, i, item]
+            negative_loss += out[b_idx, len(items), -1]
+            negative_losses.append(negative_loss)
+        return negative_losses
+
+    def decode_eval(self, context, batch_tensors):
+        B = len(batch_tensors)
+        eos_appended_tensors = torch.cat(
+            (batch_tensors, self.eos.unsqueeze(0, 1).expand(B, -1, -1)), dim=1
+        )
+        batch_out_indices = []
+        for b_idx in range(B):
+            out_indices = []
+            h = context[b_idx].unsqueeze(0)
+            c = torch.zeros(1, self.emb_dim)
+            input = self.sos.unsqueeze(0)
+            for _ in range(7):
+                _, (h, c) = self.lstm(input, (h, c))
+                out = torch.mm(h, eos_appended_tensors[b_idx].transpose(0, 1)).squeeze(
+                    0
+                )
+                argmax_index = torch.argmax(out).cpu().data.item()
+                if argmax_index == len(eos_appended_tensors[b_idx]) - 1:
+                    break
+                out_indices.append(argmax_index)
+            batch_out_indices.append(out_indices)
+        return batch_out_indices
 
 
 class QGM_Decoder(nn.Module):
     def __init__(self, emb_dim):
         super(QGM_Decoder, self).__init__()
-        att_vec_dim = 128
-        input_dim = emb_dim * 2
+        # att_vec_dim = 128
+        # input_dim = emb_dim * 2
+        att_vec_dim = emb_dim
+        input_dim = emb_dim + att_vec_dim
+
         # Prev
         self.att_linear = nn.Linear(emb_dim, emb_dim, bias=False)
         # Embeddings
@@ -52,135 +117,135 @@ class QGM_Decoder(nn.Module):
         self.is_group_by = nn.Linear(emb_dim, 2)
         self.is_order_by = nn.Linear(emb_dim, 2)
         # Select
-        # self.select_qf_num = nn.Linear(att_vec_dim, 10)
-        self.select_qf_num = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 10)
-        )
+        self.select_qf_num = nn.Linear(emb_dim, 10)
+        # self.select_qf_num = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 10)
+        # )
         self.select_qf_tab_layer = nn.Linear(emb_dim, emb_dim)
-        # self.select_qs_num = nn.Linear(att_vec_dim, 4)
-        self.select_qs_num = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 4)
-        )
-        # self.select_p_num = nn.Linear(att_vec_dim, 5)
-        self.select_p_num = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 5)
-        )
-        # self.select_p_layer = nn.Linear(att_vec_dim + emb_dim * 3, emb_dim)
-        self.select_p_layer = nn.Linear(emb_dim * 4, emb_dim)
+        self.select_qs_num = nn.Linear(att_vec_dim, 4)
+        # self.select_qs_num = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 4)
+        # )
+        self.select_p_num = nn.Linear(att_vec_dim, 5)
+        # self.select_p_num = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 5)
+        # )
+        self.select_p_layer = nn.Linear(att_vec_dim + emb_dim * 3, emb_dim)
+        # self.select_p_layer = nn.Linear(emb_dim * 4, emb_dim)
         self.select_p_col_layer = nn.Linear(emb_dim, emb_dim)
-        # self.select_p_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
-        self.select_p_agg = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim),
-            nn.ReLU(),
-            nn.Linear(att_vec_dim, len(AGG_OPS)),
-        )
-        # self.select_p_op = nn.Linear(att_vec_dim, len(WHERE_OPS))
-        self.select_p_op = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim),
-            nn.ReLU(),
-            nn.Linear(att_vec_dim, len(WHERE_OPS)),
-        )
-        # self.select_head_num = nn.Linear(att_vec_dim, 6)
-        self.select_head_num = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 6)
-        )
-        # self.select_head_layer = nn.Linear(att_vec_dim + emb_dim, att_vec_dim)
-        self.select_head_layer = nn.Linear(emb_dim * 2, emb_dim)
+        self.select_p_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
+        # self.select_p_agg = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(att_vec_dim, len(AGG_OPS)),
+        # )
+        self.select_p_op = nn.Linear(att_vec_dim, len(WHERE_OPS))
+        # self.select_p_op = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(att_vec_dim, len(WHERE_OPS)),
+        # )
+        self.select_head_num = nn.Linear(att_vec_dim, 6)
+        # self.select_head_num = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 6)
+        # )
+        self.select_head_layer = nn.Linear(att_vec_dim + emb_dim, att_vec_dim)
+        # self.select_head_layer = nn.Linear(emb_dim * 2, emb_dim)
         self.select_head_col_layer = nn.Linear(emb_dim, emb_dim)
-        # self.select_head_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
-        self.select_head_agg = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim),
-            nn.ReLU(),
-            nn.Linear(att_vec_dim, len(AGG_OPS)),
-        )
+        self.select_head_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
+        # self.select_head_agg = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(att_vec_dim, len(AGG_OPS)),
+        # )
         # Group by
-        # self.group_qf_num = nn.Linear(att_vec_dim, 4)
-        self.group_qf_num = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 4)
-        )
+        self.group_qf_num = nn.Linear(att_vec_dim, 4)
+        # self.group_qf_num = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 4)
+        # )
         self.group_qf_tab_layer = nn.Linear(emb_dim, emb_dim)
-        # self.group_qs_num = nn.Linear(att_vec_dim, 3)
-        self.group_qs_num = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 3)
-        )
-        # self.group_p_num = nn.Linear(att_vec_dim, 5)
-        self.group_p_num = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 5)
-        )
-        # self.group_p_layer = nn.Linear(att_vec_dim + emb_dim * 3, att_vec_dim)
-        self.group_p_layer = nn.Linear(emb_dim * 4, att_vec_dim)
+        self.group_qs_num = nn.Linear(att_vec_dim, 3)
+        # self.group_qs_num = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 3)
+        # )
+        self.group_p_num = nn.Linear(att_vec_dim, 5)
+        # self.group_p_num = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 5)
+        # )
+        self.group_p_layer = nn.Linear(att_vec_dim + emb_dim * 3, att_vec_dim)
+        # self.group_p_layer = nn.Linear(emb_dim * 4, att_vec_dim)
         self.group_p_col_layer = nn.Linear(emb_dim, emb_dim)
-        # self.group_p_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
-        self.group_p_agg = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim),
-            nn.ReLU(),
-            nn.Linear(att_vec_dim, len(AGG_OPS)),
-        )
-        # self.group_p_op = nn.Linear(att_vec_dim, len(WHERE_OPS))
-        self.group_p_op = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim),
-            nn.ReLU(),
-            nn.Linear(att_vec_dim, len(WHERE_OPS)),
-        )
-        # self.group_head_num = nn.Linear(att_vec_dim, 3)
-        self.group_head_num = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 3)
-        )
+        self.group_p_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
+        # self.group_p_agg = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(att_vec_dim, len(AGG_OPS)),
+        # )
+        self.group_p_op = nn.Linear(att_vec_dim, len(WHERE_OPS))
+        # self.group_p_op = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(att_vec_dim, len(WHERE_OPS)),
+        # )
+        self.group_head_num = nn.Linear(att_vec_dim, 3)
+        # self.group_head_num = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 3)
+        # )
         # self.group_head_layer = nn.Linear(att_vec_dim + emb_dim, att_vec_dim)
         self.group_head_layer = nn.Linear(emb_dim * 2, emb_dim)
         self.group_head_col_layer = nn.Linear(emb_dim, emb_dim)
-        # self.group_head_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
-        self.group_head_agg = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim),
-            nn.ReLU(),
-            nn.Linear(att_vec_dim, len(AGG_OPS)),
-        )
+        self.group_head_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
+        # self.group_head_agg = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(att_vec_dim, len(AGG_OPS)),
+        # )
         # Order by
-        # self.order_qf_num = nn.Linear(att_vec_dim, 4)
-        self.order_qf_num = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 4)
-        )
+        self.order_qf_num = nn.Linear(att_vec_dim, 4)
+        # self.order_qf_num = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 4)
+        # )
         self.order_qf_tab_layer = nn.Linear(emb_dim, emb_dim)
-        # self.order_p_num = nn.Linear(att_vec_dim, 5)
-        self.order_p_num = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 5)
-        )
-        # self.order_p_layer = nn.Linear(att_vec_dim + emb_dim * 3, att_vec_dim)
-        self.order_p_layer = nn.Linear(emb_dim * 4, att_vec_dim)
+        self.order_p_num = nn.Linear(att_vec_dim, 5)
+        # self.order_p_num = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 5)
+        # )
+        self.order_p_layer = nn.Linear(att_vec_dim + emb_dim * 3, att_vec_dim)
+        # self.order_p_layer = nn.Linear(emb_dim * 4, att_vec_dim)
         self.order_p_col_layer = nn.Linear(emb_dim, emb_dim)
-        # self.order_p_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
-        self.order_p_agg = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim),
-            nn.ReLU(),
-            nn.Linear(att_vec_dim, len(AGG_OPS)),
-        )
-        # self.order_p_op = nn.Linear(att_vec_dim, len(WHERE_OPS))
-        self.order_p_op = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim),
-            nn.ReLU(),
-            nn.Linear(att_vec_dim, len(WHERE_OPS)),
-        )
-        # self.order_head_num = nn.Linear(att_vec_dim, 3)
-        self.order_head_num = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 3)
-        )
-        # self.order_head_layer = nn.Linear(att_vec_dim + emb_dim, att_vec_dim)
-        self.order_head_layer = nn.Linear(emb_dim * 2, emb_dim)
+        self.order_p_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
+        # self.order_p_agg = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(att_vec_dim, len(AGG_OPS)),
+        # )
+        self.order_p_op = nn.Linear(att_vec_dim, len(WHERE_OPS))
+        # self.order_p_op = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(att_vec_dim, len(WHERE_OPS)),
+        # )
+        self.order_head_num = nn.Linear(att_vec_dim, 3)
+        # self.order_head_num = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 3)
+        # )
+        self.order_head_layer = nn.Linear(att_vec_dim + emb_dim, att_vec_dim)
+        # self.order_head_layer = nn.Linear(emb_dim * 2, emb_dim)
         self.order_head_col_layer = nn.Linear(emb_dim, emb_dim)
-        # self.order_head_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
-        self.order_head_agg = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim),
-            nn.ReLU(),
-            nn.Linear(att_vec_dim, len(AGG_OPS)),
-        )
-        # self.order_is_asc = nn.Linear(att_vec_dim, 2)
-        self.order_is_asc = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 2)
-        )
-        # self.order_limit_num = nn.Linear(att_vec_dim, 3)
-        self.order_limit_num = nn.Sequential(
-            nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 3)
-        )
+        self.order_head_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
+        # self.order_head_agg = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(att_vec_dim, len(AGG_OPS)),
+        # )
+        self.order_is_asc = nn.Linear(att_vec_dim, 2)
+        # self.order_is_asc = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 2)
+        # )
+        self.order_limit_num = nn.Linear(att_vec_dim, 3)
+        # self.order_limit_num = nn.Sequential(
+        #     nn.Linear(emb_dim, att_vec_dim), nn.ReLU(), nn.Linear(att_vec_dim, 3)
+        # )
 
         self.select_layers = {
             "qf_num": self.select_qf_num,
