@@ -1,11 +1,11 @@
 {
-"seed": 100,
+"seed": 90,
 
 # Path
-"data_path": "./data/spider/",
+"data_path": "./data/spider",
 "glove_embed_path": "./data/glove.42B.300d.txt",
 "log_path": "./logs/",
-"log_key": "semql",
+"log_key": "bert_qgm_simple_multi",
 
 # Hyper-parameters
 "beam_size": 5,
@@ -39,11 +39,12 @@
 
 # Training settings
 "toy": false,
-"lr": 1e-3,
-"bert_lr": 1e-4,
-"bert": -1, # -1 is no bert.
-"batch_size": 128,
+"lr": 1e-4,
+"bert_lr": 1e-5,
+"bert": 0, # -1 is no bert.
+"batch_size": 3,
 "max_epoch": 100,
 "eval_freq": 1,
-"is_qgm": false 
+"is_qgm": true
 }
+

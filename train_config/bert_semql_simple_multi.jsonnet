@@ -5,7 +5,7 @@
 "data_path": "./data/spider",
 "glove_embed_path": "./data/glove.42B.300d.txt",
 "log_path": "./logs/",
-"log_key": "bert_semql",
+"log_key": "bert_semql_simple_multi",
 
 # Hyper-parameters
 "beam_size": 5,
