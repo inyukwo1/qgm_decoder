@@ -177,21 +177,23 @@ def compare_boxes(pred_qgm, gold_qgm):
         # Compare head - idx
         is_correct_head_agg = is_correct_head_col = is_correct_head_num
         if is_correct_head_num:
-            for idx in range(min(pred_head_num, gold_head_num)):
-                # Agg
-                pred_head_agg = pred_boxes[0]["head"][idx][0]
-                gold_head_agg = gold_boxes[0]["head"][idx][0]
-                is_correct_head_agg = is_correct_head_agg and (
-                    pred_head_agg == gold_head_agg
-                )
+            pred_head = set(pred_boxes[0]["head"])
+            gold_head = set([tuple(item) for item in gold_boxes[0]["head"]])
+            if pred_head != gold_head:
+                for idx in range(min(pred_head_num, gold_head_num)):
+                    # Agg
+                    pred_head_agg = pred_boxes[0]["head"][idx][0]
+                    gold_head_agg = gold_boxes[0]["head"][idx][0]
+                    is_correct_head_agg = is_correct_head_agg and (
+                        pred_head_agg == gold_head_agg
+                    )
 
-                # Col
-                pred_head_col = pred_boxes[0]["head"][idx][1]
-                gold_head_col = gold_boxes[0]["head"][idx][1]
-                is_correct_head_col = is_correct_head_col and (
-                    pred_head_col == gold_head_col
-                )
-
+                    # Col
+                    pred_head_col = pred_boxes[0]["head"][idx][1]
+                    gold_head_col = gold_boxes[0]["head"][idx][1]
+                    is_correct_head_col = is_correct_head_col and (
+                        pred_head_col == gold_head_col
+                    )
         acc["head_agg"] = is_correct_head_agg
         acc["head_col"] = is_correct_head_col
 
@@ -204,12 +206,15 @@ def compare_boxes(pred_qgm, gold_qgm):
         # Compare body - quantifier - col
         is_correct_quantifier_tab = is_correct_quantifier_num
         if is_correct_quantifier_num:
-            for idx in range(min(pred_quantifier_num, gold_quantifier_num)):
-                pred_quantifier_tab = pred_boxes[0]["body"]["quantifiers"][idx]
-                gold_quantifier_tab = pred_boxes[0]["body"]["quantifiers"][idx]
-                is_correct_quantifier_tab = is_correct_quantifier_tab and (
-                    pred_quantifier_tab == gold_quantifier_tab
-                )
+            pred_quantifier_tab_set = set(pred_boxes[0]["body"]["quantifiers"])
+            gold_quantifier_tab_set = set(gold_boxes[0]["body"]["quantifiers"])
+            if pred_quantifier_tab_set != gold_quantifier_tab_set:
+                for idx in range(min(pred_quantifier_num, gold_quantifier_num)):
+                    pred_quantifier_tab = pred_boxes[0]["body"]["quantifiers"][idx]
+                    gold_quantifier_tab = gold_boxes[0]["body"]["quantifiers"][idx]
+                    is_correct_quantifier_tab = is_correct_quantifier_tab and (
+                        pred_quantifier_tab == gold_quantifier_tab
+                    )
         acc["quantifier_tab"] = is_correct_quantifier_tab
 
         # Compare body - local predicate numbers
@@ -223,37 +228,44 @@ def compare_boxes(pred_qgm, gold_qgm):
             is_correct_local_pred_col
         ) = is_correct_local_pred_op = is_correct_local_pred_num
         if is_correct_local_pred_num:
-            for idx in range(min(pred_local_predicate_num, gold_local_predicate_num)):
-                # Agg
-                pred_local_predicate_agg = pred_boxes[0]["body"]["local_predicates"][
-                    idx
-                ][0]
-                gold_local_predicate_agg = gold_boxes[0]["body"]["local_predicates"][
-                    idx
-                ][0]
-                is_correct_local_pred_agg = is_correct_local_pred_agg and (
-                    pred_local_predicate_agg == gold_local_predicate_agg
-                )
-                # Col
-                pred_local_predicate_col = pred_boxes[0]["body"]["local_predicates"][
-                    idx
-                ][1]
-                gold_local_predicate_col = gold_boxes[0]["body"]["local_predicates"][
-                    idx
-                ][1]
-                is_correct_local_pred_col = is_correct_local_pred_col and (
-                    pred_local_predicate_col == gold_local_predicate_col
-                )
-                # Op
-                pred_local_predicate_op = pred_boxes[0]["body"]["local_predicates"][
-                    idx
-                ][2]
-                gold_local_predicate_op = gold_boxes[0]["body"]["local_predicates"][
-                    idx
-                ][2]
-                is_correct_local_pred_op = is_correct_local_pred_op and (
-                    pred_local_predicate_op == gold_local_predicate_op
-                )
+            pred_local_predicate = set(pred_boxes[0]["body"]["local_predicates"])
+            gold_local_predicate = set(
+                [tuple(item[:3]) for item in gold_boxes[0]["body"]["local_predicates"]]
+            )
+            if pred_local_predicate != gold_local_predicate:
+                for idx in range(
+                    min(pred_local_predicate_num, gold_local_predicate_num)
+                ):
+                    # Agg
+                    pred_local_predicate_agg = pred_boxes[0]["body"][
+                        "local_predicates"
+                    ][idx][0]
+                    gold_local_predicate_agg = gold_boxes[0]["body"][
+                        "local_predicates"
+                    ][idx][0]
+                    is_correct_local_pred_agg = is_correct_local_pred_agg and (
+                        pred_local_predicate_agg == gold_local_predicate_agg
+                    )
+                    # Col
+                    pred_local_predicate_col = pred_boxes[0]["body"][
+                        "local_predicates"
+                    ][idx][1]
+                    gold_local_predicate_col = gold_boxes[0]["body"][
+                        "local_predicates"
+                    ][idx][1]
+                    is_correct_local_pred_col = is_correct_local_pred_col and (
+                        pred_local_predicate_col == gold_local_predicate_col
+                    )
+                    # Op
+                    pred_local_predicate_op = pred_boxes[0]["body"]["local_predicates"][
+                        idx
+                    ][2]
+                    gold_local_predicate_op = gold_boxes[0]["body"]["local_predicates"][
+                        idx
+                    ][2]
+                    is_correct_local_pred_op = is_correct_local_pred_op and (
+                        pred_local_predicate_op == gold_local_predicate_op
+                    )
 
         acc["local_predicate_agg"] = is_correct_local_pred_agg
         acc["local_predicate_col"] = is_correct_local_pred_col
@@ -309,10 +321,16 @@ def filter_datas(sql_data):
             # If Intersect, union, except
             if box["operator"] in IUE_INDICES:
                 flag = False
+            # single table only
+            if len(box["body"]["quantifier_types"]) > 1:
+                flag = False
+            for item in box["body"]["local_predicates"]:
+                if item[0] != AGG_OPS.index("none"):
+                    flag = False
         # only really simple queries
         if len(data["qgm"]) > 1:
             flag = False
-        # only with those with non repeated quantifiers
+        # only with non repeated quantifiers
         if flag and len(set(box["body"]["quantifiers"])) != len(
             box["body"]["quantifiers"]
         ):

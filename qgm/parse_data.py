@@ -15,7 +15,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-data_path = "data/{}/".format(args.dataset_name)
+data_path = "../data/{}/".format(args.dataset_name)
 db_dir = data_path + "database/"
 table_file = data_path + "tables.json"
 

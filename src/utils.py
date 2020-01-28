@@ -550,8 +550,8 @@ def write_eval_result_as(file_name, datas, is_corrects, accs, preds, golds):
     def sort_dic(dic):
         if isinstance(dic, dict):
             dic = {key: sort_dic(dic[key]) for key in sorted(dic.keys())}
-            if "local_predicates" in dic.keys():
-                del dic["local_predicates"]
+            if "join_predicates" in dic.keys():
+                del dic["join_predicates"]
         elif isinstance(dic, list):
             for idx in range(len(dic)):
                 dic[idx] = sort_dic(dic[idx])
@@ -610,12 +610,13 @@ def write_eval_result_as(file_name, datas, is_corrects, accs, preds, golds):
                     )
                 )
             )
+            # To-Do: Need to print column's parent table as well
             f.write(
                 "column: {}\n".format(
                     str(
                         [
-                            (idx, sql_json["col_set"][idx])
-                            for idx in range(len(sql_json["col_set"]))
+                            (idx, sql_json["col"][idx])
+                            for idx in range(len(sql_json["col"]))
                         ]
                     )
                 )

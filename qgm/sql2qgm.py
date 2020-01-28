@@ -157,7 +157,7 @@ def create_select_box(sql, info, schema):
             if isinstance(right_operand, list):
                 agg2_id = where_unit[3][0]
                 col2_id = where_unit[3][1]
-                right_operand = [agg2_id, col2_id]
+                right_operand = (agg2_id, col2_id)
             elif where_unit[4]:
                 right_operand = where_unit[3:5]
             else:
