@@ -9,6 +9,7 @@ import datetime
 import torch
 import torch.optim as optim
 import numpy as np
+import random
 
 from src import utils
 from src.models.model import IRNet
@@ -31,8 +32,13 @@ if __name__ == "__main__":
     )
     parser.add_argument("--load_model", type=str, default="", help="saved model path")
     parser.add_argument("--cuda", type=int, default="-1", help="GPU number")
+    parser.add_argument("--seed", type=int)
     args = parser.parse_args()
-
+    random.seed()
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     # Load Training Info
     H_PARAMS = json.loads(_jsonnet.evaluate_file(args.train_config))
 
