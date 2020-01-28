@@ -492,7 +492,9 @@ def epoch_acc(
         return total_acc
 
 
-def load_data_new(sql_path, table_data, use_small=False):
+def load_data_new(
+    sql_path, table_data, use_small=False, is_simple_query=True, is_single_table=True
+):
     sql_data = []
 
     print("Loading data from %s" % sql_path)
@@ -503,7 +505,7 @@ def load_data_new(sql_path, table_data, use_small=False):
     table_data_new = {table["db_id"]: table for table in table_data}
 
     # Filter data with qgm that has nested query
-    sql_data = filter_datas(sql_data)
+    sql_data = filter_datas(sql_data, is_simple_query, is_single_table)
 
     if use_small:
         return sql_data[:80], table_data_new
@@ -511,7 +513,9 @@ def load_data_new(sql_path, table_data, use_small=False):
         return sql_data, table_data_new
 
 
-def load_dataset(dataset_dir, use_small=False):
+def load_dataset(
+    dataset_dir, use_small=False, is_simple_query=True, is_single_table=True
+):
     print("Loading from datasets...")
 
     TABLE_PATH = os.path.join(dataset_dir, "tables.json")
@@ -523,10 +527,18 @@ def load_dataset(dataset_dir, use_small=False):
         table_data = json.load(inf)
 
     train_sql_data, train_table_data = load_data_new(
-        TRAIN_PATH, table_data, use_small=use_small
+        TRAIN_PATH,
+        table_data,
+        use_small=use_small,
+        is_simple_query=is_simple_query,
+        is_single_table=is_single_table,
     )
     val_sql_data, val_table_data = load_data_new(
-        DEV_PATH, table_data, use_small=use_small
+        DEV_PATH,
+        table_data,
+        use_small=use_small,
+        is_simple_query=is_simple_query,
+        is_single_table=is_single_table,
     )
 
     return train_sql_data, train_table_data, val_sql_data, val_table_data

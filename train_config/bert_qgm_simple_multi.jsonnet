@@ -45,6 +45,8 @@
 "batch_size": 3,
 "max_epoch": 100,
 "eval_freq": 1,
-"is_qgm": true
+"is_qgm": true,
+"is_simple_query": true,
+"is_single_table": false
 }
 

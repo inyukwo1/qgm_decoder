@@ -316,34 +316,35 @@ def compare_boxes(pred_qgm, gold_qgm):
     return total_acc, is_correct_list
 
 
-def filter_datas(sql_data):
+def filter_datas(sql_data, is_simple_query, is_single_table):
     filtered_datas = []
     for data in sql_data:
         flag = True
-        for box in data["qgm"]:
-            if (
-                box["body"]["quantifier_types"]
-                and "s" in box["body"]["quantifier_types"]
+        if is_simple_query:
+            for box in data["qgm"]:
+                if (
+                    box["body"]["quantifier_types"]
+                    and "s" in box["body"]["quantifier_types"]
+                ):
+                    flag = False
+                # If Intersect, union, except
+                if box["operator"] in IUE_INDICES:
+                    flag = False
+                # single table only
+                if is_single_table and len(box["body"]["quantifier_types"]) > 1:
+                    flag = False
+                if box["body"]["local_predicates"]:
+                    for item in box["body"]["local_predicates"]:
+                        if item[0] != AGG_OPS.index("none"):
+                            flag = False
+            # only really simple queries
+            if len(data["qgm"]) > 1:
+                flag = False
+            # only with non repeated quantifiers
+            if flag and len(set(box["body"]["quantifiers"])) != len(
+                box["body"]["quantifiers"]
             ):
                 flag = False
-            # If Intersect, union, except
-            if box["operator"] in IUE_INDICES:
-                flag = False
-            # single table only
-            if len(box["body"]["quantifier_types"]) > 1:
-                flag = False
-            if box["body"]["local_predicates"]:
-                for item in box["body"]["local_predicates"]:
-                    if item[0] != AGG_OPS.index("none"):
-                        flag = False
-        # only really simple queries
-        if len(data["qgm"]) > 1:
-            flag = False
-        # only with non repeated quantifiers
-        if flag and len(set(box["body"]["quantifiers"])) != len(
-            box["body"]["quantifiers"]
-        ):
-            flag = False
         if flag:
             filtered_datas += [data]
     return filtered_datas
