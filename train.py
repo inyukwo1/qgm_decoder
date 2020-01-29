@@ -42,8 +42,6 @@ if __name__ == "__main__":
         torch.cuda.manual_seed(H_PARAMS["seed"])
     np.random.seed(H_PARAMS["seed"])
     random.seed(H_PARAMS["seed"])
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
     sql_data, table_data, val_sql_data, val_table_data = utils.load_dataset(
         H_PARAMS["data_path"],
         use_small=H_PARAMS["toy"],
