@@ -423,7 +423,7 @@ def epoch_train(
                     total_loss[key] = []
             for b_loss in losses:
                 for key, item in b_loss.items():
-                    total_loss[key] += [int(item)]
+                    total_loss[key] += [float(item)]
 
             loss = torch.mean(torch.stack(loss_list))
 
