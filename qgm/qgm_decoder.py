@@ -21,6 +21,7 @@ from qgm.utils import (
     compare_boxes,
     assert_dim,
 )
+import numpy as np
 
 
 class SequentialSelector(nn.Module):
@@ -121,7 +122,8 @@ class QGM_Decoder(nn.Module):
         self.select_qf_num = nn.Linear(att_vec_dim, 10)
         self.select_qs_num = nn.Linear(att_vec_dim, 4)
         self.select_p_num = nn.Linear(att_vec_dim, 5)
-        self.select_p_layer = nn.Linear(att_vec_dim + emb_dim * 3, emb_dim)
+        self.select_p_layer = nn.LSTMCell(emb_dim * 3, emb_dim)
+        self.select_p_stopper = nn.Linear(att_vec_dim, 1)
         self.select_p_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
         self.select_p_op = nn.Linear(att_vec_dim, len(WHERE_OPS))
         self.select_head_layer = nn.Linear(att_vec_dim + emb_dim, att_vec_dim)
@@ -132,7 +134,8 @@ class QGM_Decoder(nn.Module):
         self.group_qf_num = nn.Linear(att_vec_dim, 4)
         self.group_qs_num = nn.Linear(att_vec_dim, 3)
         self.group_p_num = nn.Linear(att_vec_dim, 5)
-        self.group_p_layer = nn.Linear(att_vec_dim + emb_dim * 3, att_vec_dim)
+        self.group_p_layer = nn.LSTMCell(emb_dim * 3, emb_dim)
+        self.group_p_stopper = nn.Linear(att_vec_dim, 1)
         self.group_p_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
         self.group_p_op = nn.Linear(att_vec_dim, len(WHERE_OPS))
         self.group_head_layer = nn.Linear(att_vec_dim + emb_dim, att_vec_dim)
@@ -142,7 +145,8 @@ class QGM_Decoder(nn.Module):
         # Order by
         self.order_qf_num = nn.Linear(att_vec_dim, 4)
         self.order_p_num = nn.Linear(att_vec_dim, 5)
-        self.order_p_layer = nn.Linear(att_vec_dim + emb_dim * 3, att_vec_dim)
+        self.order_p_layer = nn.LSTMCell(emb_dim * 3, emb_dim)
+        self.order_p_stopper = nn.Linear(att_vec_dim, 1)
         self.order_p_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
         self.order_p_op = nn.Linear(att_vec_dim, len(WHERE_OPS))
         self.order_head_layer = nn.Linear(att_vec_dim + emb_dim, att_vec_dim)
@@ -156,6 +160,7 @@ class QGM_Decoder(nn.Module):
             "qs_num": self.select_qs_num,
             "p_num": self.select_p_num,
             "p_layer": self.select_p_layer,
+            "p_stopper": self.select_p_stopper,
             "p_agg": self.select_p_agg,
             "p_op": self.select_p_op,
             "head_num": self.select_head_num,
@@ -168,6 +173,7 @@ class QGM_Decoder(nn.Module):
             "qs_num": self.group_qs_num,
             "p_num": self.group_p_num,
             "p_layer": self.group_p_layer,
+            "p_stopper": self.group_p_stopper,
             "p_agg": self.group_p_agg,
             "p_op": self.group_p_op,
             "head_num": self.group_head_num,
@@ -179,6 +185,7 @@ class QGM_Decoder(nn.Module):
             "qf_num": self.order_qf_num,
             "p_num": self.order_p_num,
             "p_layer": self.order_p_layer,
+            "p_stopper": self.order_p_stopper,
             "p_agg": self.order_p_agg,
             "p_op": self.order_p_op,
             "head_num": self.order_head_num,
@@ -573,13 +580,6 @@ class QGM_Decoder(nn.Module):
 
         if box_type != "order":
             # Predict local predicate Num
-            p_num_score = layers["p_num"](att)
-            p_num_prob = torch.log_softmax(p_num_score, dim=-1)
-            if self.training:
-                selected_p_num_idx = to_tensor(get_local_predicate_num(gold_box))
-                selected_p_num_prob = torch.gather(p_num_prob, 1, selected_p_num_idx)
-            else:
-                selected_p_num_prob, selected_p_num_idx = torch.topk(p_num_prob, 1)
 
             selected_p_agg_indices = [[] for _ in range(b_size)]
             selected_p_col_indices = [[] for _ in range(b_size)]
@@ -589,14 +589,20 @@ class QGM_Decoder(nn.Module):
             selected_p_col_probs = [torch.tensor([0.0]).cuda() for _ in range(b_size)]
             selected_p_op_probs = [torch.tensor([0.0]).cuda() for _ in range(b_size)]
 
+            if self.training:
+                selected_p_num_idx = get_local_predicate_num(gold_box)
+            else:
+                selected_p_num_idx = [0] * b_size
+            stop_p_probs = [torch.tensor([0.0]).cuda() for _ in range(b_size)]
+
             prev_agg = prev_col = prev_op = torch.zeros(b_size, self.emb_dim).cuda()
-            for n_idx in range(max(selected_p_num_idx)):
+            stopped = [False] * b_size
+            p_ctx_vector = att
+            p_cell_vector = torch.zeros_like(p_ctx_vector)
+            for n_idx in range(6):
+                # predict to be stopped
                 next_b_indices = torch.tensor(
-                    [
-                        b_indices[idx]
-                        for idx in range(b_size)
-                        if selected_p_num_idx[idx] > n_idx
-                    ]
+                    [b_indices[idx] for idx in range(b_size) if not stopped[idx]]
                 ).cuda()
                 list_b_indices = list(b_indices)
                 ori_indices = [
@@ -606,14 +612,48 @@ class QGM_Decoder(nn.Module):
                 # Create context
                 new_context_vector = torch.cat(
                     [
-                        att[ori_indices],
                         prev_agg[ori_indices],
                         prev_col[ori_indices],
                         prev_op[ori_indices],
                     ],
                     1,
                 )
-                p_ctx_vector = layers["p_layer"](new_context_vector)
+                p_ctx_vector, p_cell_vector = layers["p_layer"](
+                    new_context_vector, (p_ctx_vector, p_cell_vector)
+                )
+
+                stop_out = torch.sigmoid(layers["p_stopper"](p_ctx_vector))
+                stop_gold = torch.zeros_like(stop_out)
+                alive_indices = list(range(len(p_ctx_vector)))
+                if self.training:
+                    for idx, ori_idx in enumerate(ori_indices):
+                        if selected_p_num_idx[ori_idx] == n_idx:
+                            stop_gold[idx] = 1
+                            stopped[ori_idx] = True
+                            alive_indices.remove(idx)
+                else:
+                    for idx, ori_idx in enumerate(ori_indices):
+                        if stop_out[idx].cpu().data.item() > 0.5:
+                            stopped[ori_idx] = True
+                            selected_p_num_idx[ori_idx] = n_idx
+                            alive_indices.remove(idx)
+                p_ctx_vector = p_ctx_vector[alive_indices]
+                p_cell_vector = p_cell_vector[alive_indices]
+                stop_loss = torch.nn.BCELoss(reduce=False)(stop_out, stop_gold)
+                for idx, ori_idx in enumerate(ori_indices):
+                    stop_p_probs[ori_idx] += stop_loss[idx]
+                if False not in stopped:
+                    break
+
+                # re-start
+
+                next_b_indices = torch.tensor(
+                    [b_indices[idx] for idx in range(b_size) if not stopped[idx]]
+                ).cuda()
+                list_b_indices = list(b_indices)
+                ori_indices = [
+                    list_b_indices.index(idx) for idx in list(next_b_indices)
+                ]
 
                 # Predict Agg
                 p_agg_score = layers["p_agg"](p_ctx_vector)
@@ -835,7 +875,7 @@ class QGM_Decoder(nn.Module):
                 "head_col": -selected_head_col_prob[idx],
                 "quantifier_num": -selected_qf_num_prob[idx],
                 "quantifier": -selected_qf_prob[idx],
-                "predicate_num": -selected_p_num_prob[idx],
+                "predicate_num": stop_p_probs[idx],
                 "predicate_agg": -selected_p_agg_probs[idx],
                 "predicate_col": -selected_p_col_probs[idx],
                 "predicate_op": -selected_p_op_probs[idx],
