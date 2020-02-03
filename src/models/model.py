@@ -122,8 +122,8 @@ class IRNet(BasicModel):
         col_types = []
         for b in range(B):
             word_start_ends = []
-            # question = "[CLS]"
-            question = "<cls>"
+            question = "[CLS]"
+            # question = "<cls>"
             for word in sentences[b]:
                 start = len(self.tokenizer.tokenize(question))
                 for one_word in word:
@@ -133,8 +133,8 @@ class IRNet(BasicModel):
             col_start_ends = []
             for cols in col_sets[b]:
                 start = len(self.tokenizer.tokenize(question))
-                # question += " [SEP]"
-                question += " <sep>"
+                question += " [SEP]"
+                # question += " <sep>"
                 for one_word in cols:
                     question += " " + one_word
                 end = len(self.tokenizer.tokenize(question))
@@ -142,8 +142,8 @@ class IRNet(BasicModel):
             tab_start_ends = []
             for tabs in table_sets[b]:
                 start = len(self.tokenizer.tokenize(question))
-                # question += " [SEP]"
-                question += "<sep>"
+                question += " [SEP]"
+                # question += "<sep>"
                 for one_word in tabs:
                     question += " " + one_word
                 end = len(self.tokenizer.tokenize(question))

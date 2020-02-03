@@ -372,6 +372,7 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed, is_qgm=True):
 
         example.sql_json = copy.deepcopy(sql)
         example.db_id = sql["db_id"]
+        example.mix_col_table()
         examples.append(example)
 
     examples.sort(key=lambda e: -len(e.src_sent))

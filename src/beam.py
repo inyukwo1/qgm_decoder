@@ -54,7 +54,21 @@ class Beams(object):
             return True
 
         stack = [semQL.Root1]
-        for action in self.actions:
+        for act_idx, action in enumerate(self.actions):
+            if isinstance(action, semQL.C):
+                if isinstance(self.actions[act_idx - 1], semQL.A):
+                    stack.pop()
+                    stack.append(semQL.T)
+                else:
+                    stack.pop()
+                continue
+            elif isinstance(action, semQL.T):
+                if isinstance(self.actions[act_idx - 1], semQL.A):
+                    stack.pop()
+                    stack.append(semQL.C)
+                else:
+                    stack.pop()
+                continue
             infer_action = action.get_next_action(is_sketch=self.is_sketch)
             infer_action.reverse()
             if stack[-1] is type(action):

@@ -10,6 +10,7 @@ import copy
 
 import src.rule.semQL as define_rule
 from src.models import nn_utils
+from random import randint
 
 
 class Example:
@@ -52,6 +53,12 @@ class Example:
         self.table_names = table_names
         self.table_len = table_len
         self.col_table_dict = col_table_dict
+        self.table_col_dict = dict()
+        for tab in range(self.table_len):
+            self.table_col_dict[tab] = []
+        for col in self.col_table_dict:
+            for tab in self.col_table_dict[col]:
+                self.table_col_dict[tab].append(col)
         self.cols = cols
         self.table_col_name = table_col_name
         self.table_col_len = table_col_len
@@ -69,6 +76,22 @@ class Example:
                 ):
                     continue
                 self.sketch.append(ta)
+
+    def mix_col_table(self):
+        new_actions = []
+        for i, ta in enumerate(self.truth_actions):
+            if isinstance(ta, define_rule.C):
+                if randint(0, 100) > 20:
+                    new_actions.append(ta)
+                    new_actions.append(self.truth_actions[i + 1])
+                else:
+                    new_actions.append(self.truth_actions[i + 1])
+                    new_actions.append(ta)
+            elif isinstance(ta, define_rule.T):
+                continue
+            else:
+                new_actions.append(ta)
+        self.truth_actions = new_actions
 
 
 class cached_property(object):
@@ -120,6 +143,7 @@ class Batch(object):
         self.table_names = [e.table_names for e in self.examples]
         self.table_len = [e.table_len for e in examples]
         self.col_table_dict = [e.col_table_dict for e in examples]
+        self.table_col_dict = [e.table_col_dict for e in examples]
         self.table_col_name = [e.table_col_name for e in examples]
         self.table_col_len = [e.table_col_len for e in examples]
         self.col_pred = [e.col_pred for e in examples]
@@ -134,6 +158,11 @@ class Batch(object):
     def table_dict_mask(self, table_dict):
         return nn_utils.table_dict_to_mask_tensor(
             self.table_len, table_dict, cuda=self.cuda
+        )
+
+    def col_dict_mask(self, col_dict):
+        return nn_utils.table_dict_to_mask_tensor(
+            self.col_num, col_dict, cuda=self.cuda
         )
 
     @cached_property

@@ -251,7 +251,9 @@ class SemQL_Decoder(nn.Module):
         )
 
         batch_table_dict = batch.col_table_dict
-        table_enable = np.zeros(shape=(len(examples)))
+        batch_col_dict = batch.table_col_dict
+        table_enable = np.zeros(shape=(len(examples)), dtype=int) - 1
+        col_enable = np.zeros(shape=(len(examples)), dtype=int) - 1
         action_probs = [[] for _ in examples]
 
         h_tm1 = dec_init_vec
@@ -270,8 +272,8 @@ class SemQL_Decoder(nn.Module):
                 pre_types = []
 
                 for e_id, example in enumerate(examples):
-                    if t < len(example.tgt_actions):
-                        action_tm1 = example.tgt_actions[t - 1]
+                    if t < len(example.truth_actions):
+                        action_tm1 = example.truth_actions[t - 1]
                         if type(action_tm1) in [
                             define_rule.Root1,
                             define_rule.Root,
@@ -315,8 +317,8 @@ class SemQL_Decoder(nn.Module):
 
                 # tgt t-1 action type
                 for e_id, example in enumerate(examples):
-                    if t < len(example.tgt_actions):
-                        action_tm = example.tgt_actions[t - 1]
+                    if t < len(example.truth_actions):
+                        action_tm = example.truth_actions[t - 1]
                         pre_type = self.type_embed.weight[
                             self.grammar.type2id[type(action_tm)]
                         ]
@@ -373,8 +375,17 @@ class SemQL_Decoder(nn.Module):
                 )
 
             weights.data.masked_fill_(batch.table_token_mask.bool(), -float("inf"))
+            col_dict = [
+                batch_col_dict[x_id][int(x)] if x != -1 else range(batch.col_num[x_id])
+                for x_id, x in enumerate(col_enable.tolist())
+            ]
+
+            col_mask = batch.col_dict_mask(col_dict)
+            weights.data.masked_fill_(col_mask.bool(), -float("inf"))
 
             column_attention_weights = torch.softmax(weights, dim=-1)
+            col_enable *= 0
+            col_enable -= 1
 
             table_weights = self.table_pointer_net(
                 src_encodings=schema_embedding,
@@ -386,22 +397,48 @@ class SemQL_Decoder(nn.Module):
             table_weights.data.masked_fill_(schema_token_mask.bool(), -float("inf"))
             table_dict = [
                 batch_table_dict[x_id][int(x)]
+                if x != -1
+                else range(batch.table_len[x_id])
                 for x_id, x in enumerate(table_enable.tolist())
             ]
             table_mask = batch.table_dict_mask(table_dict)
             table_weights.data.masked_fill_(table_mask.bool(), -float("inf"))
 
             table_weights = torch.softmax(table_weights, dim=-1)
+            table_enable *= 0
+            table_enable -= 1
 
             for e_id, example in enumerate(examples):
-                if t < len(example.tgt_actions):
-                    action_t = example.tgt_actions[t]
-                    if isinstance(action_t, define_rule.C):
+                if t < len(example.truth_actions):
+                    action_t = example.truth_actions[t]
+                    if isinstance(action_t, define_rule.C) and not isinstance(
+                        example.truth_actions[t - 1], define_rule.T
+                    ):
                         table_appear_mask[e_id, action_t.id_c] = 1
                         table_enable[e_id] = action_t.id_c
                         act_prob_t_i = column_attention_weights[e_id, action_t.id_c]
                         action_probs[e_id].append(act_prob_t_i)
+                        act_prob_t_i = table_weights[
+                            e_id, example.truth_actions[t + 1].id_c
+                        ]
+                        action_probs[e_id].append(act_prob_t_i)
+                    elif isinstance(action_t, define_rule.T) and not isinstance(
+                        example.truth_actions[t - 1], define_rule.C
+                    ):
+                        col_enable[e_id] = action_t.id_c
+                        act_prob_t_i = column_attention_weights[
+                            e_id, example.truth_actions[t + 1].id_c
+                        ]
+                        action_probs[e_id].append(act_prob_t_i)
+                        act_prob_t_i = table_weights[e_id, action_t.id_c]
+                        action_probs[e_id].append(act_prob_t_i)
+                    elif isinstance(action_t, define_rule.C):
+                        table_appear_mask[e_id, action_t.id_c] = 1
+                        # table_enable[e_id] = action_t.id_c
+                        act_prob_t_i = column_attention_weights[e_id, action_t.id_c]
+                        action_probs[e_id].append(act_prob_t_i)
                     elif isinstance(action_t, define_rule.T):
+                        # col_enable[e_id] = action_t.id_c
                         act_prob_t_i = table_weights[e_id, action_t.id_c]
                         action_probs[e_id].append(act_prob_t_i)
                     elif isinstance(action_t, define_rule.A):
@@ -600,6 +637,7 @@ class SemQL_Decoder(nn.Module):
         padding_sketch = self.padding_sketch(sketch_actions)
 
         batch_table_dict = batch.col_table_dict
+        batch_col_dict = batch.table_col_dict
 
         h_tm1 = dec_init_vec
 
@@ -631,12 +669,19 @@ class SemQL_Decoder(nn.Module):
             table_appear_mask = np.zeros(
                 (hyp_num, table_appear_mask.shape[1]), dtype=np.float32
             )
-            table_enable = np.zeros(shape=(hyp_num))
+            table_enable = np.zeros(shape=(hyp_num), dtype=int) - 1
+            col_enable = np.zeros(shape=(hyp_num), dtype=int) - 1
             for e_id, hyp in enumerate(beams):
-                for act in hyp.actions:
+                if hyp.actions:
+                    act = hyp.actions[-1]
                     if type(act) == define_rule.C:
                         table_appear_mask[e_id][act.id_c] = 1
                         table_enable[e_id] = act.id_c
+            for e_id, hyp in enumerate(beams):
+                if hyp.actions:
+                    act = hyp.actions[-1]
+                    if type(act) == define_rule.T:
+                        col_enable[e_id] = act.id_c
 
             if t == 0:
                 with torch.no_grad():
@@ -737,9 +782,15 @@ class SemQL_Decoder(nn.Module):
                     query_vec=att_t.unsqueeze(0),
                     src_token_mask=batch.table_token_mask,
                 )
-            # weights.data.masked_fill_(exp_col_pred_mask, -float('inf'))
+            # weights.data.masked_fill_(batch.table_token_mask.bool(), -float("inf"))
+            col_dict = [
+                batch_col_dict[0][int(x)] if x != -1 else range(batch.col_num[0])
+                for x_id, x in enumerate(col_enable.tolist())
+            ]
 
-            column_selection_log_prob = torch.log_softmax(weights, dim=-1)
+            col_mask = batch.col_dict_mask(col_dict)
+            weights.data.masked_fill_(col_mask.bool(), -float("inf"))
+            column_selection_log_prob = torch.softmax(weights, dim=-1)
 
             table_weights = self.table_pointer_net(
                 src_encodings=exp_schema_embedding,
@@ -752,13 +803,13 @@ class SemQL_Decoder(nn.Module):
             table_weights.data.masked_fill_(schema_token_mask.bool(), -float("inf"))
 
             table_dict = [
-                batch_table_dict[0][int(x)]
+                batch_table_dict[0][int(x)] if x != -1 else range(batch.table_len[0])
                 for x_id, x in enumerate(table_enable.tolist())
             ]
             table_mask = batch.table_dict_mask(table_dict)
             table_weights.data.masked_fill_(table_mask.bool(), -float("inf"))
 
-            table_weights = torch.log_softmax(table_weights, dim=-1)
+            table_weights = torch.softmax(table_weights, dim=-1)
 
             new_hyp_meta = []
             for hyp_id, hyp in enumerate(beams):
@@ -791,7 +842,6 @@ class SemQL_Decoder(nn.Module):
                             "prev_hyp_id": hyp_id,
                         }
                         new_hyp_meta.append(meta_entry)
-                elif type(padding_sketch[t]) == define_rule.T:
                     for t_id, _ in enumerate(batch.table_names[0]):
                         t_sel_score = table_weights[hyp_id, t_id]
                         new_hyp_score = hyp.score + t_sel_score.data.cpu()
@@ -804,6 +854,32 @@ class SemQL_Decoder(nn.Module):
                             "prev_hyp_id": hyp_id,
                         }
                         new_hyp_meta.append(meta_entry)
+                elif type(padding_sketch[t]) == define_rule.T:
+                    if isinstance(hyp.actions[-1], define_rule.C):
+                        for t_id, _ in enumerate(batch.table_names[0]):
+                            t_sel_score = table_weights[hyp_id, t_id]
+                            new_hyp_score = hyp.score + t_sel_score.data.cpu()
+
+                            meta_entry = {
+                                "action_type": define_rule.T,
+                                "t_id": t_id,
+                                "score": t_sel_score,
+                                "new_hyp_score": new_hyp_score,
+                                "prev_hyp_id": hyp_id,
+                            }
+                            new_hyp_meta.append(meta_entry)
+                    else:
+                        for col_id, _ in enumerate(batch.table_sents[0]):
+                            col_sel_score = column_selection_log_prob[hyp_id, col_id]
+                            new_hyp_score = hyp.score + col_sel_score.data.cpu()
+                            meta_entry = {
+                                "action_type": define_rule.C,
+                                "col_id": col_id,
+                                "score": col_sel_score,
+                                "new_hyp_score": new_hyp_score,
+                                "prev_hyp_id": hyp_id,
+                            }
+                            new_hyp_meta.append(meta_entry)
                 else:
                     prod_id = self.grammar.prod2id[padding_sketch[t].production]
                     new_hyp_score = hyp.score + torch.tensor(0.0)
@@ -939,11 +1015,24 @@ class SemQL_Decoder(nn.Module):
         for idx in range(len(gold_semql)):
             pred_sketch = []
             pred_detail = []
-            for item in pred_semql[idx]:
+            for item_idx, item in enumerate(pred_semql[idx]):
                 if item.is_sketch:
                     pred_sketch += [str(item)]
                 else:
-                    pred_detail += [str(item)]
+                    if isinstance(item, define_rule.C):
+                        if isinstance(pred_semql[idx][item_idx - 1], define_rule.A):
+                            pred_detail += [
+                                str(item),
+                                str(pred_semql[idx][item_idx + 1]),
+                            ]
+                    elif isinstance(item, define_rule.T):
+                        if isinstance(pred_semql[idx][item_idx - 1], define_rule.A):
+                            pred_detail += [
+                                str(pred_semql[idx][item_idx + 1]),
+                                str(item),
+                            ]
+                    else:
+                        pred_detail += [str(item)]
 
             gold_sketch = []
             gold_detail = []
