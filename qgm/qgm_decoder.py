@@ -21,7 +21,6 @@ from qgm.utils import (
     compare_boxes,
     assert_dim,
 )
-import numpy as np
 
 
 class SequentialSelector(nn.Module):
@@ -599,7 +598,7 @@ class QGM_Decoder(nn.Module):
             stopped = [False] * b_size
             p_ctx_vector = att
             p_cell_vector = torch.zeros_like(p_ctx_vector)
-            for n_idx in range(6):
+            for n_idx in range(10):
                 # predict to be stopped
                 next_b_indices = torch.tensor(
                     [b_indices[idx] for idx in range(b_size) if not stopped[idx]]
