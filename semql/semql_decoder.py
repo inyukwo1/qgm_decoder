@@ -416,11 +416,17 @@ class SemQL_Decoder(nn.Module):
                     ):
                         table_appear_mask[e_id, action_t.id_c] = 1
                         table_enable[e_id] = action_t.id_c
-                        act_prob_t_i = column_attention_weights[e_id, action_t.id_c]
+                        act_prob_t_i = column_attention_weights[
+                            e_id, action_t.id_c
+                        ] + torch.sum(column_attention_weights[e_id]) * 0.1 / len(
+                            column_attention_weights[e_id]
+                        )
                         action_probs[e_id].append(act_prob_t_i)
                         act_prob_t_i = table_weights[
                             e_id, example.truth_actions[t + 1].id_c
-                        ]
+                        ] + torch.sum(table_weights[e_id]) * 0.1 / len(
+                            table_weights[e_id]
+                        )
                         action_probs[e_id].append(act_prob_t_i)
                     elif isinstance(action_t, define_rule.T) and not isinstance(
                         example.truth_actions[t - 1], define_rule.C
@@ -428,18 +434,28 @@ class SemQL_Decoder(nn.Module):
                         col_enable[e_id] = action_t.id_c
                         act_prob_t_i = column_attention_weights[
                             e_id, example.truth_actions[t + 1].id_c
-                        ]
+                        ] + torch.sum(column_attention_weights[e_id]) * 0.1 / len(
+                            column_attention_weights[e_id]
+                        )
                         action_probs[e_id].append(act_prob_t_i)
-                        act_prob_t_i = table_weights[e_id, action_t.id_c]
+                        act_prob_t_i = table_weights[e_id, action_t.id_c] + torch.sum(
+                            table_weights[e_id]
+                        ) * 0.1 / len(table_weights[e_id])
                         action_probs[e_id].append(act_prob_t_i)
                     elif isinstance(action_t, define_rule.C):
                         table_appear_mask[e_id, action_t.id_c] = 1
                         # table_enable[e_id] = action_t.id_c
-                        act_prob_t_i = column_attention_weights[e_id, action_t.id_c]
+                        act_prob_t_i = column_attention_weights[
+                            e_id, action_t.id_c
+                        ] + torch.sum(column_attention_weights[e_id]) * 0.1 / len(
+                            column_attention_weights[e_id]
+                        )
                         action_probs[e_id].append(act_prob_t_i)
                     elif isinstance(action_t, define_rule.T):
                         # col_enable[e_id] = action_t.id_c
-                        act_prob_t_i = table_weights[e_id, action_t.id_c]
+                        act_prob_t_i = table_weights[e_id, action_t.id_c] + torch.sum(
+                            table_weights[e_id]
+                        ) * 0.1 / len(table_weights[e_id])
                         action_probs[e_id].append(act_prob_t_i)
                     elif isinstance(action_t, define_rule.A):
                         act_prob_t_i = apply_rule_prob[
