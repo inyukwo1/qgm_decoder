@@ -21,7 +21,6 @@ from qgm.utils import (
     compare_boxes,
     assert_dim,
 )
-import numpy as np
 
 
 class SequentialSelector(nn.Module):
@@ -120,36 +119,45 @@ class QGM_Decoder(nn.Module):
         self.is_order_by = nn.Linear(emb_dim, 2)
         # Select
         self.select_qf_num = nn.Linear(att_vec_dim, 10)
+        self.select_qf_tab_layer = nn.Linear(emb_dim, emb_dim)
         self.select_qs_num = nn.Linear(att_vec_dim, 4)
         self.select_p_num = nn.Linear(att_vec_dim, 5)
         self.select_p_layer = nn.LSTMCell(emb_dim * 3, emb_dim)
+        self.select_p_col_layer = nn.Linear(emb_dim, emb_dim)
         self.select_p_stopper = nn.Linear(att_vec_dim, 1)
         self.select_p_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
         self.select_p_op = nn.Linear(att_vec_dim, len(WHERE_OPS))
         self.select_head_layer = nn.Linear(att_vec_dim + emb_dim, att_vec_dim)
+        self.select_head_col_layer = nn.Linear(emb_dim, emb_dim)
         self.select_head_num = nn.Linear(att_vec_dim, 6)
         self.select_head_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
 
         # Group by
         self.group_qf_num = nn.Linear(att_vec_dim, 4)
+        self.group_qf_tab_layer = nn.Linear(emb_dim, emb_dim)
         self.group_qs_num = nn.Linear(att_vec_dim, 3)
         self.group_p_num = nn.Linear(att_vec_dim, 5)
         self.group_p_layer = nn.LSTMCell(emb_dim * 3, emb_dim)
+        self.group_p_col_layer = nn.Linear(emb_dim, emb_dim)
         self.group_p_stopper = nn.Linear(att_vec_dim, 1)
         self.group_p_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
         self.group_p_op = nn.Linear(att_vec_dim, len(WHERE_OPS))
         self.group_head_layer = nn.Linear(att_vec_dim + emb_dim, att_vec_dim)
+        self.group_head_col_layer = nn.Linear(emb_dim, emb_dim)
         self.group_head_num = nn.Linear(att_vec_dim, 3)
         self.group_head_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
 
         # Order by
         self.order_qf_num = nn.Linear(att_vec_dim, 4)
+        self.order_qf_tab_layer = nn.Linear(emb_dim, emb_dim)
         self.order_p_num = nn.Linear(att_vec_dim, 5)
         self.order_p_layer = nn.LSTMCell(emb_dim * 3, emb_dim)
+        self.order_p_col_layer = nn.Linear(emb_dim, emb_dim)
         self.order_p_stopper = nn.Linear(att_vec_dim, 1)
         self.order_p_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
         self.order_p_op = nn.Linear(att_vec_dim, len(WHERE_OPS))
         self.order_head_layer = nn.Linear(att_vec_dim + emb_dim, att_vec_dim)
+        self.order_head_col_layer = nn.Linear(emb_dim, emb_dim)
         self.order_head_num = nn.Linear(att_vec_dim, 3)
         self.order_head_agg = nn.Linear(att_vec_dim, len(AGG_OPS))
         self.order_is_asc = nn.Linear(att_vec_dim, 2)
@@ -157,39 +165,48 @@ class QGM_Decoder(nn.Module):
 
         self.select_layers = {
             "qf_num": self.select_qf_num,
+            "qf_tab_layer": self.select_qf_tab_layer,
             "qs_num": self.select_qs_num,
             "p_num": self.select_p_num,
             "p_layer": self.select_p_layer,
+            "p_col_layer": self.select_p_col_layer,
             "p_stopper": self.select_p_stopper,
             "p_agg": self.select_p_agg,
             "p_op": self.select_p_op,
             "head_num": self.select_head_num,
             "head_layer": self.select_head_layer,
+            "head_col_layer": self.select_head_col_layer,
             "head_agg": self.select_head_agg,
         }
 
         self.group_layers = {
             "qf_num": self.group_qf_num,
+            "qf_tab_layer": self.group_qf_tab_layer,
             "qs_num": self.group_qs_num,
             "p_num": self.group_p_num,
             "p_layer": self.group_p_layer,
+            "p_col_layer": self.group_p_col_layer,
             "p_stopper": self.group_p_stopper,
             "p_agg": self.group_p_agg,
             "p_op": self.group_p_op,
             "head_num": self.group_head_num,
             "head_layer": self.group_head_layer,
+            "head_col_layer": self.group_head_col_layer,
             "head_agg": self.group_head_agg,
         }
 
         self.order_layers = {
             "qf_num": self.order_qf_num,
+            "qf_tab_layer": self.order_qf_tab_layer,
             "p_num": self.order_p_num,
             "p_layer": self.order_p_layer,
+            "p_col_layer": self.order_p_col_layer,
             "p_stopper": self.order_p_stopper,
             "p_agg": self.order_p_agg,
             "p_op": self.order_p_op,
             "head_num": self.order_head_num,
             "head_layer": self.order_head_layer,
+            "head_col_layer": self.order_head_col_layer,
             "head_agg": self.order_head_agg,
             "is_asc": self.order_is_asc,
             "limit_num": self.order_limit_num,
@@ -203,6 +220,7 @@ class QGM_Decoder(nn.Module):
 
     def set_variables(
         self,
+        is_bert,
         encoded_src,
         encoded_col,
         encoded_tab,
@@ -211,6 +229,7 @@ class QGM_Decoder(nn.Module):
         tab_mask,
         col_tab_dic,
     ):
+        self.is_bert = is_bert
         self.encoded_src = encoded_src
         self.encoded_src_att = self.att_linear(encoded_src)
         self.encoded_col = encoded_col
@@ -538,7 +557,7 @@ class QGM_Decoder(nn.Module):
 
         # Predict from table
         qf_prob = self.get_attention_weights(
-            self.encoded_tab[b_indices], att, tab_masks, is_log_softmax=True
+            self.encoded_tab[b_indices], att, tab_masks, affine_layer=layers["qf_tab_layer"], is_log_softmax=True
         )
         if self.training:
             selected_qf_idx = get_quantifier_with_type("f", gold_box)
@@ -599,7 +618,7 @@ class QGM_Decoder(nn.Module):
             stopped = [False] * b_size
             p_ctx_vector = att
             p_cell_vector = torch.zeros_like(p_ctx_vector)
-            for n_idx in range(6):
+            for n_idx in range(10):
                 # predict to be stopped
                 next_b_indices = torch.tensor(
                     [b_indices[idx] for idx in range(b_size) if not stopped[idx]]
@@ -676,6 +695,7 @@ class QGM_Decoder(nn.Module):
                     self.encoded_col[next_b_indices],
                     p_ctx_vector,
                     col_masks[ori_indices],
+                    affine_layer=layers["p_col_layer"],
                     is_log_softmax=True,
                 )
 
@@ -750,7 +770,7 @@ class QGM_Decoder(nn.Module):
 
         # Predict Head column
         column_prob = self.get_attention_weights(
-            self.encoded_col[b_indices], att, col_masks, is_log_softmax=True
+            self.encoded_col[b_indices], att, col_masks, affine_layer=layers["head_col_layer"], is_log_softmax=True
         )
         if self.training:
             selected_head_col_idx = get_head_col(gold_box)
@@ -923,11 +943,11 @@ class QGM_Decoder(nn.Module):
         return ctx_vector
 
     def get_attention_weights(
-        self, source, query, source_mask=None, is_log_softmax=False
+        self, source, query, source_mask=None, affine_layer=None, is_log_softmax=False
     ):
         # Compute weight
-        # if is_affine:
-        #     source = affine_layer(source)
+        if affine_layer and not self.is_bert:
+            source = affine_layer(source)
         weight_scores = torch.bmm(source, query.unsqueeze(-1)).squeeze(-1)
 
         # Masking

@@ -39,6 +39,7 @@ class IRNet(BasicModel):
     def __init__(self, H_PARAMS, is_qgm=True, is_cuda=False):
         super(IRNet, self).__init__()
         self.h_params = H_PARAMS
+        self.is_bert = H_PARAMS["bert"] != -1
         self.is_cuda = is_cuda
         self.is_qgm = is_qgm
         self.use_column_pointer = H_PARAMS["column_pointer"]
@@ -50,7 +51,7 @@ class IRNet(BasicModel):
         else:
             self.new_long_tensor = torch.LongTensor
             self.new_tensor = torch.FloatTensor
-        if H_PARAMS["bert"] != -1:
+        if self.is_bert:
             model_class, tokenizer_class, pretrained_weight, dim = MODELS[
                 H_PARAMS["bert"]
             ]
@@ -90,7 +91,7 @@ class IRNet(BasicModel):
             self.decoder = SemQL_Decoder(H_PARAMS, is_cuda)
 
         self.without_bert_params = list(self.parameters(recurse=True))
-        if self.h_params["bert"] != -1:
+        if self.is_bert:
             model_class, tokenizer_class, pretrained_weight, dim = MODELS[
                 self.h_params["bert"]
             ]
@@ -300,6 +301,7 @@ class IRNet(BasicModel):
             b_indices = torch.arange(len(batch)).cuda()
 
             self.decoder.set_variables(
+                self.is_bert,
                 src_encodings,
                 table_embedding,
                 schema_embedding,
@@ -391,6 +393,7 @@ class IRNet(BasicModel):
                 b_indices = torch.arange(len(batch)).cuda()
 
                 self.decoder.set_variables(
+                    self.is_bert,
                     src_encodings,
                     table_embedding,
                     schema_embedding,

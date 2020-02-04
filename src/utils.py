@@ -487,55 +487,84 @@ def epoch_acc(
 
 
 def load_data_new(
-    sql_path, table_data, use_small=False, is_simple_query=True, is_single_table=True
+    sql_path, use_small=False, is_bert=False, is_simple_query=True, is_single_table=True
 ):
     sql_data = []
+    print("Loading data from {}".format(sql_path))
 
-    print("Loading data from %s" % sql_path)
-    with open(sql_path) as inf:
-        data = lower_keys(json.load(inf))
+    with open(sql_path) as f:
+        data = lower_keys(json.load(f))
         sql_data += data
 
-    table_data_new = {table["db_id"]: table for table in table_data}
+    # Filter some db
+    if is_bert:
+        sql_data = [
+            data
+            for data in sql_data
+            if data["db_id"] != "baseball_1"
+               and data["db_id"] != "cre_Drama_Workshop_Groups"
+               and data["db_id"] != "sakila_1"
+               and data["db_id"] != "formula_1"
+               and data["db_id"] != "soccer_1"
+        ]
 
     # Filter data with qgm that has nested query
     sql_data = filter_datas(sql_data, is_simple_query, is_single_table)
 
-    if use_small:
-        return sql_data[:80], table_data_new
-    else:
-        return sql_data, table_data_new
+    return sql_data[:80] if use_small else sql_data
 
 
-def load_dataset(
-    dataset_dir, use_small=False, is_simple_query=True, is_single_table=True
-):
+def load_dataset(H_PARAMS, use_small=False):
+    is_bert = H_PARAMS["bert"] != -1
+    dataset_dir = H_PARAMS["data_path"]
+    dataset_names = H_PARAMS["data_names"]
+    is_simple_query = H_PARAMS["is_simple_query"]
+    is_single_table = H_PARAMS["is_single_table"]
+
     print("Loading from datasets...")
 
-    TABLE_PATH = os.path.join(dataset_dir, "tables.json")
-    TRAIN_PATH = os.path.join(dataset_dir, "train.json")
-    DEV_PATH = os.path.join(dataset_dir, "dev.json")
+    train_lens = []
+    val_lens = []
 
-    with open(TABLE_PATH) as inf:
-        print("Loading data from %s" % TABLE_PATH)
-        table_data = json.load(inf)
+    train_datas = []
+    val_datas = []
+    table_data = []
+    for dataset_name in dataset_names:
+        dataset_path = os.path.join(dataset_dir, dataset_name)
+        print("Loading data from {}".format(dataset_path))
 
-    train_sql_data, train_table_data = load_data_new(
-        TRAIN_PATH,
-        table_data,
-        use_small=use_small,
-        is_simple_query=is_simple_query,
-        is_single_table=is_single_table,
-    )
-    val_sql_data, val_table_data = load_data_new(
-        DEV_PATH,
-        table_data,
-        use_small=use_small,
-        is_simple_query=is_simple_query,
-        is_single_table=is_single_table,
-    )
+        # Get paths
+        table_path = os.path.join(dataset_path, "tables.json")
+        train_path = os.path.join(dataset_path, "train.json")
+        val_path = os.path.join(dataset_path, "dev.json")
 
-    return train_sql_data, train_table_data, val_sql_data, val_table_data
+        with open(table_path) as f:
+            table_data += json.load(f)
+
+        # Train
+        train_tmp = load_data_new(train_path, use_small=use_small, is_bert=is_bert, is_simple_query=is_simple_query, is_single_table=is_single_table)
+        train_lens += [len(train_tmp)]
+        train_datas += [train_tmp]
+
+        # Dev
+        val_tmp = load_data_new(val_path, use_small=use_small, is_bert=is_bert, is_simple_query=is_simple_query, is_single_table=is_single_table)
+        val_lens += [len(val_tmp)]
+        val_datas += [val_tmp]
+
+    # Tables as dictionary
+    table_data = {table['db_id']: table for table in table_data}
+
+    # Show dataset length
+    print("Total training set: {}".format(sum(train_lens)))
+    for idx in range(len(dataset_names)):
+        print("{}: {}".format(dataset_names[idx], train_lens[idx]))
+
+    print("\nTotal val set: {}".format(sum(val_lens)))
+    for idx in range(len(dataset_names)):
+        print("{}: {}".format(dataset_names[idx], val_lens[idx]))
+    print('\n')
+
+    return train_datas, val_datas, table_data
 
 
 def save_checkpoint(model, checkpoint_name):
@@ -634,3 +663,28 @@ def write_eval_result_as(file_name, datas, is_corrects, accs, preds, golds):
             f.write("gold:   {}\n".format(gold))
             f.write("pred:   {}\n".format(pred))
             f.write("\n")
+
+
+def logging_to_tensorboard(summary_writer, prefix, summary, epoch):
+    if isinstance(summary, dict):
+        for key in summary.keys():
+            summary_writer.add_scalar(prefix + key, summary[key], epoch)
+    else:
+        summary_writer.add_scalar(prefix, summary, epoch)
+
+
+def calculate_total_acc(total_accs, data_lens):
+    # Calculate Total Acc
+    total_acc = {}
+    for idx in range(len(data_lens)):
+        data_len = data_lens[idx]
+        for key, value in total_accs[idx].items():
+            if key in total_acc:
+                total_acc[key] += value * data_len
+            else:
+                total_acc[key] = value * data_len
+
+    # Average
+    total_acc = {key: value / sum(data_lens) for key, value in total_acc.items()}
+
+    return total_acc

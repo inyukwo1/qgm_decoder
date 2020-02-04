@@ -345,6 +345,15 @@ def filter_datas(sql_data, is_simple_query, is_single_table):
                 box["body"]["quantifiers"]
             ):
                 flag = False
+            # Filter datas in wikitablequestions that has hard operator
+            if ' + ' in data['query']:
+                flag = False
+            '''
+            # Filter OR in local predicate
+            if ' OR ' in data['query']:
+                flag = False
+            '''
+
         if flag:
             filtered_datas += [data]
     return filtered_datas

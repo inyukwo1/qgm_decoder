@@ -5,6 +5,7 @@ import random
 import _jsonnet
 import argparse
 import datetime
+import itertools
 
 import torch
 import torch.optim as optim
@@ -13,11 +14,6 @@ import numpy as np
 from src import utils
 from src.models.model import IRNet
 from torch.utils.tensorboard import SummaryWriter
-
-
-def logging_to_tensorboard(summary_writer, prefix, dic, epoch):
-    for key in dic.keys():
-        summary_writer.add_scalar(prefix + key, dic[key], epoch)
 
 
 if __name__ == "__main__":
@@ -29,6 +25,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--debugging", action="store_true", help="Run in debugging mode"
     )
+    parser.add_argument("--toy", action='store_true', help='If set, use small data; used for fast debugging.')
     parser.add_argument("--load_model", type=str, default="", help="saved model path")
     parser.add_argument("--cuda", type=int, default="-1", help="GPU number")
     args = parser.parse_args()
@@ -42,36 +39,17 @@ if __name__ == "__main__":
         torch.cuda.manual_seed(H_PARAMS["seed"])
     np.random.seed(H_PARAMS["seed"])
     random.seed(H_PARAMS["seed"])
-    sql_data, table_data, val_sql_data, val_table_data = utils.load_dataset(
-        H_PARAMS["data_path"],
-        use_small=H_PARAMS["toy"],
-        is_simple_query=H_PARAMS["is_simple_query"],
-        is_single_table=H_PARAMS["is_single_table"],
-    )
 
-    # Filter data for bert
-    if H_PARAMS["bert"] != -1:
-        sql_data = [
-            data
-            for data in sql_data
-            if data["db_id"] != "baseball_1"
-            and data["db_id"] != "cre_Drama_Workshop_Groups"
-            and data["db_id"] != "sakila_1"
-            and data["db_id"] != "formula_1"
-            and data["db_id"] != "soccer_1"
-        ]
-        val_sql_data = [data for data in val_sql_data if data["db_id"] != "baseball_1"]
+    # Load dataset
+    train_datas, val_datas, table_data = utils.load_dataset(H_PARAMS, use_small=args.toy)
 
-    print("train data length: {}".format(len(sql_data)))
-    print("dev data length: {}".format(len(val_sql_data)))
-
+    # Set model
     model = IRNet(H_PARAMS, is_qgm=H_PARAMS["is_qgm"], is_cuda=args.cuda != -1)
-
     if args.cuda != -1:
         torch.cuda.set_device(args.cuda)
         model.cuda()
 
-    # now get the optimizer
+    # Set optimizer
     optimizer_cls = eval("torch.optim.%s" % H_PARAMS["optimizer"])
     optimizer = optimizer_cls(model.without_bert_params, lr=H_PARAMS["lr"])
     if H_PARAMS["bert"] != -1:
@@ -135,7 +113,7 @@ if __name__ == "__main__":
     if not os.path.exists(log_model_path):
         os.mkdir(log_model_path)
 
-    best_dev_total_acc = 0
+    best_val_acc = 0
     for epoch in range(1, H_PARAMS["max_epoch"]):
         print(
             "\nEpoch: {}  lr: {:.2e}  step: {}  Time: {}".format(
@@ -146,61 +124,90 @@ if __name__ == "__main__":
             )
         )
 
-        # Evaluation
+        # Training
         train_loss = utils.epoch_train(
             model,
             optimizer,
             bert_optimizer,
             H_PARAMS["batch_size"],
-            sql_data,
+            list(itertools.chain.from_iterable(train_datas)),
             table_data,
             H_PARAMS["clip_grad"],
             is_qgm=H_PARAMS["is_qgm"],
         )
+
+        utils.logging_to_tensorboard(summary_writer, "Total_train_loss/", train_loss, epoch)
+
+        # Evaluation
         if not epoch % H_PARAMS["eval_freq"] or epoch == H_PARAMS["epoch"]:
             print("Evaluation:")
-            train_total_acc = utils.epoch_acc(
-                model,
-                H_PARAMS["batch_size"],
-                sql_data,
-                table_data,
-                is_qgm=H_PARAMS["is_qgm"],
-            )
-            dev_loss = utils.epoch_train(
-                model,
-                optimizer,
-                bert_optimizer,
-                H_PARAMS["batch_size"],
-                val_sql_data,
-                val_table_data,
-                H_PARAMS["clip_grad"],
-                is_qgm=H_PARAMS["is_qgm"],
-                is_train=False,
-            )
-            dev_total_acc = utils.epoch_acc(
-                model,
-                H_PARAMS["batch_size"],
-                val_sql_data,
-                val_table_data,
-                is_qgm=H_PARAMS["is_qgm"],
-            )
-            print("Train Acc: {}".format(train_total_acc["total"]))
-            print("Dev Acc: {}".format(dev_total_acc["total"]))
+            dataset_names = H_PARAMS['data_names']
+
+            val_losses = []
+            val_total_accs = []
+            train_total_accs = []
+            for idx, dataset_name in enumerate(dataset_names):
+                train_data = train_datas[idx]
+                val_data = val_datas[idx]
+
+                train_total_accs += [utils.epoch_acc(
+                    model,
+                    H_PARAMS["batch_size"],
+                    train_data,
+                    table_data,
+                    is_qgm=H_PARAMS["is_qgm"],
+                )]
+                val_losses += [utils.epoch_train(
+                    model,
+                    optimizer,
+                    bert_optimizer,
+                    H_PARAMS["batch_size"],
+                    val_data,
+                    table_data,
+                    H_PARAMS["clip_grad"],
+                    is_qgm=H_PARAMS["is_qgm"],
+                    is_train=False,
+                )]
+                val_total_accs += [utils.epoch_acc(
+                    model,
+                    H_PARAMS["batch_size"],
+                    val_data,
+                    table_data,
+                    is_qgm=H_PARAMS["is_qgm"],
+                )]
+
+                # Logging to tensorboard
+                utils.logging_to_tensorboard(summary_writer, "{}_train_acc/".format(dataset_name), train_total_accs[idx], epoch)
+                utils.logging_to_tensorboard(summary_writer, "{}_val_loss/".format(dataset_name), val_losses[idx], epoch)
+                utils.logging_to_tensorboard(summary_writer, "{}_val_acc/".format(dataset_name), val_total_accs[idx], epoch)
+
+            # Calculate Total Acc
+            train_acc = utils.calculate_total_acc(train_total_accs, [len(datas) for datas in train_datas])
+            val_acc = utils.calculate_total_acc(val_total_accs, [len(datas) for datas in val_datas])
 
             # Logging to tensorboard
-            logging_to_tensorboard(summary_writer, "train_loss/", train_loss, epoch)
-            logging_to_tensorboard(summary_writer, "train_acc/", train_total_acc, epoch)
-            logging_to_tensorboard(summary_writer, "dev_loss/", dev_loss, epoch)
-            logging_to_tensorboard(summary_writer, "dev_acc/", dev_total_acc, epoch)
+            utils.logging_to_tensorboard(summary_writer, "Total_train_acc/", train_acc, epoch)
+            utils.logging_to_tensorboard(summary_writer, "Total_val_acc/", val_acc, epoch)
 
             # Save if total_acc is higher
-            if best_dev_total_acc < dev_total_acc["total"]:
-                best_dev_total_acc = dev_total_acc["total"]
-                print("Saving new best model with acc: {}".format(best_dev_total_acc))
+            if best_val_acc < val_acc['total']:
+                best_val_acc = val_acc['total']
+                print("Saving new best model with acc: {}".format(best_val_acc))
                 torch.save(
                     model.state_dict(),
-                    os.path.join(log_model_path, "{}_best_model.pt".format(epoch)),
+                    os.path.join(log_model_path, "best_model.pt"),
                 )
+                with open('best_model.log', 'a') as f:
+                    f.write('Epoch: {} Train Acc: Val Acc:{}'.format(epoch, train_acc, best_val_acc))
+
+            # Print Accuracy
+            print("Total Train Acc: {}".format(train_acc['total']))
+            for idx in range(len(dataset_names)):
+                print("{}: {}".format(dataset_names[idx], train_total_accs[idx]["total"]))
+            print("\nTotal Val Acc: {}".format(val_acc['total']))
+            for idx in range(len(dataset_names)):
+                print("{}: {}".format(dataset_names[idx], val_total_accs[idx]["total"]))
+            print('\n')
 
         # Change learning rate
         scheduler.step()
