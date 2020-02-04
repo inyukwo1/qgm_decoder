@@ -16,11 +16,6 @@ from src.models.model import IRNet
 from torch.utils.tensorboard import SummaryWriter
 
 
-def logging_to_tensorboard(summary_writer, prefix, dic, epoch):
-    for key in dic.keys():
-        summary_writer.add_scalar(prefix + key, dic[key], epoch)
-
-
 if __name__ == "__main__":
     # Parse Arguments
     parser = argparse.ArgumentParser()
@@ -30,6 +25,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--debugging", action="store_true", help="Run in debugging mode"
     )
+    parser.add_argument("--toy", action='store_true', help='If set, use small data; used for fast debugging.')
     parser.add_argument("--load_model", type=str, default="", help="saved model path")
     parser.add_argument("--cuda", type=int, default="-1", help="GPU number")
     args = parser.parse_args()
@@ -43,15 +39,17 @@ if __name__ == "__main__":
         torch.cuda.manual_seed(H_PARAMS["seed"])
     np.random.seed(H_PARAMS["seed"])
     random.seed(H_PARAMS["seed"])
-    train_datas, val_datas, table_data = utils.load_dataset(H_PARAMS)
 
+    # Load dataset
+    train_datas, val_datas, table_data = utils.load_dataset(H_PARAMS, use_small=args.toy)
+
+    # Set model
     model = IRNet(H_PARAMS, is_qgm=H_PARAMS["is_qgm"], is_cuda=args.cuda != -1)
-
     if args.cuda != -1:
         torch.cuda.set_device(args.cuda)
         model.cuda()
 
-    # now get the optimizer
+    # Set optimizer
     optimizer_cls = eval("torch.optim.%s" % H_PARAMS["optimizer"])
     optimizer = optimizer_cls(model.without_bert_params, lr=H_PARAMS["lr"])
     if H_PARAMS["bert"] != -1:
@@ -138,13 +136,12 @@ if __name__ == "__main__":
             is_qgm=H_PARAMS["is_qgm"],
         )
 
-        logging_to_tensorboard(summary_writer, "{}/train_loss/".format(dataset_name), train_loss, epoch)
+        utils.logging_to_tensorboard(summary_writer, "Total_train_loss/", train_loss, epoch)
 
         # Evaluation
         if not epoch % H_PARAMS["eval_freq"] or epoch == H_PARAMS["epoch"]:
             print("Evaluation:")
             dataset_names = H_PARAMS['data_names']
-            dataset_num = len(dataset_names)
 
             val_losses = []
             val_total_accs = []
@@ -180,36 +177,36 @@ if __name__ == "__main__":
                 )]
 
                 # Logging to tensorboard
-                logging_to_tensorboard(summary_writer, "{}/train_acc/".format(dataset_name), train_total_accs[idx], epoch)
-                logging_to_tensorboard(summary_writer, "{}/val_loss/".format(dataset_name), val_losses[idx], epoch)
-                logging_to_tensorboard(summary_writer, "{}/val_acc/".format(dataset_name), val_total_accs[idx], epoch)
+                utils.logging_to_tensorboard(summary_writer, "{}_train_acc/".format(dataset_name), train_total_accs[idx], epoch)
+                utils.logging_to_tensorboard(summary_writer, "{}_val_loss/".format(dataset_name), val_losses[idx], epoch)
+                utils.logging_to_tensorboard(summary_writer, "{}_val_acc/".format(dataset_name), val_total_accs[idx], epoch)
 
             # Calculate Total Acc
-            train_acc = sum([train_total_accs[idx] * len(train_datas[idx]) for idx in range(dataset_num)]) / dataset_num
-            val_acc = sum([val_total_accs[idx] * len(val_datas[idx]) for idx in range(dataset_num)]) / dataset_num
+            train_acc = utils.calculate_total_acc(train_total_accs, [len(datas) for datas in train_datas])
+            val_acc = utils.calculate_total_acc(val_total_accs, [len(datas) for datas in val_datas])
 
             # Logging to tensorboard
-            logging_to_tensorboard(summary_writer, "Total_train_acc/", train_acc)
-            logging_to_tensorboard(summary_writer, "Total_val_acc/", val_acc)
+            utils.logging_to_tensorboard(summary_writer, "Total_train_acc/", train_acc, epoch)
+            utils.logging_to_tensorboard(summary_writer, "Total_val_acc/", val_acc, epoch)
 
             # Save if total_acc is higher
-            if best_val_acc < val_acc:
-                best_val_acc = val_acc
-                print("Saving new best model with acc: {}".format(val_acc))
+            if best_val_acc < val_acc['total']:
+                best_val_acc = val_acc['total']
+                print("Saving new best model with acc: {}".format(best_val_acc))
                 torch.save(
                     model.state_dict(),
                     os.path.join(log_model_path, "best_model.pt"),
                 )
                 with open('best_model.log', 'a') as f:
-                    f.write('Epoch: {} Train Acc: Val Acc:{}'.format(epoch, train_acc, val_acc))
+                    f.write('Epoch: {} Train Acc: Val Acc:{}'.format(epoch, train_acc, best_val_acc))
 
             # Print Accuracy
-            print("Total Train Acc: {}".format(train_acc))
+            print("Total Train Acc: {}".format(train_acc['total']))
             for idx in range(len(dataset_names)):
-                print("{}: {}".format(dataset_names[idx], train_total_accs["total"][idx]))
-            print("\nTotal Val Acc: {}".format(val_acc))
+                print("{}: {}".format(dataset_names[idx], train_total_accs[idx]["total"]))
+            print("\nTotal Val Acc: {}".format(val_acc['total']))
             for idx in range(len(dataset_names)):
-                print("{}: {}".format(dataset_names[idx], val_total_accs["total"][idx]))
+                print("{}: {}".format(dataset_names[idx], val_total_accs[idx]["total"]))
             print('\n')
 
         # Change learning rate

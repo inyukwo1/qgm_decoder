@@ -514,9 +514,8 @@ def load_data_new(
     return sql_data[:80] if use_small else sql_data
 
 
-def load_dataset(H_PARAMS):
+def load_dataset(H_PARAMS, use_small=False):
     is_bert = H_PARAMS["bert"] != -1
-    use_small = H_PARAMS["toy"]
     dataset_dir = H_PARAMS["data_path"]
     dataset_names = H_PARAMS["data_names"]
     is_simple_query = H_PARAMS["is_simple_query"]
@@ -664,3 +663,28 @@ def write_eval_result_as(file_name, datas, is_corrects, accs, preds, golds):
             f.write("gold:   {}\n".format(gold))
             f.write("pred:   {}\n".format(pred))
             f.write("\n")
+
+
+def logging_to_tensorboard(summary_writer, prefix, summary, epoch):
+    if isinstance(summary, dict):
+        for key in summary.keys():
+            summary_writer.add_scalar(prefix + key, summary[key], epoch)
+    else:
+        summary_writer.add_scalar(prefix, summary, epoch)
+
+
+def calculate_total_acc(total_accs, data_lens):
+    # Calculate Total Acc
+    total_acc = {}
+    for idx in range(len(data_lens)):
+        data_len = data_lens[idx]
+        for key, value in total_accs[idx].items():
+            if key in total_acc:
+                total_acc[key] += value * data_len
+            else:
+                total_acc[key] = value * data_len
+
+    # Average
+    total_acc = {key: value / sum(data_lens) for key, value in total_acc.items()}
+
+    return total_acc

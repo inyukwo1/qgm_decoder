@@ -39,7 +39,6 @@
 "column_att": "affine", #choices=['dot_prod', 'affine']
 
 # Training settings
-"toy": false,
 "lr": 1e-3,
 "bert_lr": 1e-4,
 "bert": -1, # -1 is no bert.
