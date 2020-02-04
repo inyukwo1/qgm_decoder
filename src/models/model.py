@@ -51,7 +51,7 @@ class IRNet(BasicModel):
         else:
             self.new_long_tensor = torch.LongTensor
             self.new_tensor = torch.FloatTensor
-        if self.is_bert
+        if self.is_bert:
             model_class, tokenizer_class, pretrained_weight, dim = MODELS[
                 H_PARAMS["bert"]
             ]
