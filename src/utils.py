@@ -502,10 +502,10 @@ def load_data_new(
             data
             for data in sql_data
             if data["db_id"] != "baseball_1"
-               and data["db_id"] != "cre_Drama_Workshop_Groups"
-               and data["db_id"] != "sakila_1"
-               and data["db_id"] != "formula_1"
-               and data["db_id"] != "soccer_1"
+            and data["db_id"] != "cre_Drama_Workshop_Groups"
+            and data["db_id"] != "sakila_1"
+            and data["db_id"] != "formula_1"
+            and data["db_id"] != "soccer_1"
         ]
 
     # Filter data with qgm that has nested query
@@ -542,17 +542,29 @@ def load_dataset(H_PARAMS, use_small=False):
             table_data += json.load(f)
 
         # Train
-        train_tmp = load_data_new(train_path, use_small=use_small, is_bert=is_bert, is_simple_query=is_simple_query, is_single_table=is_single_table)
+        train_tmp = load_data_new(
+            train_path,
+            use_small=use_small,
+            is_bert=is_bert,
+            is_simple_query=is_simple_query,
+            is_single_table=is_single_table,
+        )
         train_lens += [len(train_tmp)]
         train_datas += [train_tmp]
 
         # Dev
-        val_tmp = load_data_new(val_path, use_small=use_small, is_bert=is_bert, is_simple_query=is_simple_query, is_single_table=is_single_table)
+        val_tmp = load_data_new(
+            val_path,
+            use_small=use_small,
+            is_bert=is_bert,
+            is_simple_query=is_simple_query,
+            is_single_table=is_single_table,
+        )
         val_lens += [len(val_tmp)]
         val_datas += [val_tmp]
 
     # Tables as dictionary
-    table_data = {table['db_id']: table for table in table_data}
+    table_data = {table["db_id"]: table for table in table_data}
 
     # Show dataset length
     print("Total training set: {}".format(sum(train_lens)))
@@ -562,7 +574,7 @@ def load_dataset(H_PARAMS, use_small=False):
     print("\nTotal val set: {}".format(sum(val_lens)))
     for idx in range(len(dataset_names)):
         print("{}: {}".format(dataset_names[idx], val_lens[idx]))
-    print('\n')
+    print("\n")
 
     return train_datas, val_datas, table_data
 

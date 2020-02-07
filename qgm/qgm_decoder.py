@@ -23,66 +23,201 @@ from qgm.utils import (
 )
 
 
-class SequentialSelector(nn.Module):
-    def __init__(self, input_dim, emb_dim):
-        super(SequentialSelector, self).__init__()
-        self.input_dim = input_dim
-        self.emb_dim = emb_dim
-        self.lstm = nn.LSTM(
-            input_dim, emb_dim, 2, batch_first=True, dropout=0.2, bidirectional=False
-        )
-        self.sos = nn.Parameter(torch.zeros(input_dim))
-        self.eos = nn.Parameter(torch.zeros(emb_dim))
+class BatchLosses:
+    # Curerently not used
+    def __init__(self, b_indices):
+        self._loss_dict = dict()
+        self._b_indices = b_indices
 
-    def decode_train(
-        self, context, batch_input_tensors, batch_tensors, batch_selected_items
+    def register_batch_loss(self, loss_name, loss, b_indices=None):
+        if b_indices is None:
+            b_indices = self._b_indices
+
+        if loss_name not in self._loss_dict:
+            self._loss_dict[loss_name] = torch.zeros(len(self._b_indices))
+            if torch.cuda.is_available():
+                self._loss_dict[loss_name] = self._loss_dict[loss_name].cuda()
+        for idx, b_idx in enumerate(b_indices):
+            org_idx = list(self._b_indices).index(b_idx)
+            self._loss_dict[loss_name][org_idx] += loss[idx]
+
+
+class BatchGold:
+    def __init__(self, gold_boxes):
+        self.gold_boxes = gold_boxes
+
+
+class BatchState:
+    def __init__(
+        self,
+        decoder,
+        encoded_src,
+        encoded_src_att,
+        encoded_col,
+        encoded_tab,
+        src_mask,
+        col_mask,
+        tab_mask,
+        col_tab_dic,
+        att,
+        state_vector,
+        view_indices=None,
     ):
-        B = len(batch_tensors)
-        assert_dim(batch_input_tensors, [B, None, self.input_dim])
-        assert_dim(batch_tensors, [B, None, self.emb_dim])
+        self.decoder = decoder
+        self.encoded_src = encoded_src
+        self.encoded_src_att = encoded_src_att
+        self.encoded_col = encoded_col
+        self.encoded_tab = encoded_tab
+        self.src_mask = src_mask
+        self.col_mask = col_mask
+        self.tab_mask = tab_mask
+        self.col_tab_dic = col_tab_dic
+        self.tab_col_dic = []
+        for b_idx in range(len(col_tab_dic)):
+            b_tmp = []
+            tab_len = len(col_tab_dic[b_idx][0])
+            for t_idx in range(tab_len):
+                tab_tmp = [
+                    idx
+                    for idx in range(len(col_tab_dic[b_idx]))
+                    if t_idx in col_tab_dic[b_idx][idx]
+                ]
+                b_tmp += [tab_tmp]
+            self.tab_col_dic += [b_tmp]
 
-        batch_input = torch.cat(
-            (self.sos.unsqueeze(0, 1).expand(B, -1, -1), batch_input_tensors), dim=1
-        )
-        out_hiddens, _ = self.lstm(batch_input, (context, torch.zeros(B, self.emb_dim)))
-        eos_appended_tensors = torch.cat(
-            (batch_tensors, self.eos.unsqueeze(0, 1).expand(B, -1, -1)), dim=1
-        )
-        out = torch.nn.bmm(out_hiddens, eos_appended_tensors.transpose(1, 2))
-        out = torch.log_softmax(out, dim=-1)
-        negative_losses = []
-        for b_idx in range(B):
-            negative_loss = 0
-            items = batch_selected_items[b_idx]
-            for i, item in enumerate(items):
-                negative_loss += out[b_idx, i, item]
-            negative_loss += out[b_idx, len(items), -1]
-            negative_losses.append(negative_loss)
-        return negative_losses, out_hiddens
+        self.att = att
+        self.state_vector = state_vector
+        if view_indices is not None:
+            self.view_indices = view_indices
+        else:
+            self.view_indices = torch.arange(len(col_tab_dic)).cuda()
 
-    def decode_eval(self, context, batch_tensors):
-        B = len(batch_tensors)
-        eos_appended_tensors = torch.cat(
-            (batch_tensors, self.eos.unsqueeze(0, 1).expand(B, -1, -1)), dim=1
+    def b_size(self):
+        return len(self.col_tab_dic)
+
+    def make_view(self, view_indices):
+        new_col_tab_dic = [self.col_tab_dic[idx] for idx in view_indices]
+        return BatchState(
+            self.decoder,
+            self.encoded_src[view_indices],
+            self.encoded_src_att[view_indices],
+            self.encoded_col[view_indices],
+            self.encoded_tab[view_indices],
+            self.src_mask[view_indices],
+            self.col_mask[view_indices],
+            self.tab_mask[view_indices],
+            new_col_tab_dic,
+            self.att[view_indices],
+            [self.state_vector[0][view_indices], self.state_vector[1][view_indices]],
+            self.view_indices[view_indices],
         )
-        batch_out_indices = []
-        for b_idx in range(B):
-            out_indices = []
-            h = context[b_idx].unsqueeze(0)
-            c = torch.zeros(1, self.emb_dim)
-            input = self.sos.unsqueeze(0)
-            for _ in range(7):
-                _, (h, c) = self.lstm(input, (h, c))
-                out = torch.mm(h, eos_appended_tensors[b_idx].transpose(0, 1)).squeeze(
-                    0
-                )
-                argmax_index = torch.argmax(out).cpu().data.item()
-                if argmax_index == len(eos_appended_tensors[b_idx]) - 1:
-                    break
-                out_indices.append(argmax_index)
-                input = eos_appended_tensors[b_idx, argmax_index]
-            batch_out_indices.append(out_indices)
-        return batch_out_indices
+
+    def update_state_using_view(self, view):
+        my_indices_list = self.view_indices.tolist()
+        view_indices_list = view.view_indices.tolist()
+        state_vector = [
+            list(torch.unbind(self.state_vector[0])),
+            list(torch.unbind(self.state_vector[1])),
+        ]
+        att = list(torch.unbind(self.att))
+        for idx, view_idx in enumerate(view_indices_list):
+            my_loc = my_indices_list.index(view_idx)
+            att[my_loc] = view.att[idx]
+            state_vector[0][my_loc] = view.state_vector[0][idx]
+            state_vector[1][my_loc] = view.state_vector[1][idx]
+
+        self.state_vector = (torch.stack(state_vector[0]), torch.stack(state_vector[1]))
+        self.att = torch.stack(att)
+
+    def compute_context_vector(self, x):
+        # Compute LSTM
+        state_vector = self.decoder.lstm(x, self.state_vector)
+
+        # Select
+        encoded_src = self.encoded_src
+        encoded_src_att = self.encoded_src_att
+        src_mask = self.src_mask
+
+        # Compute attention
+        ctx_vector = self.attention(
+            encoded_src, encoded_src_att, state_vector[0], src_mask
+        )
+        att = self.decoder.att_layer(torch.cat([state_vector[0], ctx_vector], 1))
+        self.state_vector = state_vector
+        self.att = att
+
+    def attention(self, encoded_src, encoded_src_attn, state_vector, src_mask=None):
+        # Compute attention weights
+        att_weight = self.get_attention_weights(
+            encoded_src_attn, state_vector, src_mask
+        )
+
+        # Compute new context_vector
+        ctx_vector = torch.bmm(att_weight.unsqueeze(1), encoded_src).squeeze(1)
+
+        return ctx_vector
+
+    def get_attention_weights(
+        self, source, query, source_mask=None, affine_layer=None, is_log_softmax=False
+    ):
+        # Compute weight
+        if affine_layer and not self.decoder.is_bert:
+            source = affine_layer(source)
+        query = query.unsqueeze(-1)
+        weight_scores = torch.bmm(source, query)
+        weight_scores = weight_scores.squeeze(-1)
+
+        # Masking
+        if source_mask is not None:
+            weight_scores.data.masked_fill_(source_mask.bool(), -float("inf"))
+
+        if is_log_softmax:
+            weight_probs = torch.log_softmax(weight_scores, dim=-1)
+        else:
+            weight_probs = torch.softmax(weight_scores, dim=-1)
+
+        return weight_probs
+
+    def compute_lstm_input(self, box):
+        # Encode Box
+        encoded_box = (
+            self.encode_box(box)
+            if box
+            else torch.zeros(len(self.att), self.decoder.emb_dim).cuda()
+        )
+        return torch.cat([encoded_box, self.att], 1)
+
+    def encode_box(self, boxes):
+        encoded_col = self.encoded_col
+        encoded_tab = self.encoded_tab
+        # Encode head
+        b_embs = []
+        for b_idx, box in enumerate(boxes):
+            tmp = []
+            for head in box["head"]:
+                agg_id, col_id = head
+                agg_emb = self.decoder.agg_emb(torch.tensor(agg_id).cuda()).squeeze(0)
+                col_emb = encoded_col[b_idx][torch.tensor(col_id).cuda()]
+                emb = agg_emb + col_emb
+                tmp += [emb]
+            head_emb = sum(tmp) / len(tmp)
+
+            # Encode body (only quantifiers)
+            tmp = []
+            for table_id in box["body"]["quantifiers"]:
+                tab_emb = encoded_tab[b_idx][table_id]
+                tmp += [tab_emb]
+            body_emb = sum(tmp) / len(tmp) if tmp else torch.zeros(self.decoder.emb_dim)
+
+            # Encode operator
+            box_op_emb = self.decoder.box_op_emb(torch.tensor(box["operator"]).cuda())
+
+            # Combine and encode
+            embs = torch.cat([head_emb, body_emb, box_op_emb], 0)
+
+            b_embs += [embs]
+        ctx_vector = self.decoder.box_encode_layer(torch.stack(b_embs))
+        return ctx_vector
 
 
 class QGM_Decoder(nn.Module):
@@ -254,15 +389,25 @@ class QGM_Decoder(nn.Module):
     def decode(self, b_indices, att, state_vector, prev_box=None, gold_boxes=None):
         b_size = len(b_indices)
 
-        # att_linear
-        x = (
-            self.compute_context_vector(b_indices, None, state_vector)
-            if att
-            else torch.zeros(b_size, self.lstm.input_size).cuda()
+        state = BatchState(
+            self,
+            self.encoded_src,
+            self.encoded_src_att,
+            self.encoded_col,
+            self.encoded_tab,
+            self.src_mask,
+            self.col_mask,
+            self.tab_mask,
+            self.col_tab_dic,
+            att,
+            state_vector,
         )
-        state_vector, att = self.compute_context_vector(b_indices, x, state_vector)
 
-        iuen_score = self.iuen_linear(att)
+        # att_linear
+        x = torch.zeros(b_size, self.lstm.input_size).cuda()
+        state.compute_context_vector(x)
+
+        iuen_score = self.iuen_linear(state.att)
         iuen_prob = torch.log_softmax(iuen_score, dim=-1)
 
         # Choose box_operator
@@ -285,8 +430,8 @@ class QGM_Decoder(nn.Module):
             gold_front_boxes = gold_rear_boxes = None
 
         # Calculate state vector
-        state_vector, losses, pred_front_boxes = self.decode_boxes(
-            b_indices, att, state_vector, prev_box=prev_box, gold_boxes=gold_front_boxes
+        losses, pred_front_boxes = self.decode_boxes(
+            state, prev_box=prev_box, gold_boxes=gold_front_boxes
         )
         pred_boxes = pred_front_boxes
 
@@ -298,19 +443,11 @@ class QGM_Decoder(nn.Module):
 
         if next_b_indices is not None:
             # get sub att and state_vector
-            att = att[next_b_indices]
-            next_state_vector = [
-                state_vector[0][next_b_indices],
-                state_vector[1][next_b_indices],
-            ]
+            next_state = state.make_view(next_b_indices)
             prev_boxes = [pred_boxes[idx][-1] for idx in next_b_indices]
 
-            next_state_vector, rear_losses, pred_rear_boxes = self.decode_boxes(
-                next_b_indices,
-                att,
-                next_state_vector,
-                prev_box=prev_boxes,
-                gold_boxes=gold_rear_boxes,
+            rear_losses, pred_rear_boxes = self.decode_boxes(
+                next_state, prev_box=prev_boxes, gold_boxes=gold_rear_boxes,
             )
 
             # Change operator
@@ -318,11 +455,6 @@ class QGM_Decoder(nn.Module):
             for idx in range(len(pred_rear_boxes)):
                 operator = IUEN[next_operators[idx]]
                 pred_rear_boxes[idx][0]["operator"] = BOX_OPS.index(operator)
-
-            state_vector = [
-                list(torch.unbind(state_vector[0])),
-                list(torch.unbind(state_vector[1])),
-            ]
 
             for idx, b_idx in enumerate(next_b_indices):
                 # Append boxes
@@ -334,12 +466,7 @@ class QGM_Decoder(nn.Module):
                 for key in losses[ori_idx].keys():
                     losses[ori_idx][key] += rear_losses[idx][key]
 
-            # Change State vector
-            for idx, b_idx in enumerate(next_b_indices):
-                state_vector[0][b_idx] = next_state_vector[0][idx]
-                state_vector[1][b_idx] = next_state_vector[1][idx]
-
-            state_vector = (torch.stack(state_vector[0]), torch.stack(state_vector[1]))
+            state.update_state_using_view(next_state)
 
         # Add loss for op
         for idx in range(b_size):
@@ -347,15 +474,14 @@ class QGM_Decoder(nn.Module):
 
         return state_vector, losses, pred_boxes
 
-    def decode_boxes(self, b_indices, att, state_vector, prev_box, gold_boxes):
-        b_size = len(b_indices)
+    def decode_boxes(self, state, prev_box, gold_boxes):
 
-        x = self.compute_lstm_input(b_indices, prev_box, att)
-        state_vector, att = self.compute_context_vector(b_indices, x, state_vector)
+        x = state.compute_lstm_input(prev_box)
+        state.compute_context_vector(x)
 
         # Get scores for groupBy, orderBy
-        groupBy_scores = self.is_group_by(att)
-        orderBy_scores = self.is_order_by(att)
+        groupBy_scores = self.is_group_by(state.att)
+        orderBy_scores = self.is_order_by(state.att)
 
         # Change as probs
         groupBy_probs = torch.log_softmax(groupBy_scores, dim=-1)
@@ -375,11 +501,11 @@ class QGM_Decoder(nn.Module):
         # Get b_indices for group by
         is_groupBy = group_selected_idx == 1
         is_orderBy = order_selected_idx == 1
-        groupBy_indices = [idx for idx in range(b_size) if is_groupBy[idx]]
+        groupBy_indices = [idx for idx in range(state.b_size()) if is_groupBy[idx]]
         groupBy_indices = (
             torch.tensor(groupBy_indices).cuda() if groupBy_indices else None
         )
-        orderBy_indices = [idx for idx in range(b_size) if is_orderBy[idx]]
+        orderBy_indices = [idx for idx in range(state.b_size()) if is_orderBy[idx]]
         orderBy_indices = (
             torch.tensor(orderBy_indices).cuda() if orderBy_indices else None
         )
@@ -394,44 +520,24 @@ class QGM_Decoder(nn.Module):
 
         # Predict SELECT BOX
         select_gold_box = [box[0] for box in gold_boxes] if self.training else None
-        select_loss, select_box = self.decode_box_type(
-            "select", b_indices, att, select_gold_box
-        )
+        select_loss, select_box = self.decode_box_type("select", state, select_gold_box)
         pred_boxes = [[box] for box in select_box]
 
         losses = select_loss
 
         # Predict GroupBy BOX
         if groupBy_indices is not None:
-            groupBy_att = att[groupBy_indices]
             groupBy_prev_box = [
-                select_box[idx] for idx in range(b_size) if is_groupBy[idx]
+                select_box[idx] for idx in range(state.b_size()) if is_groupBy[idx]
             ]
-            groupBy_state_vector = [
-                state_vector[0][groupBy_indices],
-                state_vector[1][groupBy_indices],
-            ]
+            groupBy_state = state.make_view(groupBy_indices)
 
-            groupBy_b_indices = torch.tensor(
-                [b_indices[idx] for idx in groupBy_indices]
-            ).cuda()
-            x = self.compute_lstm_input(
-                groupBy_b_indices, groupBy_prev_box, groupBy_att
-            )
-            groupBy_state_vector, groupBy_att = self.compute_context_vector(
-                groupBy_b_indices, x, groupBy_state_vector
-            )
+            x = groupBy_state.compute_lstm_input(groupBy_prev_box)
+            groupBy_state.compute_context_vector(x)
 
             groupBy_loss, groupBy_pred_box = self.decode_box_type(
-                "groupBy", groupBy_b_indices, groupBy_att, groupBy_gold_box
+                "groupBy", groupBy_state, groupBy_gold_box
             )
-
-            # Unbind
-            state_vector = [
-                list(torch.unbind(state_vector[0])),
-                list(torch.unbind(state_vector[1])),
-            ]
-            att = list(torch.unbind(att))
 
             for idx, ori_idx in enumerate(groupBy_indices):
                 # Append box
@@ -441,47 +547,21 @@ class QGM_Decoder(nn.Module):
                 for key in losses[ori_idx].keys():
                     losses[ori_idx][key] += groupBy_loss[idx][key]
 
-                # Save state vector
-                state_vector[0][ori_idx] = groupBy_state_vector[0][idx]
-                state_vector[1][ori_idx] = groupBy_state_vector[1][idx]
-
-                att[ori_idx] = groupBy_att[idx]
-
-            # Bind back
-            state_vector = (torch.stack(state_vector[0]), torch.stack(state_vector[1]))
-            att = torch.stack(att)
+            state.update_state_using_view(groupBy_state)
 
         # Predict OrderBy BOX
         if orderBy_indices is not None:
-            orderBy_att = att[orderBy_indices]
             orderBy_prev_box = [
-                pred_boxes[idx][-1] for idx in range(b_size) if is_orderBy[idx]
+                pred_boxes[idx][-1] for idx in range(state.b_size()) if is_orderBy[idx]
             ]
-            orderBy_state_vector = [
-                state_vector[0][orderBy_indices],
-                state_vector[1][orderBy_indices],
-            ]
+            orderBy_state = state.make_view(orderBy_indices)
 
-            orderBy_b_indices = torch.tensor(
-                [b_indices[idx] for idx in orderBy_indices]
-            ).cuda()
-            x = self.compute_lstm_input(
-                orderBy_b_indices, orderBy_prev_box, orderBy_att
-            )
-            orderBy_state_vector, orderBy_att = self.compute_context_vector(
-                orderBy_b_indices, x, orderBy_state_vector
-            )
+            x = orderBy_state.compute_lstm_input(orderBy_prev_box)
+            orderBy_state.compute_context_vector(x)
 
             orderBy_loss, orderBy_pred_box = self.decode_box_type(
-                "orderBy", orderBy_b_indices, orderBy_att, orderBy_gold_box
+                "orderBy", orderBy_state, orderBy_gold_box
             )
-
-            # Unbind
-            state_vector = [
-                list(torch.unbind(state_vector[0])),
-                list(torch.unbind(state_vector[1])),
-            ]
-            att = list(torch.unbind(att))
 
             for idx, ori_idx in enumerate(orderBy_indices):
                 # Append box
@@ -490,28 +570,17 @@ class QGM_Decoder(nn.Module):
                 for key in losses[ori_idx].keys():
                     losses[ori_idx][key] += orderBy_loss[idx][key]
 
-                # Save state vector
-                state_vector[0][ori_idx] = orderBy_state_vector[0][idx]
-                state_vector[1][ori_idx] = orderBy_state_vector[1][idx]
-
-                att[ori_idx] = orderBy_att[idx]
-
-            # Bind back
-            state_vector = (torch.stack(state_vector[0]), torch.stack(state_vector[1]))
-            att = torch.stack(att)
+            state.update_state_using_view(orderBy_state)
 
         # Add is_group_by, is_order_by
-        for idx in range(b_size):
+        for idx in range(state.b_size()):
             losses[idx]["is_group_by"] = -group_selected_prob[idx]
             losses[idx]["is_order_by"] = -order_selected_prob[idx]
 
-        return state_vector, losses, pred_boxes
+        return losses, pred_boxes
 
-    def decode_box_type(self, box_type, b_indices, att, gold_box):
-        b_size = len(att)
-        # Create column mask and table mask
-        col_masks = self.col_mask[b_indices]
-        tab_masks = self.tab_mask[b_indices]
+    def decode_box_type(self, box_type, state, gold_box):
+        b_size = state.b_size()
         if box_type == "select":
             layers = self.select_layers
         elif box_type == "groupBy":
@@ -532,18 +601,18 @@ class QGM_Decoder(nn.Module):
                 },
                 "operator": BOX_OPS.index(box_type),
             }
-            for _ in range(b_size)
+            for _ in range(state.b_size())
         ]
 
         # Predict quantifier type f num
-        qf_num_score = layers["qf_num"](att)
+        qf_num_score = layers["qf_num"](state.att)
 
         # Apply mask to qf_num_scores
-        tab_lens = [list(mask).count(0) for mask in tab_masks]
+        tab_lens = [list(mask).count(0) for mask in state.tab_mask]
         max_len = qf_num_score.shape[1]
-        qf_num_mask = torch.arange(max_len).expand(b_size, max_len) >= torch.tensor(
-            tab_lens
-        ).unsqueeze(1)
+        qf_num_mask = torch.arange(max_len).expand(
+            state.b_size(), max_len
+        ) >= torch.tensor(tab_lens).unsqueeze(1)
         qf_num_score = qf_num_score.masked_fill(qf_num_mask.cuda(), float("-inf"))
 
         # To prob
@@ -556,8 +625,12 @@ class QGM_Decoder(nn.Module):
             selected_qf_num_prob, selected_qf_num_idx = torch.topk(qf_num_prob, 1)
 
         # Predict from table
-        qf_prob = self.get_attention_weights(
-            self.encoded_tab[b_indices], att, tab_masks, affine_layer=layers["qf_tab_layer"], is_log_softmax=True
+        qf_prob = state.get_attention_weights(
+            state.encoded_tab,
+            state.att,
+            state.tab_mask,
+            affine_layer=layers["qf_tab_layer"],
+            is_log_softmax=True,
         )
         if self.training:
             selected_qf_idx = get_quantifier_with_type("f", gold_box)
@@ -588,11 +661,11 @@ class QGM_Decoder(nn.Module):
 
         # Create new column mask from prediction based on quantifiers
         # use tab_col_dic
-        col_masks = torch.ones_like(col_masks).cuda()
+        col_masks = torch.ones_like(state.col_mask).cuda()
         for b_idx in range(b_size):
             tmp = []
             for item in selected_qf_idx[b_idx]:
-                tmp += self.tab_col_dic[b_idx][item]
+                tmp += state.tab_col_dic[b_idx][item]
             tmp = list(set(tmp))
             tmp = torch.tensor(tmp).cuda()
             col_masks[b_idx][tmp] = 0
@@ -616,17 +689,11 @@ class QGM_Decoder(nn.Module):
 
             prev_agg = prev_col = prev_op = torch.zeros(b_size, self.emb_dim).cuda()
             stopped = [False] * b_size
-            p_ctx_vector = att
+            p_ctx_vector = state.att
             p_cell_vector = torch.zeros_like(p_ctx_vector)
             for n_idx in range(10):
                 # predict to be stopped
-                next_b_indices = torch.tensor(
-                    [b_indices[idx] for idx in range(b_size) if not stopped[idx]]
-                ).cuda()
-                list_b_indices = list(b_indices)
-                ori_indices = [
-                    list_b_indices.index(idx) for idx in list(next_b_indices)
-                ]
+                ori_indices = [idx for idx in range(b_size) if not stopped[idx]]
 
                 # Create context
                 new_context_vector = torch.cat(
@@ -666,13 +733,8 @@ class QGM_Decoder(nn.Module):
 
                 # re-start
 
-                next_b_indices = torch.tensor(
-                    [b_indices[idx] for idx in range(b_size) if not stopped[idx]]
-                ).cuda()
-                list_b_indices = list(b_indices)
-                ori_indices = [
-                    list_b_indices.index(idx) for idx in list(next_b_indices)
-                ]
+                ori_indices = [idx for idx in range(b_size) if not stopped[idx]]
+                notstop_state = state.make_view(ori_indices)
 
                 # Predict Agg
                 p_agg_score = layers["p_agg"](p_ctx_vector)
@@ -691,8 +753,8 @@ class QGM_Decoder(nn.Module):
                     selected_p_agg_prob, selected_p_agg_idx = torch.topk(p_agg_prob, 1)
 
                 # Predict Col
-                p_col_prob = self.get_attention_weights(
-                    self.encoded_col[next_b_indices],
+                p_col_prob = notstop_state.get_attention_weights(
+                    notstop_state.encoded_col,
                     p_ctx_vector,
                     col_masks[ori_indices],
                     affine_layer=layers["p_col_layer"],
@@ -730,8 +792,8 @@ class QGM_Decoder(nn.Module):
                 prev_op[ori_indices] = self.p_op_emb(selected_p_op_idx).squeeze(1)
                 prev_col[ori_indices] = torch.stack(
                     [
-                        self.encoded_col[b_idx][selected_p_col_idx][idx]
-                        for idx, b_idx in enumerate(next_b_indices)
+                        notstop_state.encoded_col[idx][selected_p_col_idx][idx]
+                        for idx in range(notstop_state.b_size())
                     ]
                 ).squeeze(1)
 
@@ -758,7 +820,7 @@ class QGM_Decoder(nn.Module):
                     pred_boxes[idx]["body"]["local_predicates"] += [p]
 
         # Predict Head num
-        head_num_score = layers["head_num"](att)
+        head_num_score = layers["head_num"](state.att)
         head_num_prob = torch.log_softmax(head_num_score, dim=-1)
         if self.training:
             selected_head_num_idx = to_tensor(get_head_num(gold_box))
@@ -769,8 +831,12 @@ class QGM_Decoder(nn.Module):
             selected_head_num_prob, selected_head_num_idx = torch.topk(head_num_prob, 1)
 
         # Predict Head column
-        column_prob = self.get_attention_weights(
-            self.encoded_col[b_indices], att, col_masks, affine_layer=layers["head_col_layer"], is_log_softmax=True
+        column_prob = state.get_attention_weights(
+            state.encoded_col,
+            state.att,
+            col_masks,
+            affine_layer=layers["head_col_layer"],
+            is_log_softmax=True,
         )
         if self.training:
             selected_head_col_idx = get_head_col(gold_box)
@@ -799,15 +865,9 @@ class QGM_Decoder(nn.Module):
 
         # Predict Head Agg
         for n_idx in range(max(selected_head_num_idx) + 1):
-            next_b_indices = torch.tensor(
-                [
-                    b_indices[idx]
-                    for idx in range(b_size)
-                    if selected_head_num_idx[idx] + 1 > n_idx
-                ]
-            ).cuda()
-            list_b_indices = list(b_indices)
-            ori_indices = [list_b_indices.index(idx) for idx in list(next_b_indices)]
+            ori_indices = [
+                idx for idx in range(b_size) if selected_head_num_idx[idx] + 1 > n_idx
+            ]
 
             # Create context
             tmp_col_idx = torch.tensor(
@@ -822,7 +882,7 @@ class QGM_Decoder(nn.Module):
                     for idx, ori_idx in enumerate(ori_indices)
                 ]
             )
-            new_context_vector = torch.cat([att[ori_indices], col_emb], 1)
+            new_context_vector = torch.cat([state.att[ori_indices], col_emb], 1)
             h_ctx_vector = layers["head_layer"](new_context_vector)
 
             # Predict Agg
@@ -860,7 +920,7 @@ class QGM_Decoder(nn.Module):
 
         if box_type == "order":
             # predict is_asc
-            is_asc_score = layers["is_asc"](att)
+            is_asc_score = layers["is_asc"](state.att)
             is_asc_prob = torch.log_softmax(is_asc_score, dim=-1)
             if self.training:
                 selected_is_asc_idx = to_tensor(get_is_asc(gold_box))
@@ -869,7 +929,7 @@ class QGM_Decoder(nn.Module):
                 selected_is_asc_prob, selected_is_asc_idx = torch.topk(is_asc_prob, 1)
 
             # predict limit_num
-            limit_num_score = layers["limit_num"](att)
+            limit_num_score = layers["limit_num"](state.att)
             limit_num_prob = torch.log_softmax(limit_num_score, dim=-1)
             if self.training:
                 selected_limit_num_idx = to_tensor(get_limit_num(gold_box))
@@ -909,94 +969,6 @@ class QGM_Decoder(nn.Module):
             losses += [loss]
 
         return losses, pred_boxes
-
-    def encode_box(self, b_indices, boxes):
-        encoded_col = self.encoded_col[b_indices]
-        encoded_tab = self.encoded_tab[b_indices]
-        # Encode head
-        b_embs = []
-        for b_idx, box in enumerate(boxes):
-            tmp = []
-            for head in box["head"]:
-                agg_id, col_id = head
-                agg_emb = self.agg_emb(torch.tensor(agg_id).cuda()).squeeze(0)
-                col_emb = encoded_col[b_idx][torch.tensor(col_id).cuda()]
-                emb = agg_emb + col_emb
-                tmp += [emb]
-            head_emb = sum(tmp) / len(tmp)
-
-            # Encode body (only quantifiers)
-            tmp = []
-            for table_id in box["body"]["quantifiers"]:
-                tab_emb = encoded_tab[b_idx][table_id]
-                tmp += [tab_emb]
-            body_emb = sum(tmp) / len(tmp) if tmp else torch.zeros(self.emb_dim)
-
-            # Encode operator
-            box_op_emb = self.box_op_emb(torch.tensor(box["operator"]).cuda())
-
-            # Combine and encode
-            embs = torch.cat([head_emb, body_emb, box_op_emb], 0)
-
-            b_embs += [embs]
-        ctx_vector = self.box_encode_layer(torch.stack(b_embs))
-        return ctx_vector
-
-    def get_attention_weights(
-        self, source, query, source_mask=None, affine_layer=None, is_log_softmax=False
-    ):
-        # Compute weight
-        if affine_layer and not self.is_bert:
-            source = affine_layer(source)
-        weight_scores = torch.bmm(source, query.unsqueeze(-1)).squeeze(-1)
-
-        # Masking
-        if source_mask is not None:
-            weight_scores.data.masked_fill_(source_mask.bool(), -float("inf"))
-
-        if is_log_softmax:
-            weight_probs = torch.log_softmax(weight_scores, dim=-1)
-        else:
-            weight_probs = torch.softmax(weight_scores, dim=-1)
-
-        return weight_probs
-
-    def attention(self, encoded_src, encoded_src_attn, state_vector, src_mask=None):
-        # Compute attention weights
-        att_weight = self.get_attention_weights(
-            encoded_src_attn, state_vector, src_mask
-        )
-
-        # Compute new context_vector
-        ctx_vector = torch.bmm(att_weight.unsqueeze(1), encoded_src).squeeze(1)
-
-        return ctx_vector
-
-    def compute_context_vector(self, b_indices, x, state_vector):
-        # Compute LSTM
-        state_vector = self.lstm(x, state_vector)
-
-        # Select
-        encoded_src = self.encoded_src[b_indices]
-        encoded_src_att = self.encoded_src_att[b_indices]
-        src_mask = self.src_mask[b_indices]
-
-        # Compute attention
-        ctx_vector = self.attention(
-            encoded_src, encoded_src_att, state_vector[0], src_mask
-        )
-        att = self.att_layer(torch.cat([state_vector[0], ctx_vector], 1))
-
-        return state_vector, att
-
-    def compute_lstm_input(self, b_indices, box, att):
-        # Encode Box
-        encoded_box = (
-            self.encode_box(b_indices, box)
-            if box
-            else torch.zeros(len(att), self.emb_dim).cuda()
-        )
-        return torch.cat([encoded_box, att], 1)
 
     def get_accuracy(self, pred_qgms, gold_qgms):
         return compare_boxes(pred_qgms, gold_qgms)

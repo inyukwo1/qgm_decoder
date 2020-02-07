@@ -320,6 +320,8 @@ def filter_datas(sql_data, is_simple_query, is_single_table):
     filtered_datas = []
     for data in sql_data:
         flag = True
+        if "FROM (" in data["query"]:
+            flag = False
         if is_simple_query:
             for box in data["qgm"]:
                 if (
@@ -346,13 +348,13 @@ def filter_datas(sql_data, is_simple_query, is_single_table):
             ):
                 flag = False
             # Filter datas in wikitablequestions that has hard operator
-            if ' + ' in data['query']:
+            if " + " in data["query"]:
                 flag = False
-            '''
+            """
             # Filter OR in local predicate
             if ' OR ' in data['query']:
                 flag = False
-            '''
+            """
 
         if flag:
             filtered_datas += [data]
