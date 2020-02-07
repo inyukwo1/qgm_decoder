@@ -463,8 +463,8 @@ if __name__ == "__main__":
         try:
             r = parser.full_parse(datas[i])
         except:
-            print('idx: ', i)
-            print('sql: ', datas[i]['query'])
+            print("idx: ", i)
+            print("sql: ", datas[i]["query"])
             continue
         datas[i]["rule_label"] = " ".join([str(x) for x in r])
         processed_data.append(datas[i])

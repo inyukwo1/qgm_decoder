@@ -6,3 +6,8 @@ data/
 renv/
 venv/
 saved_model/
+*.pkl
+*.tsv.gz
+*d.txt
+web/build/
+web/node_modules/
