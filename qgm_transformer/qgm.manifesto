@@ -1,0 +1,16 @@
+Symbol_start
+Q = Quantifier
+H = Head
+P = Predicate
+T = Table
+A = aggregation
+C = Column
+O = Operator
+Symbol_end
+
+Grammar_start
+Box ::= Q H P
+Q ::= T Q | T
+H ::= A C H | A C
+P ::= O A C P | O A C
+Grammar_end
