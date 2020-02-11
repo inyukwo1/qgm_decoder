@@ -15,6 +15,7 @@ from src.models.basic_model import BasicModel
 from qgm.qgm_decoder import QGM_Decoder
 from semql.semql_decoder import SemQL_Decoder
 from transformers import *
+from qgm_transformer.decoder import QGM_Transformer_Decoder
 
 
 # Transformers has a unified API
@@ -42,6 +43,7 @@ class IRNet(BasicModel):
         self.is_bert = H_PARAMS["bert"] != -1
         self.is_cuda = is_cuda
         self.is_qgm = is_qgm
+        self.is_transformer = True
         self.use_column_pointer = H_PARAMS["column_pointer"]
         self.use_sentence_features = H_PARAMS["sentence_features"]
 
@@ -85,7 +87,9 @@ class IRNet(BasicModel):
         self.dropout = nn.Dropout(self.h_params["dropout"])
 
         # QGM Decoer
-        if self.is_qgm:
+        if self.is_transformer:
+            self.decoder = QGM_Transformer_Decoder()
+        elif self.is_qgm:
             self.decoder = QGM_Decoder(self.h_params["embed_size"])
         else:
             self.decoder = SemQL_Decoder(H_PARAMS, is_cuda)
@@ -293,7 +297,37 @@ class IRNet(BasicModel):
 
         dec_init_vec = self.init_decoder_state(last_cell)
 
-        if self.is_qgm:
+        if self.is_transformer:
+            src_mask = batch.src_token_mask
+            col_mask = batch.table_token_mask
+            tab_mask = batch.schema_token_mask
+            col_tab_dic = batch.col_table_dict
+            tab_col_dic = []
+            for b_idx in range(len(col_tab_dic)):
+                b_tmp = []
+                tab_len = len(col_tab_dic[b_idx][0])
+                for t_idx in range(tab_len):
+                    tab_tmp = [
+                        idx
+                        for idx in range(len(col_tab_dic[b_idx]))
+                        if t_idx in col_tab_dic[b_idx][idx]
+                    ]
+                    b_tmp += [tab_tmp]
+                tab_col_dic += [b_tmp]
+
+            losses, pred = self.decoder(src_encodings,
+                         table_embedding,
+                         schema_embedding,
+                         src_mask,
+                         col_mask,
+                         tab_mask,
+                         tab_col_dic,
+                         batch.qgm_action
+                         )
+
+            return losses
+
+        elif self.is_qgm:
             src_mask = batch.src_token_mask
             col_mask = batch.table_token_mask
             tab_mask = batch.schema_token_mask
@@ -385,7 +419,37 @@ class IRNet(BasicModel):
 
             dec_init_vec = self.init_decoder_state(last_cell)
 
-            if self.is_qgm:
+            if self.is_transformer:
+                src_mask = batch.src_token_mask
+                col_mask = batch.table_token_mask
+                tab_mask = batch.schema_token_mask
+                col_tab_dic = batch.col_table_dict
+                tab_col_dic = []
+                for b_idx in range(len(col_tab_dic)):
+                    b_tmp = []
+                    tab_len = len(col_tab_dic[b_idx][0])
+                    for t_idx in range(tab_len):
+                        tab_tmp = [
+                            idx
+                            for idx in range(len(col_tab_dic[b_idx]))
+                            if t_idx in col_tab_dic[b_idx][idx]
+                        ]
+                        b_tmp += [tab_tmp]
+                    tab_col_dic += [b_tmp]
+
+                losses, pred = self.decoder(src_encodings,
+                                          table_embedding,
+                                          schema_embedding,
+                                          src_mask,
+                                          col_mask,
+                                          tab_mask,
+                                          tab_col_dic,
+                                          batch.qgm_action
+                                          )
+
+                return pred
+
+            elif self.is_qgm:
                 src_mask = batch.src_token_mask
                 col_mask = batch.table_token_mask
                 tab_mask = batch.schema_token_mask

@@ -275,6 +275,7 @@ def process(sql, table, is_qgm=True):
     process_dict["table_names"] = table_names
     process_dict["tab_set_iter"] = tab_set_iter
     process_dict["qgm"] = sql["qgm"]
+    process_dict["qgm_action"] = sql["qgm_action"]
 
     return process_dict
 
@@ -368,6 +369,7 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed, is_qgm=True):
             tokenized_src_sent=process_dict["col_set_type"],
             tgt_actions=rule_label,
             qgm=process_dict["qgm"],
+            qgm_action=process_dict["qgm_action"],
         )
 
         example.sql_json = copy.deepcopy(sql)
@@ -386,6 +388,7 @@ def epoch_train(
     sql_data,
     table_data,
     clip_grad,
+    is_transformer=True,
     is_qgm=True,
     is_train=True,
 ):
@@ -405,7 +408,18 @@ def epoch_train(
         examples = to_batch_seq(sql_data, table_data, perm, st, ed, is_qgm=is_qgm)
 
         result = model.forward(examples)
-        if is_qgm:
+        if is_transformer:
+            sketch_loss, detail_loss = result
+            if not total_loss:
+                total_loss["sketch"] = []
+                total_loss["detail"] = []
+            for sketch_loss in sketch_loss:
+                total_loss["sketch"] += [float(sketch_loss)]
+            for detail_loss in detail_loss:
+                total_loss["detail"] += [float(detail_loss)]
+
+            loss = torch.mean(sketch_loss) + torch.mean(detail_loss)
+        elif is_qgm:
             losses, pred_boxes = result
 
             # Combine losses
@@ -458,7 +472,7 @@ def epoch_train(
 
 
 def epoch_acc(
-    model, batch_size, sql_data, table_data, is_qgm=True, return_details=False
+    model, batch_size, sql_data, table_data, is_transformer=True, is_qgm=True, return_details=False
 ):
     model.eval()
     perm = list(range(len(sql_data)))
@@ -469,7 +483,10 @@ def epoch_acc(
         ed = st + batch_size if st + batch_size < len(perm) else len(perm)
         examples = to_batch_seq(sql_data, table_data, perm, st, ed, is_qgm=is_qgm)
         example_list += examples
-        if is_qgm:
+        if is_transformer:
+            pred += model.parse(examples)
+            gold += [example.qgm_action for example in examples]
+        elif is_qgm:
             pred += model.parse(examples)
             gold += [example.qgm for example in examples]
         else:

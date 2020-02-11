@@ -1,13 +1,26 @@
+import torch.nn as nn
+
+
 class Grammar:
     def __init__(self, manifesto_path):
+        # Symbol
         self.symbols = {}
-        self.actions = {}
         self.terminals = []
-        self.action_to_id = {}
-        self.id_to_action = {}
         self.start_symbol = None
+        self.symbol_to_symbol_id = {}
+        self.symbol_id_to_symbol = {}
+
+        # Action
+        self.actions = {}
+        self.action_to_action_id = {}
+        self.action_id_to_action = {}
         self._create_grammar(manifesto_path)
         self.terminals = [key for key in self.symbols.keys() if key not in self.actions.keys()]
+
+        # Embeddings
+        emb_dim = 300
+        self.symbol_emb = nn.Embedding(len(self.symbols), emb_dim).cuda()
+        self.action_emb = nn.Embedding(len(self.action_to_action_id), emb_dim).cuda()
 
     def _create_grammar(self, manifesto_path):
         cur_line = 0
@@ -17,23 +30,23 @@ class Grammar:
         action_sign = " ::= "
 
         def parse_current_state(line, prev_state):
-            if "Symbol_start" in line:
+            if "<Symbol_start>" in line:
                 prev_state = symbol_flag
-            elif "Symbol_end" in line:
+            elif "<Symbol_end>" in line:
                 prev_state = None
-            elif "Grammar_start" in line:
+            elif "<Grammar_start>" in line:
                 prev_state = grammar_flag
-            elif "Grammar_end" in line:
+            elif "<Grammar_end>" in line:
                 prev_state = None
             return prev_state
 
         def parse_symbol(line):
-            assert symbol_sign in line, "Symbol format error in line {}".format(cur_line)
+            assert symbol_sign in line, "Symbol format error in line {}: {}".format(cur_line, line)
             symbol, symbol_name = line.split(symbol_sign)
             self.symbols[symbol] = symbol_name
 
         def parse_action(line):
-            assert action_sign in line, "Action Format error in line {}".format(cur_line)
+            assert action_sign in line, "Action Format error in line {}: {}".format(cur_line, line)
             left_symbol, right_symbols = line.split(action_sign)
             actions = right_symbols.strip(" ").split(" | ")
             assert left_symbol not in self.actions.keys(), "Overwriting previous action rule in line {}".format(cur_line)
@@ -50,7 +63,7 @@ class Grammar:
                 cur_line += 1
                 line = line.strip("\n")
                 # Pass empty lines
-                if not line:
+                if not line or line[0] == "#":
                     continue
                 # Parse state
                 state = parse_current_state(line, cur_state)
@@ -70,16 +83,32 @@ class Grammar:
                 action_list += [(key, idx)]
 
         # action-to-id
-        self.action_to_id = {action_list[idx]: idx for idx in range(len(action_list))}
+        self.action_to_action_id = {action_list[idx]: idx for idx in range(len(action_list))}
 
         # id-to-action
-        self.id_to_action = {idx: action_list[idx] for idx in range(len(action_list))}
+        self.action_id_to_action = {idx: action_list[idx] for idx in range(len(action_list))}
+
+        # symbol_id_to_symbol
+        self.symbol_id_to_symbol = {idx: symbol for idx, symbol in enumerate(self.symbols)}
+
+        # symbol_to_symbol_id
+        self.symbol_to_symbol_id = {symbol: idx for idx, symbol in enumerate(self.symbols)}
 
     def action_to_string(self, symbol, idx):
         return "{} ::= {}".format(symbol, self.actions[symbol][idx])
 
+    def action_to_symbol(self, actions):
+        tmp = []
+        for idx in range(len(actions)):
+            tmp2 = []
+            for action in actions[idx]:
+                symbol = action[0]
+                tmp2 += [self.symbol_to_symbol_id[symbol]]
+            tmp += [tmp2]
+        return tmp
+
     def get_action_id(self, symbol, idx):
-        self.action_to_id[(symbol, idx)]
+        self.action_to_action_id[(symbol, idx)]
 
     def get_next_action(self, symbol, idx):
         return self.actions[symbol][idx]
@@ -93,6 +122,15 @@ class Grammar:
     def get_all_actions(self):
         return self.actions
 
+    def get_start_symbol_id(self):
+        return self.symbol_to_symbol_id[self.start_symbol]
+
+    def get_action_len(self):
+        return len(self.action_to_action_id)
+
+    def get_next_possible_action_ids(self, symbol_id):
+        symbol = self.symbol_id_to_symbol[symbol_id]
+        return [self.action_to_action_id[(symbol, idx)] for idx in range(len(self.actions[symbol]))]
 
 if __name__ == "__main__":
     mani_path = "/home/hkkang/debugging/irnet_qgm_transformer/qgm_transformer/qgm.manifesto"

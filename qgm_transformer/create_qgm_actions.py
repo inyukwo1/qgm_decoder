@@ -5,7 +5,7 @@ def create_qgm_action(qgm_boxes):
     # Simple query only
     qgm_box = qgm_boxes[0]
 
-    actions = 'Box(0) '
+    actions = 'B({}) '.format(0 if qgm_box['body']['local_predicates'] else 1)
 
     # Q
     q_len = len(qgm_box['body']['quantifiers'])
@@ -32,8 +32,8 @@ def create_qgm_action(qgm_boxes):
     return actions
 
 if __name__ == "__main__":
-    #file_name = "../data/spider/dev.json"
-    file_name = "../data/spider/train.json"
+    file_name = "../data/spider/dev.json"
+    #file_name = "../data/spider/train.json"
     datas = json.load(open(file_name))
 
     # Add qgm_actions
