@@ -11,9 +11,7 @@ class QGM_Transformer_Decoder(nn.Module):
     def __init__(self):
         super(QGM_Transformer_Decoder, self).__init__()
         # Grammar
-        mani_path = (
-            "/home/hkkang/debugging/irnet_qgm_transformer/qgm_transformer/qgm.manifesto"
-        )
+        mani_path = "./qgm_transformer/qgm.manifesto"
         self.grammar = Grammar(mani_path)
 
         # Decode Layers
@@ -73,7 +71,7 @@ class QGM_Transformer_Decoder(nn.Module):
 
         # Decode
         while not state.is_done():
-            #print("Step: {}".format(state.step_cnt))
+            # print("Step: {}".format(state.step_cnt))
             # Get sub-mini-batch
             memory = state.get_memory()
             tgt = state.get_tgt()
@@ -142,7 +140,10 @@ class QGM_Transformer_Decoder(nn.Module):
             state.update_state()
 
         # get losses, preds
-        return (torch.stack(state.sketch_loss), torch.stack(state.detail_loss)), state.pred_history
+        return (
+            (torch.stack(state.sketch_loss), torch.stack(state.detail_loss)),
+            state.pred_history,
+        )
 
     def predict(self, view, out, src, src_mask):
         # Calculate similarity
@@ -160,8 +161,8 @@ class QGM_Transformer_Decoder(nn.Module):
             pred_probs = pred_probs.squeeze(1)
             pred_indices = [int(item) for item in pred_indices.squeeze(1)]
 
-        #print("pred indices: {}".format(pred_indices))
-        #print("probs: {}".format(probs))
+        # print("pred indices: {}".format(pred_indices))
+        # print("probs: {}".format(probs))
         view.save_loss(pred_probs)
         view.save_pred(pred_indices)
 

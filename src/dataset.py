@@ -60,7 +60,7 @@ class Example:
         self.tgt_actions = tgt_actions
         self.truth_actions = copy.deepcopy(tgt_actions)
         self.qgm = qgm
-        self.qgm_action =qgm_action
+        self.qgm_action = qgm_action
         self.sketch = list()
         if self.truth_actions:
             for ta in self.truth_actions:

@@ -15,7 +15,9 @@ class Grammar:
         self.action_to_action_id = {}
         self.action_id_to_action = {}
         self._create_grammar(manifesto_path)
-        self.terminals = [key for key in self.symbols.keys() if key not in self.actions.keys()]
+        self.terminals = [
+            key for key in self.symbols.keys() if key not in self.actions.keys()
+        ]
 
         # Embeddings
         emb_dim = 300
@@ -41,22 +43,28 @@ class Grammar:
             return prev_state
 
         def parse_symbol(line):
-            assert symbol_sign in line, "Symbol format error in line {}: {}".format(cur_line, line)
+            assert symbol_sign in line, "Symbol format error in line {}: {}".format(
+                cur_line, line
+            )
             symbol, symbol_name = line.split(symbol_sign)
             self.symbols[symbol] = symbol_name
 
         def parse_action(line):
-            assert action_sign in line, "Action Format error in line {}: {}".format(cur_line, line)
+            assert action_sign in line, "Action Format error in line {}: {}".format(
+                cur_line, line
+            )
             left_symbol, right_symbols = line.split(action_sign)
             actions = right_symbols.strip(" ").split(" | ")
-            assert left_symbol not in self.actions.keys(), "Overwriting previous action rule in line {}".format(cur_line)
+            assert (
+                left_symbol not in self.actions.keys()
+            ), "Overwriting previous action rule in line {}".format(cur_line)
             self.actions[left_symbol] = actions
             # Set Start Symbol
             if not self.start_symbol:
                 self.start_symbol = left_symbol
 
         # Parse Manifesto File
-        with open(manifesto_path, 'r') as f:
+        with open(manifesto_path, "r") as f:
             lines = f.readlines()
             cur_state = None
             for line in lines:
@@ -83,16 +91,24 @@ class Grammar:
                 action_list += [(key, idx)]
 
         # action-to-id
-        self.action_to_action_id = {action_list[idx]: idx for idx in range(len(action_list))}
+        self.action_to_action_id = {
+            action_list[idx]: idx for idx in range(len(action_list))
+        }
 
         # id-to-action
-        self.action_id_to_action = {idx: action_list[idx] for idx in range(len(action_list))}
+        self.action_id_to_action = {
+            idx: action_list[idx] for idx in range(len(action_list))
+        }
 
         # symbol_id_to_symbol
-        self.symbol_id_to_symbol = {idx: symbol for idx, symbol in enumerate(self.symbols)}
+        self.symbol_id_to_symbol = {
+            idx: symbol for idx, symbol in enumerate(self.symbols)
+        }
 
         # symbol_to_symbol_id
-        self.symbol_to_symbol_id = {symbol: idx for idx, symbol in enumerate(self.symbols)}
+        self.symbol_to_symbol_id = {
+            symbol: idx for idx, symbol in enumerate(self.symbols)
+        }
 
     def action_to_string(self, symbol, idx):
         return "{} ::= {}".format(symbol, self.actions[symbol][idx])
@@ -130,9 +146,15 @@ class Grammar:
 
     def get_next_possible_action_ids(self, symbol_id):
         symbol = self.symbol_id_to_symbol[symbol_id]
-        return [self.action_to_action_id[(symbol, idx)] for idx in range(len(self.actions[symbol]))]
+        return [
+            self.action_to_action_id[(symbol, idx)]
+            for idx in range(len(self.actions[symbol]))
+        ]
+
 
 if __name__ == "__main__":
-    mani_path = "/home/hkkang/debugging/irnet_qgm_transformer/qgm_transformer/qgm.manifesto"
+    mani_path = (
+        "/home/hkkang/debugging/irnet_qgm_transformer/qgm_transformer/qgm.manifesto"
+    )
     grammar = Grammar(mani_path)
     stop = 1
