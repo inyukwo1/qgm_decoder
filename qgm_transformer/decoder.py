@@ -20,8 +20,10 @@ class QGM_Transformer_Decoder(nn.Module):
         dim = 300
         d_model = 300
         self.nhead = 6
-        self.affine_layer = nn.Linear(dim, dim)
-        self.linear_layer = nn.Linear(d_model, d_model)
+        self.att_affine_layer = nn.Linear(dim, dim)
+        self.tgt_affine_layer = nn.Linear(dim, dim)
+        self.tgt_linear_layer = nn.Linear(dim*2, d_model)
+        self.out_linear_layer = nn.Linear(d_model, dim)
 
         # Transformer Layers
         decoder_layer = TransformerDecoderLayer(d_model=d_model, nhead=self.nhead)
@@ -73,10 +75,9 @@ class QGM_Transformer_Decoder(nn.Module):
 
         # Decode
         while not state.is_done():
-            # print("Step: {}".format(state.step_cnt))
             # Get sub-mini-batch
             memory = state.get_memory()
-            tgt = state.get_tgt()
+            tgt = state.get_tgt(self.tgt_affine_layer, self.tgt_linear_layer)
             memory_mask = state.get_memory_mask(self.nhead, tgt_size=tgt.shape[0])
 
             # Decode
@@ -84,7 +85,7 @@ class QGM_Transformer_Decoder(nn.Module):
             out = self.transformer_decoder(
                 tgt, memory, memory_mask=memory_mask
             ).transpose(0, 1)
-            out = self.linear_layer(out[:, -1:, :])
+            out = self.out_linear_layer(out[:, -1:, :])
 
             # Get views
             action_view, column_view, table_view = state.get_views()
@@ -97,8 +98,7 @@ class QGM_Transformer_Decoder(nn.Module):
                     [
                         self.grammar.get_next_possible_action_ids(cur_node)
                         for cur_node in current_nodes
-                    ],
-                    dtype=torch.long,
+                    ]
                 )
 
                 # Get input mask
@@ -149,8 +149,8 @@ class QGM_Transformer_Decoder(nn.Module):
 
     def predict(self, view, out, src, src_mask):
         # Calculate similarity
-        probs = self.calculate_attention_weights(
-            src, out, source_mask=src_mask, affine_layer=self.affine_layer
+        probs = utils.calculate_attention_weights(
+            src, out, source_mask=src_mask, affine_layer=self.att_affine_layer
         )
 
         if self.training:
@@ -163,25 +163,9 @@ class QGM_Transformer_Decoder(nn.Module):
             pred_probs = pred_probs.squeeze(1)
             pred_indices = [int(item) for item in pred_indices.squeeze(1)]
 
-        # print("pred indices: {}".format(pred_indices))
-        # print("probs: {}".format(probs))
         view.save_loss(pred_probs)
         view.save_pred(pred_indices)
 
-    def calculate_attention_weights(
-        self, source, query, source_mask=None, affine_layer=None
-    ):
-        if affine_layer:
-            source = affine_layer(source)
-        weight_scores = torch.bmm(source, query.transpose(1, 2)).squeeze(-1)
-
-        # Masking
-        if source_mask is not None:
-            weight_scores.data.masked_fill_(source_mask.bool(), -float("inf"))
-
-        weight_probs = torch.log_softmax(weight_scores, dim=-1)
-
-        return weight_probs
 
     def get_accuracy(self, pred_qgm_actions, gold_qgm_actions):
         # process gold_qgm_actions
@@ -245,14 +229,14 @@ class QGM_Transformer_Decoder(nn.Module):
 
             # More detailed Accs
             # Head Num: Count number of B
-            pred_head_cnt = utils.count_symbol(pred_qgm_action, "B")
-            gold_head_cnt = utils.count_symbol(gold_qgm_action, "B")
-            head_cnt_is_correct = pred_head_cnt == gold_head_cnt
+            pred_head_num = utils.count_symbol(pred_qgm_action, "B")
+            gold_head_num = utils.count_symbol(gold_qgm_action, "B")
+            head_num_is_correct = pred_head_num == gold_head_num
 
             # Head others
-            head_agg_is_correct = head_col_is_correct = head_cnt_is_correct
+            head_agg_is_correct = head_col_is_correct = head_num_is_correct
 
-            if head_cnt_is_correct:
+            if head_num_is_correct:
                 # Head Agg: Check A after H
                 pred_head_agg = utils.filter_action(pred_qgm_action, "A", ["H"])
                 gold_head_agg = utils.filter_action(gold_qgm_action, "A", ["H"])
@@ -262,38 +246,38 @@ class QGM_Transformer_Decoder(nn.Module):
                 gold_head_col = utils.filter_action(gold_qgm_action, "C", ["H", "A"])
                 head_col_is_correct = pred_head_col == gold_head_col
 
-            total_acc["head_num"] += head_cnt_is_correct
+            total_acc["head_num"] += head_num_is_correct
             total_acc["head_agg"] += head_agg_is_correct
             total_acc["head_col"] += head_col_is_correct
 
             # Quantifier Num: Count number of Q
             pred_quan_num = utils.count_symbol(pred_qgm_action, "Q")
             gold_quan_num = utils.count_symbol(gold_qgm_action, "Q")
-            quan_cnt_is_correct = pred_quan_num == gold_quan_num
+            quan_num_is_correct = pred_quan_num == gold_quan_num
 
             # Quantifier others
-            quan_tab_is_correct = quan_cnt_is_correct
-            if quan_cnt_is_correct:
+            quan_tab_is_correct = quan_num_is_correct
+            if quan_num_is_correct:
                 # Quantifier Tab: Check T After Q
                 pred_quan_tab = utils.filter_action(pred_qgm_action, "T", ["Q"])
                 gold_quan_tab = utils.filter_action(gold_qgm_action, "T", ["Q"])
                 quan_tab_is_correct = pred_quan_tab == gold_quan_tab
 
-            total_acc["quantifier_num"] += quan_cnt_is_correct
+            total_acc["quantifier_num"] += quan_num_is_correct
             total_acc["quantifier_tab"] += quan_tab_is_correct
 
             # Predicate Num: Count number of P
-            pred_predicate_cnt = utils.count_symbol(pred_qgm_action, "P")
-            gold_predicate_cnt = utils.count_symbol(gold_qgm_action, "P")
-            predicate_cnt_is_correct = pred_predicate_cnt == gold_predicate_cnt
+            pred_predicate_num = utils.count_symbol(pred_qgm_action, "P")
+            gold_predicate_num = utils.count_symbol(gold_qgm_action, "P")
+            predicate_num_is_correct = pred_predicate_num == gold_predicate_num
 
             # Others
             predicate_op_is_correct = (
                 predicate_agg_is_correct
-            ) = predicate_col_is_correct = predicate_cnt_is_correct
+            ) = predicate_col_is_correct = predicate_num_is_correct
 
             # Predicate Num: Count number of P
-            if predicate_cnt_is_correct:
+            if predicate_num_is_correct:
                 # Predicate op: Check O After P
                 pred_predicate_op = utils.filter_action(pred_qgm_action, "O", ["P"])
                 gold_predicate_op = utils.filter_action(gold_qgm_action, "O", ["P"])
@@ -313,6 +297,7 @@ class QGM_Transformer_Decoder(nn.Module):
                 )
                 predicate_col_is_correct = pred_predicate_col == gold_predicate_col
 
+            total_acc["local_predicate_num"] += predicate_num_is_correct
             total_acc["local_predicate_agg"] += predicate_agg_is_correct
             total_acc["local_predicate_col"] += predicate_col_is_correct
             total_acc["local_predicate_op"] += predicate_op_is_correct
