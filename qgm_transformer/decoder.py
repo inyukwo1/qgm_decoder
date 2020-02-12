@@ -192,7 +192,22 @@ class QGM_Transformer_Decoder(nn.Module):
                 tmp += [(symbol, int(idx))]
             parsed_gold_qgm_actions += [tmp]
 
-        total_acc = {"total": 0.0, "detail": 0.0, "sketch": 0.0}
+        keys = [
+            "total",
+            "detail",
+            "sketch",
+            "head_num",
+            "head_agg",
+            "head_col",
+            "quantifier_num",
+            "quantifier_tab",
+            "local_predicate_num",
+            "local_predicate_op",
+            "local_predicate_agg",
+            "local_predicate_col",
+        ]
+        total_acc = {key: 0.0 for key in keys}
+
         is_correct_list = []
 
         assert len(pred_qgm_actions) == len(parsed_gold_qgm_actions)
@@ -245,9 +260,9 @@ class QGM_Transformer_Decoder(nn.Module):
                 gold_head_col = utils.filter_action(gold_qgm_action, "C", ["H", "A"])
                 head_col_is_correct = pred_head_col == gold_head_col
 
-            total_acc["head_num"] = head_cnt_is_correct
-            total_acc["head_agg"] = head_agg_is_correct
-            total_acc["head_col"] = head_col_is_correct
+            total_acc["head_num"] += head_cnt_is_correct
+            total_acc["head_agg"] += head_agg_is_correct
+            total_acc["head_col"] += head_col_is_correct
 
             # Quantifier Num: Count number of Q
             pred_quan_num = utils.count_symbol(pred_qgm_action, "Q")
@@ -262,8 +277,8 @@ class QGM_Transformer_Decoder(nn.Module):
                 gold_quan_tab = utils.filter_action(gold_qgm_action, "T", ["Q"])
                 quan_tab_is_correct = pred_quan_tab == gold_quan_tab
 
-            total_acc["quantifier_num"] = quan_cnt_is_correct
-            total_acc["quantifier_tab"] = quan_tab_is_correct
+            total_acc["quantifier_num"] += quan_cnt_is_correct
+            total_acc["quantifier_tab"] += quan_tab_is_correct
 
             # Predicate Num: Count number of P
             pred_predicate_cnt = utils.count_symbol(pred_qgm_action, "P")
@@ -271,7 +286,9 @@ class QGM_Transformer_Decoder(nn.Module):
             predicate_cnt_is_correct = pred_predicate_cnt == gold_predicate_cnt
 
             # Others
-            predicate_op_is_correct = predicate_agg_is_correct = predicate_col_is_correct = predicate_cnt_is_correct
+            predicate_op_is_correct = (
+                predicate_agg_is_correct
+            ) = predicate_col_is_correct = predicate_cnt_is_correct
 
             # Predicate Num: Count number of P
             if predicate_cnt_is_correct:
@@ -286,13 +303,17 @@ class QGM_Transformer_Decoder(nn.Module):
                 predicate_agg_is_correct = pred_predicate_agg == gold_predicate_agg
 
                 # Predicate Col: Check C After O A
-                pred_predicate_col = utils.filter_action(pred_qgm_action, "C", ["O", "A"])
-                gold_predicate_col = utils.filter_action(gold_qgm_action, "C", ["O", "A"])
+                pred_predicate_col = utils.filter_action(
+                    pred_qgm_action, "C", ["O", "A"]
+                )
+                gold_predicate_col = utils.filter_action(
+                    gold_qgm_action, "C", ["O", "A"]
+                )
                 predicate_col_is_correct = pred_predicate_col == gold_predicate_col
 
-            total_acc["local_predicate_agg"] = predicate_agg_is_correct
-            total_acc["local_predicate_col"] = predicate_col_is_correct
-            total_acc["local_predicate_op"] = predicate_op_is_correct
+            total_acc["local_predicate_agg"] += predicate_agg_is_correct
+            total_acc["local_predicate_col"] += predicate_col_is_correct
+            total_acc["local_predicate_op"] += predicate_op_is_correct
 
         for key in total_acc.keys():
             total_acc[key] = total_acc[key] / len(gold_qgm_actions)

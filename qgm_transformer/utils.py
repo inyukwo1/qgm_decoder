@@ -30,6 +30,9 @@ def filter_action(qgm_action, target_symbol, prev_symbols):
             # is possible to satisfy condition
             if prev_symbols and idx >= len(prev_symbols):
                 # Check if satisfy prev symbol condition
-                if False not in [qgm_action[idx-(s_idx+1)][0] == prev_symbol for s_idx, prev_symbol in enumerate(prev_symbols)]:
+                if False not in [
+                    qgm_action[idx - (s_idx + 1)][0] == prev_symbol
+                    for s_idx, prev_symbol in enumerate(prev_symbols)
+                ]:
                     actions += [action]
     return actions
