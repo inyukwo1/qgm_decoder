@@ -315,15 +315,16 @@ class IRNet(BasicModel):
                     b_tmp += [tab_tmp]
                 tab_col_dic += [b_tmp]
 
-            losses, pred = self.decoder(src_encodings,
-                         table_embedding,
-                         schema_embedding,
-                         src_mask,
-                         col_mask,
-                         tab_mask,
-                         tab_col_dic,
-                         batch.qgm_action
-                         )
+            losses, pred = self.decoder(
+                src_encodings,
+                table_embedding,
+                schema_embedding,
+                src_mask,
+                col_mask,
+                tab_mask,
+                tab_col_dic,
+                batch.qgm_action,
+            )
 
             return losses
 
@@ -437,15 +438,16 @@ class IRNet(BasicModel):
                         b_tmp += [tab_tmp]
                     tab_col_dic += [b_tmp]
 
-                losses, pred = self.decoder(src_encodings,
-                                          table_embedding,
-                                          schema_embedding,
-                                          src_mask,
-                                          col_mask,
-                                          tab_mask,
-                                          tab_col_dic,
-                                          batch.qgm_action
-                                          )
+                losses, pred = self.decoder(
+                    src_encodings,
+                    table_embedding,
+                    schema_embedding,
+                    src_mask,
+                    col_mask,
+                    tab_mask,
+                    tab_col_dic,
+                    batch.qgm_action,
+                )
 
                 return pred
 

@@ -36,6 +36,7 @@ class Example:
         col_pred=None,
         tokenized_src_sent=None,
         qgm=None,
+        qgm_action=None,
     ):
         self.src_sent = src_sent
         self.tokenized_src_sent = tokenized_src_sent
@@ -59,6 +60,7 @@ class Example:
         self.tgt_actions = tgt_actions
         self.truth_actions = copy.deepcopy(tgt_actions)
         self.qgm = qgm
+        self.qgm_action =qgm_action
         self.sketch = list()
         if self.truth_actions:
             for ta in self.truth_actions:
@@ -124,6 +126,7 @@ class Batch(object):
         self.table_col_len = [e.table_col_len for e in examples]
         self.col_pred = [e.col_pred for e in examples]
         self.qgm = [e.qgm for e in examples]
+        self.qgm_action = [e.qgm_action for e in examples]
 
         self.grammar = grammar
         self.cuda = is_cuda

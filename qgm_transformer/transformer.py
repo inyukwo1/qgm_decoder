@@ -50,6 +50,7 @@ class TransformerDecoderLayer(Module):
         self.dropout2 = Dropout(dropout)
         self.dropout3 = Dropout(dropout)
 
+
         self.activation = _get_activation_fn(activation)
 
     def __setstate__(self, state):

@@ -31,6 +31,7 @@ if __name__ == "__main__":
         action="store_true",
         help="If set, use small data; used for fast debugging.",
     )
+
     parser.add_argument("--load_model", type=str, default="", help="saved model path")
     parser.add_argument("--cuda", type=int, default="-1", help="GPU number")
     args = parser.parse_args()

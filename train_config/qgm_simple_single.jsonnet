@@ -3,7 +3,8 @@
 
 # Path
 "data_path": "./data",
-"data_names": ["spider", "wikisql", "wikitablequestions", "patients"],
+#"data_names": ["spider", "wikisql", "wikitablequestions", "patients"],
+"data_names": ["spider"],
 "glove_embed_path": "./data/glove.42B.300d.txt",
 "log_path": "./logs/",
 "log_key": "qgm_simple_single",

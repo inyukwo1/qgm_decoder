@@ -472,7 +472,13 @@ def epoch_train(
 
 
 def epoch_acc(
-    model, batch_size, sql_data, table_data, is_transformer=True, is_qgm=True, return_details=False
+    model,
+    batch_size,
+    sql_data,
+    table_data,
+    is_transformer=True,
+    is_qgm=True,
+    return_details=False,
 ):
     model.eval()
     perm = list(range(len(sql_data)))
