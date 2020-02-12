@@ -234,7 +234,7 @@ if __name__ == "__main__":
             )
 
             # Save if total_acc is higher
-            if best_val_acc < val_acc["total"]:
+            if best_val_acc <= val_acc["total"]:
                 best_val_acc = val_acc["total"]
                 print("Saving new best model with acc: {}".format(best_val_acc))
                 torch.save(

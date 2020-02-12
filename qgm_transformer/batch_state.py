@@ -154,8 +154,8 @@ class TransformerBatchState:
         self._combine_view(table_view)
 
     def get_current_action_node(self):
-        last_action = [self.nonterminal_stack[b_idx][0] for b_idx in self.b_indices]
-        return last_action
+        symbols = [self.nonterminal_stack[b_idx][0] for b_idx in self.b_indices]
+        return symbols
 
     def is_done(self):
         return not bool(self.b_indices)

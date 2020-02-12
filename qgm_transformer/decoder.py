@@ -25,7 +25,7 @@ class QGM_Transformer_Decoder(nn.Module):
 
         # Transformer Layers
         decoder_layer = TransformerDecoderLayer(d_model=d_model, nhead=self.nhead)
-        self.transformer_decoder = TransformerDecoder(decoder_layer, num_layers=6)
+        self.transformer_decoder = TransformerDecoder(decoder_layer, num_layers=3)
         self._init_positional_embedding(d_model)
 
     def _init_positional_embedding(self, d_model, dropout=0.1, max_len=5000):
@@ -73,6 +73,7 @@ class QGM_Transformer_Decoder(nn.Module):
 
         # Decode
         while not state.is_done():
+            #print("Step: {}".format(state.step_cnt))
             # Get sub-mini-batch
             memory = state.get_memory()
             tgt = state.get_tgt()
@@ -141,7 +142,7 @@ class QGM_Transformer_Decoder(nn.Module):
             state.update_state()
 
         # get losses, preds
-        return (state.sketch_loss, state.detail_loss), state.pred_history
+        return (torch.stack(state.sketch_loss), torch.stack(state.detail_loss)), state.pred_history
 
     def predict(self, view, out, src, src_mask):
         # Calculate similarity
@@ -159,6 +160,8 @@ class QGM_Transformer_Decoder(nn.Module):
             pred_probs = pred_probs.squeeze(1)
             pred_indices = [int(item) for item in pred_indices.squeeze(1)]
 
+        #print("pred indices: {}".format(pred_indices))
+        #print("probs: {}".format(probs))
         view.save_loss(pred_probs)
         view.save_pred(pred_indices)
 
@@ -185,7 +188,7 @@ class QGM_Transformer_Decoder(nn.Module):
             for item in qgm_action.split(" "):
                 symbol = item.split("(")[0]
                 idx = item.split("(")[1].split(")")[0]
-                tmp += [(symbol, idx)]
+                tmp += [(symbol, int(idx))]
             parsed_gold_qgm_actions += [tmp]
 
         total_acc = {"total": 0.0, "detail": 0.0, "sketch": 0.0}

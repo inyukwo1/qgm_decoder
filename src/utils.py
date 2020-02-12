@@ -409,16 +409,17 @@ def epoch_train(
 
         result = model.forward(examples)
         if is_transformer:
-            sketch_loss, detail_loss = result
+            sketch_losses, detail_losses = result
             if not total_loss:
                 total_loss["sketch"] = []
                 total_loss["detail"] = []
-            for sketch_loss in sketch_loss:
+                total_loss["total"] = []
+            for sketch_loss, detail_loss in zip(sketch_losses, detail_losses):
                 total_loss["sketch"] += [float(sketch_loss)]
-            for detail_loss in detail_loss:
                 total_loss["detail"] += [float(detail_loss)]
+                total_loss["total"] += [float(sketch_loss) + float(detail_loss)]
 
-            loss = torch.mean(sketch_loss) + torch.mean(detail_loss)
+            loss = torch.mean(sketch_losses) + torch.mean(detail_losses)
         elif is_qgm:
             losses, pred_boxes = result
 
