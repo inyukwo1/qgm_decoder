@@ -652,7 +652,7 @@ def write_eval_result_as(file_name, datas, is_corrects, accs, preds, golds):
             gold = sort_dic(gold)
             ans = "Correct" if is_corrects[idx] else "Wrong"
 
-            f.write("idx:    {}\n".format(idx))
+            f.write("\nidx:    {}\n".format(idx))
             f.write("ans:    {}\n".format(ans))
             f.write("db_id:  {}\n".format(sql_json["db_id"]))
             f.write("SQL:    {}\n".format(sql_json["query"]))
@@ -672,16 +672,16 @@ def write_eval_result_as(file_name, datas, is_corrects, accs, preds, golds):
                 q_type_list += [
                     "{}{}{}{}".format(q_type_pad, q_type, q_type_pad, q_type_pad_extra)
                 ]
-            f.write("q:      {}\n".format(q_list))
-            f.write("q_type: {}\n".format(q_type_list))
+            f.write("\nq:      | {} |\n".format(" | ".join(q_list)))
+            f.write("q_type: | {} |\n".format(" | ".join(q_type_list)))
 
             f.write(
-                "table:  {}\n".format(
+                "\ntable:  {}\n".format(
                     str(
-                        [
-                            (idx, sql_json["table_names"][idx])
+                        " ".join([
+                            "({}-{}: {})".format(sql_json["col_table"][idx], idx, sql_json["table_names"][idx])
                             for idx in range(len(sql_json["table_names"]))
-                        ]
+                        ])
                     )
                 )
             )
@@ -689,16 +689,16 @@ def write_eval_result_as(file_name, datas, is_corrects, accs, preds, golds):
             f.write(
                 "column: {}\n".format(
                     str(
-                        [
-                            (idx, sql_json["col"][idx])
+                        " ".join([
+                            "({}-{}: {})".format(sql_json["col_table"][idx], idx, sql_json["col"][idx])
                             for idx in range(len(sql_json["col"]))
-                        ]
+                        ])
                     )
                 )
             )
-            f.write("gold:   {}\n".format(gold))
+            f.write("\ngold:   {}\n".format(gold))
             f.write("pred:   {}\n".format(pred))
-            f.write("\n")
+            f.write("\n\n{}\n\n".format("-" * 200))
 
 
 def logging_to_tensorboard(summary_writer, prefix, summary, epoch):
