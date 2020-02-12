@@ -1,9 +1,9 @@
 import math
 import torch
 import torch.nn as nn
+import qgm_transformer.utils as utils
 from qgm_transformer.grammar import Grammar
 from qgm_transformer.batch_state import TransformerBatchState
-from qgm_transformer.utils import array_to_tensor
 from qgm_transformer.transformer import TransformerDecoderLayer, TransformerDecoder
 
 
@@ -93,7 +93,7 @@ class QGM_Transformer_Decoder(nn.Module):
             if action_view:
                 # Get input: last action
                 current_nodes = action_view.get_current_action_node()
-                next_action_ids = array_to_tensor(
+                next_action_ids = utils.array_to_tensor(
                     [
                         self.grammar.get_next_possible_action_ids(cur_node)
                         for cur_node in current_nodes
@@ -224,6 +224,74 @@ class QGM_Transformer_Decoder(nn.Module):
             total_acc["total"] += total_is_correct
 
             is_correct_list += [total_is_correct]
+
+            # More detailed Accs
+            # Head Num: Count number of B
+            pred_head_cnt = utils.count_symbol(pred_qgm_action, "B")
+            gold_head_cnt = utils.count_symbol(gold_qgm_action, "B")
+            head_cnt_is_correct = pred_head_cnt == gold_head_cnt
+
+            # Head others
+            head_agg_is_correct = head_col_is_correct = head_cnt_is_correct
+
+            if head_cnt_is_correct:
+                # Head Agg: Check A after H
+                pred_head_agg = utils.filter_action(pred_qgm_action, "A", ["H"])
+                gold_head_agg = utils.filter_action(gold_qgm_action, "A", ["H"])
+                head_agg_is_correct = pred_head_agg == gold_head_agg
+                # Head col: Check C After H A
+                pred_head_col = utils.filter_action(pred_qgm_action, "C", ["H", "A"])
+                gold_head_col = utils.filter_action(gold_qgm_action, "C", ["H", "A"])
+                head_col_is_correct = pred_head_col == gold_head_col
+
+            total_acc["head_num"] = head_cnt_is_correct
+            total_acc["head_agg"] = head_agg_is_correct
+            total_acc["head_col"] = head_col_is_correct
+
+            # Quantifier Num: Count number of Q
+            pred_quan_num = utils.count_symbol(pred_qgm_action, "Q")
+            gold_quan_num = utils.count_symbol(gold_qgm_action, "Q")
+            quan_cnt_is_correct = pred_quan_num == gold_quan_num
+
+            # Quantifier others
+            quan_tab_is_correct = quan_cnt_is_correct
+            if quan_cnt_is_correct:
+                # Quantifier Tab: Check T After Q
+                pred_quan_tab = utils.filter_action(pred_qgm_action, "T", ["Q"])
+                gold_quan_tab = utils.filter_action(gold_qgm_action, "T", ["Q"])
+                quan_tab_is_correct = pred_quan_tab == gold_quan_tab
+
+            total_acc["quantifier_num"] = quan_cnt_is_correct
+            total_acc["quantifier_tab"] = quan_tab_is_correct
+
+            # Predicate Num: Count number of P
+            pred_predicate_cnt = utils.count_symbol(pred_qgm_action, "P")
+            gold_predicate_cnt = utils.count_symbol(gold_qgm_action, "P")
+            predicate_cnt_is_correct = pred_predicate_cnt == gold_predicate_cnt
+
+            # Others
+            predicate_op_is_correct = predicate_agg_is_correct = predicate_col_is_correct = predicate_cnt_is_correct
+
+            # Predicate Num: Count number of P
+            if predicate_cnt_is_correct:
+                # Predicate op: Check O After P
+                pred_predicate_op = utils.filter_action(pred_qgm_action, "O", ["P"])
+                gold_predicate_op = utils.filter_action(gold_qgm_action, "O", ["P"])
+                predicate_op_is_correct = pred_predicate_op == gold_predicate_op
+
+                # Predicate Agg: Check A After O
+                pred_predicate_agg = utils.filter_action(pred_qgm_action, "A", ["O"])
+                gold_predicate_agg = utils.filter_action(gold_qgm_action, "A", ["O"])
+                predicate_agg_is_correct = pred_predicate_agg == gold_predicate_agg
+
+                # Predicate Col: Check C After O A
+                pred_predicate_col = utils.filter_action(pred_qgm_action, "C", ["O", "A"])
+                gold_predicate_col = utils.filter_action(gold_qgm_action, "C", ["O", "A"])
+                predicate_col_is_correct = pred_predicate_col == gold_predicate_col
+
+            total_acc["local_predicate_agg"] = predicate_agg_is_correct
+            total_acc["local_predicate_col"] = predicate_col_is_correct
+            total_acc["local_predicate_op"] = predicate_op_is_correct
 
         for key in total_acc.keys():
             total_acc[key] = total_acc[key] / len(gold_qgm_actions)
