@@ -88,7 +88,7 @@ class IRNet(BasicModel):
 
         # QGM Decoer
         if self.is_transformer:
-            self.decoder = QGM_Transformer_Decoder()
+            self.decoder = QGM_Transformer_Decoder(self.is_bert)
         elif self.is_qgm:
             self.decoder = QGM_Decoder(self.h_params["embed_size"])
         else:

@@ -2,7 +2,7 @@ import torch.nn as nn
 
 
 class Grammar:
-    def __init__(self, manifesto_path):
+    def __init__(self, is_bert, manifesto_path):
         # Symbol
         self.symbols = {}
         self.terminals = []
@@ -18,7 +18,7 @@ class Grammar:
         self.terminals = [key for key in self.symbols.keys() if key not in self.actions.keys()]
 
         # Embeddings
-        emb_dim = 300
+        emb_dim = 1024 if is_bert else 300
         self.symbol_emb = nn.Embedding(len(self.symbols), emb_dim).cuda()
         self.action_emb = nn.Embedding(len(self.action_to_action_id), emb_dim).cuda()
 

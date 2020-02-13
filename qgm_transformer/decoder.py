@@ -8,19 +8,19 @@ from qgm_transformer.transformer import TransformerDecoderLayer, TransformerDeco
 
 
 class QGM_Transformer_Decoder(nn.Module):
-    def __init__(self):
+    def __init__(self, is_bert):
         super(QGM_Transformer_Decoder, self).__init__()
         # Grammar
         mani_path = (
             "/home/hkkang/debugging/irnet_qgm_transformer/qgm_transformer/qgm.manifesto"
         )
-        self.grammar = Grammar(mani_path)
+        self.grammar = Grammar(is_bert, mani_path)
 
         # Decode Layers
-        dim =300
-        d_model = 300
+        dim = 1024 if is_bert else 300
+        d_model = 1024 if is_bert else 300
         self.dim = dim
-        self.nhead = 6
+        self.nhead = 8 if is_bert else 6
         self.att_affine_layer = nn.Linear(dim, dim)
         self.tgt_affine_layer = nn.Linear(dim, dim)
         self.tgt_linear_layer = nn.Linear(dim*2, d_model)
@@ -241,8 +241,8 @@ class QGM_Transformer_Decoder(nn.Module):
 
             # More detailed Accs
             # Head Num: Count number of B
-            pred_head_num = utils.count_symbol(pred_qgm_action, "B")
-            gold_head_num = utils.count_symbol(gold_qgm_action, "B")
+            pred_head_num = utils.count_symbol(pred_qgm_action, "H")
+            gold_head_num = utils.count_symbol(gold_qgm_action, "H")
             head_num_is_correct = pred_head_num == gold_head_num
 
             # Head others
