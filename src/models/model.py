@@ -43,7 +43,7 @@ class IRNet(BasicModel):
         self.is_bert = H_PARAMS["bert"] != -1
         self.is_cuda = is_cuda
         self.is_qgm = is_qgm
-        self.is_transformer = True
+        self.is_transformer = is_qgm
         self.use_column_pointer = H_PARAMS["column_pointer"]
         self.use_sentence_features = H_PARAMS["sentence_features"]
 
@@ -85,6 +85,7 @@ class IRNet(BasicModel):
         )
 
         self.dropout = nn.Dropout(self.h_params["dropout"])
+        self.captum_iden = nn.Dropout(0.000001)
 
         # QGM Decoer
         if self.is_transformer:
@@ -236,55 +237,60 @@ class IRNet(BasicModel):
 
         return src_encodings, table_embedding, schema_embedding, embedding[:, 0, :]
 
-    def forward(self, examples):
-        # now should implement the examples
+    def lstm_encode(self, batch, src_embedding=None):
+        src_encodings, (last_state, last_cell) = self.encode(
+            batch.src_sents, batch.src_sents_len, None, src_token_embed=src_embedding
+        )
+
+        src_encodings = self.dropout(src_encodings)
+        if src_embedding is None:
+            src_embedding = self.gen_x_batch(batch.src_sents)
+
+        table_embedding = self.gen_x_batch(batch.table_sents)
+        schema_embedding = self.gen_x_batch(batch.table_names)
+        # get emb differ
+        embedding_differ = self.embedding_cosine(
+            src_embedding=src_embedding,
+            table_embedding=table_embedding,
+            table_unk_mask=batch.table_unk_mask,
+        )
+
+        schema_differ = self.embedding_cosine(
+            src_embedding=src_embedding,
+            table_embedding=schema_embedding,
+            table_unk_mask=batch.schema_token_mask,
+        )
+
+        tab_ctx = (src_encodings.unsqueeze(1) * embedding_differ.unsqueeze(3)).sum(2)
+        schema_ctx = (src_encodings.unsqueeze(1) * schema_differ.unsqueeze(3)).sum(2)
+
+        table_embedding = table_embedding + tab_ctx
+
+        schema_embedding = schema_embedding + schema_ctx
+
+        col_type = self.input_type(batch.col_hot_type)
+
+        col_type_var = self.col_type(col_type)
+
+        tab_type = self.input_type(batch.tab_hot_type)
+
+        tab_type_var = self.tab_type(tab_type)
+
+        table_embedding = table_embedding + col_type_var
+
+        schema_embedding = schema_embedding + tab_type_var
+        return src_encodings, table_embedding, schema_embedding, last_cell
+
+    def forward_until_step(self, src_embeddings, examples, step):
         batch = Batch(examples, is_cuda=self.is_cuda)
 
         if self.h_params["bert"] == -1:
-            src_encodings, (last_state, last_cell) = self.encode(
-                batch.src_sents, batch.src_sents_len, None
-            )
-
-            src_encodings = self.dropout(src_encodings)
-
-            table_embedding = self.gen_x_batch(batch.table_sents)
-            src_embedding = self.gen_x_batch(batch.src_sents)
-            schema_embedding = self.gen_x_batch(batch.table_names)
-            # get emb differ
-            embedding_differ = self.embedding_cosine(
-                src_embedding=src_embedding,
-                table_embedding=table_embedding,
-                table_unk_mask=batch.table_unk_mask,
-            )
-
-            schema_differ = self.embedding_cosine(
-                src_embedding=src_embedding,
-                table_embedding=schema_embedding,
-                table_unk_mask=batch.schema_token_mask,
-            )
-
-            tab_ctx = (src_encodings.unsqueeze(1) * embedding_differ.unsqueeze(3)).sum(
-                2
-            )
-            schema_ctx = (src_encodings.unsqueeze(1) * schema_differ.unsqueeze(3)).sum(
-                2
-            )
-
-            table_embedding = table_embedding + tab_ctx
-
-            schema_embedding = schema_embedding + schema_ctx
-
-            col_type = self.input_type(batch.col_hot_type)
-
-            col_type_var = self.col_type(col_type)
-
-            tab_type = self.input_type(batch.tab_hot_type)
-
-            tab_type_var = self.tab_type(tab_type)
-
-            table_embedding = table_embedding + col_type_var
-
-            schema_embedding = schema_embedding + tab_type_var
+            (
+                src_encodings,
+                table_embedding,
+                schema_embedding,
+                last_cell,
+            ) = self.lstm_encode(batch, src_embeddings)
         else:
             (
                 src_encodings,
@@ -294,6 +300,101 @@ class IRNet(BasicModel):
             ) = self.transformer_encode(batch)
             if src_encodings is None:
                 return None, None
+        src_encodings = self.captum_iden(src_encodings)
+
+        dec_init_vec = self.init_decoder_state(last_cell)
+
+        if self.is_transformer:
+            src_mask = batch.src_token_mask
+            col_mask = batch.table_token_mask
+            tab_mask = batch.schema_token_mask
+            col_tab_dic = batch.col_table_dict
+            tab_col_dic = []
+            for b_idx in range(len(col_tab_dic)):
+                b_tmp = []
+                tab_len = len(col_tab_dic[b_idx][0])
+                for t_idx in range(tab_len):
+                    tab_tmp = [
+                        idx
+                        for idx in range(len(col_tab_dic[b_idx]))
+                        if t_idx in col_tab_dic[b_idx][idx]
+                    ]
+                    b_tmp += [tab_tmp]
+                tab_col_dic += [b_tmp]
+
+            gold_action, pred_action, gold_score, pred_score = self.decoder(
+                src_encodings,
+                table_embedding,
+                schema_embedding,
+                src_mask,
+                col_mask,
+                tab_mask,
+                tab_col_dic,
+                batch.qgm_action,
+                step,
+                batch.table_sents,
+                batch.table_names_iter,
+            )
+
+        elif self.is_qgm:
+            src_mask = batch.src_token_mask
+            col_mask = batch.table_token_mask
+            tab_mask = batch.schema_token_mask
+            col_tab_dic = batch.col_table_dict
+            b_indices = torch.arange(len(batch)).cuda()
+
+            self.decoder.set_variables(
+                self.is_bert,
+                src_encodings,
+                table_embedding,
+                schema_embedding,
+                src_mask,
+                col_mask,
+                tab_mask,
+                col_tab_dic,
+                step,
+            )
+            pred_action, pred_score = self.decoder.decode_until_step(
+                b_indices, None, dec_init_vec, prev_box=None, gold_boxes=batch.qgm
+            )
+        else:
+            (
+                gold_action,
+                pred_action,
+                gold_score,
+                pred_score,
+            ) = self.decoder.decode_forward(
+                examples,
+                batch,
+                src_encodings,
+                table_embedding,
+                schema_embedding,
+                dec_init_vec,
+                step,
+            )
+        return gold_action, pred_action, gold_score, pred_score
+
+    def forward(self, examples):
+        # now should implement the examples
+        batch = Batch(examples, is_cuda=self.is_cuda)
+
+        if self.h_params["bert"] == -1:
+            (
+                src_encodings,
+                table_embedding,
+                schema_embedding,
+                last_cell,
+            ) = self.lstm_encode(batch)
+        else:
+            (
+                src_encodings,
+                table_embedding,
+                schema_embedding,
+                last_cell,
+            ) = self.transformer_encode(batch)
+            if src_encodings is None:
+                return None, None
+        src_encodings = self.captum_iden(src_encodings)
 
         dec_init_vec = self.init_decoder_state(last_cell)
 

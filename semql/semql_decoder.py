@@ -145,6 +145,7 @@ class SemQL_Decoder(nn.Module):
         table_embedding,
         schema_embedding,
         dec_init_vec,
+        step=None,  # for captum
     ):
         table_appear_mask = batch.table_appear_mask
 
@@ -231,6 +232,15 @@ class SemQL_Decoder(nn.Module):
             # get the Root possibility
             apply_rule_prob = torch.softmax(self.production_readout(att_t), dim=-1)
 
+            if t == step:
+                gold_action = examples[0].sketch[t].production
+                gold_action_id = self.grammar.prod2id[gold_action]
+                pred_action_id = torch.argmax(apply_rule_prob[-1]).item()
+                pred_action = self.grammar.id2prod[pred_action_id]
+                pred_probs = apply_rule_prob[:, pred_action_id]
+                gold_probs = apply_rule_prob[:, gold_action_id]
+                return gold_action, pred_action, gold_probs, pred_probs
+
             for e_id, example in enumerate(examples):
                 if t < len(example.sketch):
                     action_t = example.sketch[t]
@@ -255,6 +265,8 @@ class SemQL_Decoder(nn.Module):
         action_probs = [[] for _ in examples]
 
         h_tm1 = dec_init_vec
+
+        detail_t = 0
 
         for t in range(batch.max_action_num):
             if t == 0:
@@ -393,6 +405,43 @@ class SemQL_Decoder(nn.Module):
 
             table_weights = torch.softmax(table_weights, dim=-1)
 
+            if step == detail_t + batch.max_sketch_num:
+                gold_action_t = examples[0].tgt_actions[t]
+                if isinstance(gold_action_t, define_rule.C):
+                    gold_action_id = gold_action_t.id_c
+                    gold_action = "C({})".format(
+                        " ".join(examples[0].tab_cols[gold_action_id])
+                    )
+                    pred_action_id = torch.argmax(column_attention_weights[-1]).item()
+                    pred_action = "C({})".format(
+                        " ".join(examples[0].tab_cols[pred_action_id])
+                    )
+                    gold_probs = column_attention_weights[:, gold_action_id]
+                    pred_probs = column_attention_weights[:, pred_action_id]
+                    return gold_action, pred_action, gold_probs, pred_probs
+                elif isinstance(gold_action_t, define_rule.T):
+                    gold_action_id = gold_action_t.id_c
+                    gold_action = "T({})".format(
+                        " ".join(examples[0].table_names[gold_action_id])
+                    )
+                    pred_action_id = torch.argmax(table_weights[-1]).item()
+                    pred_action = "T({})".format(
+                        " ".join(examples[0].table_names[pred_action_id])
+                    )
+                    gold_probs = table_weights[:, gold_action_id]
+                    pred_probs = table_weights[:, pred_action_id]
+                    return gold_action, pred_action, gold_probs, pred_probs
+                elif isinstance(gold_action_t, define_rule.A):
+                    gold_action_id = self.grammar.prod2id[gold_action_t.production]
+                    gold_action = gold_action_t.production
+                    pred_action_id = torch.argmax(apply_rule_prob[-1]).item()
+                    pred_action = self.grammar.id2prod[pred_action_id]
+                    pred_probs = apply_rule_prob[:, pred_action_id]
+                    gold_probs = apply_rule_prob[:, gold_action_id]
+                    return gold_action, pred_action, gold_probs, pred_probs
+                else:
+                    pass
+
             for e_id, example in enumerate(examples):
                 if t < len(example.tgt_actions):
                     action_t = example.tgt_actions[t]
@@ -411,6 +460,12 @@ class SemQL_Decoder(nn.Module):
                         action_probs[e_id].append(act_prob_t_i)
                     else:
                         pass
+            if (
+                isinstance(examples[0].tgt_actions[t], define_rule.C)
+                or isinstance(examples[0].tgt_actions[t], define_rule.T)
+                or isinstance(examples[0].tgt_actions[t], define_rule.A)
+            ):
+                detail_t += 1
             h_tm1 = (h_t, cell_t)
             att_tm1 = att_t
         lf_prob_var = torch.stack(
@@ -420,6 +475,7 @@ class SemQL_Decoder(nn.Module):
             ],
             dim=0,
         )
+        assert step is None
 
         return [-sketch_prob_var, -lf_prob_var]
 

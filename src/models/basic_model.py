@@ -46,14 +46,17 @@ class BasicModel(nn.Module):
 
         return embedding_differ
 
-    def encode(self, src_sents_var, src_sents_len, q_onehot_project=None):
+    def encode(
+        self, src_sents_var, src_sents_len, q_onehot_project=None, src_token_embed=None
+    ):
         """
         encode the source sequence
         :return:
             src_encodings: Variable(batch_size, src_sent_len, hidden_size * 2)
             last_state, last_cell: Variable(batch_size, hidden_size)
         """
-        src_token_embed = self.gen_x_batch(src_sents_var)
+        if src_token_embed is None:
+            src_token_embed = self.gen_x_batch(src_sents_var)
 
         if q_onehot_project is not None:
             src_token_embed = torch.cat([src_token_embed, q_onehot_project], dim=-1)
