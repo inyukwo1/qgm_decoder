@@ -725,7 +725,7 @@ class QGM_Decoder(nn.Module):
                             alive_indices.remove(idx)
                 p_ctx_vector = p_ctx_vector[alive_indices]
                 p_cell_vector = p_cell_vector[alive_indices]
-                stop_loss = torch.nn.BCELoss(reduce=False)(stop_out, stop_gold)
+                stop_loss = torch.nn.BCELoss(reduction="none")(stop_out, stop_gold)
                 for idx, ori_idx in enumerate(ori_indices):
                     stop_p_probs[ori_idx] += stop_loss[idx]
                 if False not in stopped:

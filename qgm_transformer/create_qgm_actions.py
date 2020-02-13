@@ -33,15 +33,27 @@ def create_qgm_action(qgm_boxes):
 
 
 if __name__ == "__main__":
-    file_name = "../data/spider/dev.json"
-    # file_name = "../data/spider/train.json"
-    datas = json.load(open(file_name))
+    #file_name = "../data/wikitablequestions/dev.json"
+    file_name = "../data/wikitablequestions/train.json"
 
-    # Add qgm_actions
-    for data in datas:
-        qgm_action = create_qgm_action(data["qgm"])
-        data["qgm_action"] = qgm_action
+    dataset_names = ["spider", "wikisql", "wikitablequestions"]
+    data_types = ["dev", "train", "test"]
 
-    # Save
-    with open(file_name, "w") as f:
-        json.dump(datas, f)
+    for dataset_name in dataset_names:
+        for data_type in data_types:
+            if dataset_name == "spider" and data_type == "test":
+                continue
+            file_name = "../data/{}/{}.json".format(dataset_name, data_type)
+
+            print("Dealing with {}".format(file_name))
+
+            datas = json.load(open(file_name))
+
+            # Add qgm_actions
+            for data in datas:
+                qgm_action = create_qgm_action(data["qgm"])
+                data["qgm_action"] = qgm_action
+
+            # Save
+            with open(file_name, "w") as f:
+                json.dump(datas, f)

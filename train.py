@@ -14,6 +14,7 @@ import numpy as np
 from src import utils
 from src.models.model import IRNet
 from torch.utils.tensorboard import SummaryWriter
+from RAdam.radam import RAdam
 
 
 if __name__ == "__main__":
@@ -60,6 +61,7 @@ if __name__ == "__main__":
 
     # Set optimizer
     optimizer_cls = eval("torch.optim.%s" % H_PARAMS["optimizer"])
+    #optimizer_cls = RAdam
     optimizer = optimizer_cls(model.without_bert_params, lr=H_PARAMS["lr"])
     if H_PARAMS["bert"] != -1:
         bert_optimizer = optimizer_cls(
@@ -142,7 +144,7 @@ if __name__ == "__main__":
             list(itertools.chain.from_iterable(train_datas)),
             table_data,
             H_PARAMS["clip_grad"],
-            is_transformer=True,
+            is_transformer=H_PARAMS["is_transformer"],
             is_qgm=H_PARAMS["is_qgm"],
         )
 
@@ -168,7 +170,7 @@ if __name__ == "__main__":
                         H_PARAMS["batch_size"],
                         train_data,
                         table_data,
-                        is_transformer=True,
+                        is_transformer=H_PARAMS["is_transformer"],
                         is_qgm=H_PARAMS["is_qgm"],
                     )
                 ]
@@ -181,7 +183,7 @@ if __name__ == "__main__":
                         val_data,
                         table_data,
                         H_PARAMS["clip_grad"],
-                        is_transformer=True,
+                        is_transformer=H_PARAMS["is_transformer"],
                         is_qgm=H_PARAMS["is_qgm"],
                         is_train=False,
                     )
@@ -192,7 +194,7 @@ if __name__ == "__main__":
                         H_PARAMS["batch_size"],
                         val_data,
                         table_data,
-                        is_transformer=True,
+                        is_transformer=H_PARAMS["is_transformer"],
                         is_qgm=H_PARAMS["is_qgm"],
                     )
                 ]

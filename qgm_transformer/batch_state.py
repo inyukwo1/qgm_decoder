@@ -1,6 +1,6 @@
 import copy
 import torch
-from qgm_transformer.utils import array_to_tensor
+import qgm_transformer.utils as utils
 
 
 class TransformerBatchState:
@@ -178,23 +178,47 @@ class TransformerBatchState:
 
         return mask
 
-    def get_tgt(self):
-        view_indices = self.b_indices
-
+    def get_tgt(self, affine_layer, linear_layer):
         # Get prev symbols
-        prev_symbols = [
-            self.pred_history[idx] if self.pred_history[idx] else []
-            for idx in view_indices
+        prev_actions = [
+            self.pred_history[b_idx] if self.pred_history[b_idx] else []
+            for b_idx in self.b_indices
         ]
 
         # To symbols
-        symbols = self.grammar.action_to_symbol(prev_symbols)
-        for idx, b_idx in enumerate(view_indices):
+        symbols = self.grammar.actions_to_symbols(prev_actions)
+        for idx, b_idx in enumerate(self.b_indices):
             symbols[idx] += [self.nonterminal_stack[b_idx][0]]
 
-        # To tgt
-        symbols = array_to_tensor(symbols, torch.long)
-        tgt = self.grammar.symbol_emb(symbols)
+        # Get symbol embedding
+        symbols = utils.to_long_tensor(symbols)
+        symbol_embs = self.grammar.symbol_emb(symbols)
+
+        # Get action embedding
+        action_embs = torch.zeros(self.get_b_size(), 1, self.grammar.action_emb.embedding_dim).cuda()
+        if self.step_cnt > 0:
+            stacked_action_emb_list = []
+            for b_idx, actions in enumerate(prev_actions):
+                action_emb_list = []
+                for s_idx, action in enumerate(actions):
+                    # Table
+                    if action[0] == 'T':
+                        action_emb_list += [self.encoded_tab[b_idx][action[1]]]
+                    # Column
+                    elif action[0] == 'C':
+                        action_emb_list += [self.encoded_col[b_idx][action[1]]]
+                    # Action
+                    else:
+                        action_emb_list += [self.grammar.action_emb(utils.to_long_tensor(self.grammar.action_to_action_id[action]))]
+                stacked_action_emb_list += [torch.stack(action_emb_list)]
+            action_embs = torch.cat((action_embs, torch.stack(stacked_action_emb_list)), dim=1)
+
+        # Linear Layer
+        action_embs = affine_layer(action_embs)
+
+        # Concatenate
+        tgt = torch.cat((symbol_embs, action_embs), dim=-1)
+        tgt = linear_layer(tgt)
 
         return tgt.transpose(0, 1)
 

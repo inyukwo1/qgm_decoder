@@ -31,17 +31,10 @@ if __name__ == "__main__":
     np.random.seed(H_PARAMS["seed"])
     random.seed(H_PARAMS["seed"])
 
-    sql_data, table_data, val_sql_data, val_table_data = utils.load_dataset(
-        H_PARAMS["data_path"], use_small=H_PARAMS["toy"]
-    )
+    train_datas, val_datas, table_data = utils.load_dataset(H_PARAMS=H_PARAMS)
 
-    # Filter data for bert
-    if H_PARAMS["bert"] != -1:
-        sql_data = [data for data in sql_data if data["db_id"] != "baseball_1"]
-        val_sql_data = [data for data in val_sql_data if data["db_id"] != "baseball_1"]
-
-    print("train data length: {}".format(len(sql_data)))
-    print("dev data length: {}".format(len(val_sql_data)))
+    if args.cuda != -1:
+        torch.cuda.set_device(args.cuda)
 
     model = IRNet(H_PARAMS, is_qgm=H_PARAMS["is_qgm"], is_cuda=args.cuda != -1)
 
@@ -79,7 +72,7 @@ if __name__ == "__main__":
     ) = utils.epoch_acc(
         model,
         H_PARAMS["batch_size"],
-        sql_data,
+        train_datas[0],
         table_data,
         is_qgm=H_PARAMS["is_qgm"],
         return_details=True,
@@ -88,8 +81,8 @@ if __name__ == "__main__":
     dev_total_acc, dev_is_correct, dev_pred, dev_gold, dev_list = utils.epoch_acc(
         model,
         H_PARAMS["batch_size"],
-        val_sql_data,
-        val_table_data,
+        val_datas[0],
+        table_data,
         is_qgm=H_PARAMS["is_qgm"],
         return_details=True,
     )
@@ -109,6 +102,12 @@ if __name__ == "__main__":
 
     # Save outputs from train
     assert len(train_pred) == len(train_gold) and len(train_gold) == len(train_list)
+    # Format pred
+    tmp = []
+    for pred in train_pred:
+        tmp += [' '.join(["{}({})".format(*item) for item in pred])]
+    train_pred = tmp
+
     utils.write_eval_result_as(
         train_out_path,
         train_list,
@@ -120,6 +119,11 @@ if __name__ == "__main__":
 
     # Save outputs from dev
     assert len(dev_pred) == len(dev_gold) and len(dev_gold) == len(dev_list)
+    # Format pred
+    tmp = []
+    for pred in dev_pred:
+        tmp += [' '.join(["{}({})".format(*item) for item in pred])]
+    dev_pred = tmp
     utils.write_eval_result_as(
         dev_out_path, dev_list, dev_is_correct, dev_total_acc, dev_pred, dev_gold
     )

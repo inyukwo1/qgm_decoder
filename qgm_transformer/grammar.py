@@ -113,7 +113,7 @@ class Grammar:
     def action_to_string(self, symbol, idx):
         return "{} ::= {}".format(symbol, self.actions[symbol][idx])
 
-    def action_to_symbol(self, actions):
+    def actions_to_symbols(self, actions):
         tmp = []
         for idx in range(len(actions)):
             tmp2 = []
