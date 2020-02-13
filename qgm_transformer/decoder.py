@@ -17,8 +17,9 @@ class QGM_Transformer_Decoder(nn.Module):
         self.grammar = Grammar(mani_path)
 
         # Decode Layers
-        dim = 300
+        dim =300
         d_model = 300
+        self.dim = dim
         self.nhead = 6
         self.att_affine_layer = nn.Linear(dim, dim)
         self.tgt_affine_layer = nn.Linear(dim, dim)
@@ -122,7 +123,18 @@ class QGM_Transformer_Decoder(nn.Module):
                 encoded_cols = column_view.encoded_col
 
                 # Get input mask
-                col_masks = column_view.col_mask
+                #col_masks = column_view.col_mask
+                col_masks = torch.ones(
+                    (column_view.get_b_size(), column_view.encoded_col.shape[1]),
+                    dtype=torch.long,
+                ).cuda()
+                for idx, b_idx in enumerate(column_view.b_indices):
+                    table_ids = [action[1] for action in column_view.pred_history[b_idx] if action[0] == "T"]
+                    col_ids = []
+                    for table_id in table_ids:
+                        col_ids += column_view.tab_col_dic[idx][table_id]
+                    col_ids = utils.to_long_tensor(list(set(col_ids)))
+                    col_masks[idx][col_ids] = 0
 
                 self.predict(column_view, column_out, encoded_cols, col_masks)
 

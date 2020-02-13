@@ -144,7 +144,7 @@ if __name__ == "__main__":
             list(itertools.chain.from_iterable(train_datas)),
             table_data,
             H_PARAMS["clip_grad"],
-            is_transformer=True,
+            is_transformer=H_PARAMS["is_transformer"],
             is_qgm=H_PARAMS["is_qgm"],
         )
 
@@ -170,7 +170,7 @@ if __name__ == "__main__":
                         H_PARAMS["batch_size"],
                         train_data,
                         table_data,
-                        is_transformer=True,
+                        is_transformer=H_PARAMS["is_transformer"],
                         is_qgm=H_PARAMS["is_qgm"],
                     )
                 ]
@@ -183,7 +183,7 @@ if __name__ == "__main__":
                         val_data,
                         table_data,
                         H_PARAMS["clip_grad"],
-                        is_transformer=True,
+                        is_transformer=H_PARAMS["is_transformer"],
                         is_qgm=H_PARAMS["is_qgm"],
                         is_train=False,
                     )
@@ -194,7 +194,7 @@ if __name__ == "__main__":
                         H_PARAMS["batch_size"],
                         val_data,
                         table_data,
-                        is_transformer=True,
+                        is_transformer=H_PARAMS["is_transformer"],
                         is_qgm=H_PARAMS["is_qgm"],
                     )
                 ]

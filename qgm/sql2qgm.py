@@ -106,12 +106,15 @@ def create_select_box(sql, info, schema):
         assert table_unit[0] in ["sql", "table_unit"]
         if "sql" == table_unit[0]:
             something = sql2qgm(sql, table_unit[1], schema)
-            quantifiers += [something]
-            quantifier_types += ["s"]
+            if something not in quantifiers:
+                quantifiers += [something]
+                quantifier_types += ["s"]
         else:
             table_id = table_unit[1]
-            quantifiers += [table_id]
-            quantifier_types += ["f"]
+            if table_id not in quantifiers:
+                quantifiers += [table_id]
+                quantifier_types += ["f"]
+
 
     # Create body - join predicates
     for conds_unit in info["from"]["conds"]:
@@ -123,6 +126,8 @@ def create_select_box(sql, info, schema):
 
         # right col
         col2_id = something[3][1]
+        if isinstance(col2_id, list):
+            col2_id = col2_id[1]
         table2_id = schema["column_names"][col2_id][0]
         assert table2_id in quantifiers
 

@@ -43,7 +43,7 @@ class IRNet(BasicModel):
         self.is_bert = H_PARAMS["bert"] != -1
         self.is_cuda = is_cuda
         self.is_qgm = is_qgm
-        self.is_transformer = True
+        self.is_transformer = H_PARAMS["is_transformer"]
         self.use_column_pointer = H_PARAMS["column_pointer"]
         self.use_sentence_features = H_PARAMS["sentence_features"]
 
