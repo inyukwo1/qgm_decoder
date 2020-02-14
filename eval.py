@@ -102,7 +102,7 @@ if __name__ == "__main__":
     train_out_path = os.path.join(log_path, "train.result")
     dev_out_path = os.path.join(log_path, "dev.result")
 
-    use_col_set = not H_PARAMS['is_qgm']
+    use_col_set = not H_PARAMS["is_qgm"]
 
     # Save outputs from train
     assert len(train_pred) == len(train_gold) and len(train_gold) == len(train_list)
@@ -110,7 +110,7 @@ if __name__ == "__main__":
         # Format pred
         tmp = []
         for pred in train_pred:
-            tmp += [' '.join(["{}({})".format(*item) for item in pred])]
+            tmp += [" ".join(["{}({})".format(*item) for item in pred])]
         train_pred = tmp
 
     utils.write_eval_result_as(
@@ -120,7 +120,7 @@ if __name__ == "__main__":
         train_total_acc,
         train_pred,
         train_gold,
-        use_col_set=use_col_set
+        use_col_set=use_col_set,
     )
 
     # Save outputs from dev
@@ -129,8 +129,14 @@ if __name__ == "__main__":
         # Format pred
         tmp = []
         for pred in dev_pred:
-            tmp += [' '.join(["{}({})".format(*item) for item in pred])]
+            tmp += [" ".join(["{}({})".format(*item) for item in pred])]
         dev_pred = tmp
     utils.write_eval_result_as(
-        dev_out_path, dev_list, dev_is_correct, dev_total_acc, dev_pred, dev_gold, use_col_set=use_col_set
+        dev_out_path,
+        dev_list,
+        dev_is_correct,
+        dev_total_acc,
+        dev_pred,
+        dev_gold,
+        use_col_set=use_col_set,
     )
