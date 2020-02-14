@@ -33,9 +33,6 @@ def create_qgm_action(qgm_boxes):
 
 
 if __name__ == "__main__":
-    # file_name = "../data/wikitablequestions/dev.json"
-    file_name = "../data/wikitablequestions/train.json"
-
     dataset_names = ["spider", "wikisql", "wikitablequestions"]
     data_types = ["dev", "train", "test"]
 
