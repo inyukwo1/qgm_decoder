@@ -621,8 +621,11 @@ def init_log_checkpoint_path(args):
     return save_path
 
 
-def write_eval_result_as(file_name, datas, is_corrects, accs, preds, golds, use_col_set=False):
-    col_key = 'col_set' if use_col_set else 'col'
+def write_eval_result_as(
+    file_name, datas, is_corrects, accs, preds, golds, use_col_set=False
+):
+    col_key = "col_set" if use_col_set else "col"
+
     def sort_dic(dic):
         if isinstance(dic, dict):
             dic = {key: sort_dic(dic[key]) for key in sorted(dic.keys())}
@@ -679,10 +682,12 @@ def write_eval_result_as(file_name, datas, is_corrects, accs, preds, golds, use_
             f.write(
                 "\ntable:  {}\n".format(
                     str(
-                        " ".join([
-                            "<{}: {}>".format(idx, sql_json["table_names"][idx])
-                            for idx in range(len(sql_json["table_names"]))
-                        ])
+                        " ".join(
+                            [
+                                "<{}: {}>".format(idx, sql_json["table_names"][idx])
+                                for idx in range(len(sql_json["table_names"]))
+                            ]
+                        )
                     )
                 )
             )
@@ -690,13 +695,15 @@ def write_eval_result_as(file_name, datas, is_corrects, accs, preds, golds, use_
             f.write("column: ")
             # Format column info
             col_infos = [
-                    "({}-{}: {})".format(sql_json["col_table"][idx], idx, sql_json[col_key][idx])
-                    for idx in range(len(sql_json[col_key]))
-                ]
+                "({}-{}: {})".format(
+                    sql_json["col_table"][idx], idx, sql_json[col_key][idx]
+                )
+                for idx in range(len(sql_json[col_key]))
+            ]
             # Split line by 10 items
             for idx, col_info in enumerate(col_infos):
                 if idx % 10 == 0 and idx != 0:
-                    f.write('\n\t')
+                    f.write("\n\t")
                 f.write("{} ".format(col_info))
 
             f.write("\n\ngold:   {}\n".format(gold))

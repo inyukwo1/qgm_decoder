@@ -19,17 +19,17 @@ def to_long_tensor(batch_list):
 
 
 def calculate_attention_weights(source, query, source_mask=None, affine_layer=None):
-        if affine_layer:
-            source = affine_layer(source)
-        weight_scores = torch.bmm(source, query.transpose(1, 2)).squeeze(-1)
+    if affine_layer:
+        source = affine_layer(source)
+    weight_scores = torch.bmm(source, query.transpose(1, 2)).squeeze(-1)
 
-        # Masking
-        if source_mask is not None:
-            weight_scores.data.masked_fill_(source_mask.bool(), -float("inf"))
+    # Masking
+    if source_mask is not None:
+        weight_scores.data.masked_fill_(source_mask.bool(), -float("inf"))
 
-        weight_probs = torch.log_softmax(weight_scores, dim=-1)
+    weight_probs = torch.log_softmax(weight_scores, dim=-1)
 
-        return weight_probs
+    return weight_probs
 
 
 def count_symbol(qgm_action, symbol):
