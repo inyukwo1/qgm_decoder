@@ -115,7 +115,6 @@ def create_select_box(sql, info, schema):
                 quantifiers += [table_id]
                 quantifier_types += ["f"]
 
-
     # Create body - join predicates
     for conds_unit in info["from"]["conds"]:
         something = conds_unit

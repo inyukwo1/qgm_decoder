@@ -105,7 +105,7 @@ if __name__ == "__main__":
     # Format pred
     tmp = []
     for pred in train_pred:
-        tmp += [' '.join(["{}({})".format(*item) for item in pred])]
+        tmp += [" ".join(["{}({})".format(*item) for item in pred])]
     train_pred = tmp
 
     utils.write_eval_result_as(
@@ -122,7 +122,7 @@ if __name__ == "__main__":
     # Format pred
     tmp = []
     for pred in dev_pred:
-        tmp += [' '.join(["{}({})".format(*item) for item in pred])]
+        tmp += [" ".join(["{}({})".format(*item) for item in pred])]
     dev_pred = tmp
     utils.write_eval_result_as(
         dev_out_path, dev_list, dev_is_correct, dev_total_acc, dev_pred, dev_gold

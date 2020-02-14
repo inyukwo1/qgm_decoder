@@ -195,23 +195,33 @@ class TransformerBatchState:
         symbol_embs = self.grammar.symbol_emb(symbols)
 
         # Get action embedding
-        action_embs = torch.zeros(self.get_b_size(), 1, self.grammar.action_emb.embedding_dim).cuda()
+        action_embs = torch.zeros(
+            self.get_b_size(), 1, self.grammar.action_emb.embedding_dim
+        ).cuda()
         if self.step_cnt > 0:
             stacked_action_emb_list = []
             for b_idx, actions in enumerate(prev_actions):
                 action_emb_list = []
                 for s_idx, action in enumerate(actions):
                     # Table
-                    if action[0] == 'T':
+                    if action[0] == "T":
                         action_emb_list += [self.encoded_tab[b_idx][action[1]]]
                     # Column
-                    elif action[0] == 'C':
+                    elif action[0] == "C":
                         action_emb_list += [self.encoded_col[b_idx][action[1]]]
                     # Action
                     else:
-                        action_emb_list += [self.grammar.action_emb(utils.to_long_tensor(self.grammar.action_to_action_id[action]))]
+                        action_emb_list += [
+                            self.grammar.action_emb(
+                                utils.to_long_tensor(
+                                    self.grammar.action_to_action_id[action]
+                                )
+                            )
+                        ]
                 stacked_action_emb_list += [torch.stack(action_emb_list)]
-            action_embs = torch.cat((action_embs, torch.stack(stacked_action_emb_list)), dim=1)
+            action_embs = torch.cat(
+                (action_embs, torch.stack(stacked_action_emb_list)), dim=1
+            )
 
         # Linear Layer
         action_embs = affine_layer(action_embs)

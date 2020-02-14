@@ -678,10 +678,12 @@ def write_eval_result_as(file_name, datas, is_corrects, accs, preds, golds):
             f.write(
                 "\ntable:  {}\n".format(
                     str(
-                        " ".join([
-                            "<{}: {}>".format(idx, sql_json["table_names"][idx])
-                            for idx in range(len(sql_json["table_names"]))
-                        ])
+                        " ".join(
+                            [
+                                "<{}: {}>".format(idx, sql_json["table_names"][idx])
+                                for idx in range(len(sql_json["table_names"]))
+                            ]
+                        )
                     )
                 )
             )
@@ -689,13 +691,15 @@ def write_eval_result_as(file_name, datas, is_corrects, accs, preds, golds):
             f.write("column: ")
             # Format column info
             col_infos = [
-                    "({}-{}: {})".format(sql_json["col_table"][idx], idx, sql_json["col"][idx])
-                    for idx in range(len(sql_json["col"]))
-                ]
+                "({}-{}: {})".format(
+                    sql_json["col_table"][idx], idx, sql_json["col"][idx]
+                )
+                for idx in range(len(sql_json["col"]))
+            ]
             # Split line by 10 items
             for idx, col_info in enumerate(col_infos):
                 if idx % 10 == 0 and idx != 0:
-                    f.write('\n\t')
+                    f.write("\n\t")
                 f.write("{} ".format(col_info))
 
             f.write("\n\ngold:   {}\n".format(gold))

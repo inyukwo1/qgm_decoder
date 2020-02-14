@@ -15,13 +15,13 @@ class QGM_Transformer_Decoder(nn.Module):
         self.grammar = Grammar(mani_path)
 
         # Decode Layers
-        dim =300
+        dim = 300
         d_model = 300
         self.dim = dim
         self.nhead = 6
         self.att_affine_layer = nn.Linear(dim, dim)
         self.tgt_affine_layer = nn.Linear(dim, dim)
-        self.tgt_linear_layer = nn.Linear(dim*2, d_model)
+        self.tgt_linear_layer = nn.Linear(dim * 2, d_model)
         self.out_linear_layer = nn.Linear(d_model, dim)
 
         # Transformer Layers
@@ -55,6 +55,9 @@ class QGM_Transformer_Decoder(nn.Module):
         tab_mask,
         tab_col_dic,
         gold_qgms=None,
+        step=None,  # for captum
+        col_names=None,  # for captum
+        tab_names=None,  # for captum
     ):
         if gold_qgms:
             gold_qgms = [item.split(" ") for item in gold_qgms]
@@ -73,6 +76,7 @@ class QGM_Transformer_Decoder(nn.Module):
         )
 
         # Decode
+        decode_step_num = 0
         while not state.is_done():
             # Get sub-mini-batch
             memory = state.get_memory()
@@ -113,28 +117,77 @@ class QGM_Transformer_Decoder(nn.Module):
                 action_emb = action_emb.unsqueeze(0).repeat(
                     action_view.get_b_size(), 1, 1
                 )
+                if step is not None and decode_step_num == step:
+                    (
+                        gold_index,
+                        selected_idx,
+                        gold_prob,
+                        selected_prob,
+                    ) = self.predict_for_captum(
+                        action_view, action_out, action_emb, action_masks,
+                    )
+                    gold_action = self.grammar.action_id_to_action[gold_index]
+                    action = self.grammar.action_id_to_action[selected_idx]
+                    return (
+                        "{}({})".format(gold_action[0], gold_action[1]),
+                        "{}({})".format(action[0], action[1]),
+                        gold_prob,
+                        selected_prob,
+                    )
 
-                self.predict(action_view, action_out, action_emb, action_masks)
+                self.predict(
+                    action_view,
+                    action_out,
+                    action_emb,
+                    action_masks,
+                    self.training or step is not None,
+                )
+                decode_step_num += 1
 
             if column_view:
                 # Get input: column encoding
                 encoded_cols = column_view.encoded_col
 
                 # Get input mask
-                #col_masks = column_view.col_mask
+                # col_masks = column_view.col_mask
                 col_masks = torch.ones(
                     (column_view.get_b_size(), column_view.encoded_col.shape[1]),
                     dtype=torch.long,
                 ).cuda()
                 for idx, b_idx in enumerate(column_view.b_indices):
-                    table_ids = [action[1] for action in column_view.pred_history[b_idx] if action[0] == "T"]
+                    table_ids = [
+                        action[1]
+                        for action in column_view.pred_history[b_idx]
+                        if action[0] == "T"
+                    ]
                     col_ids = []
                     for table_id in table_ids:
                         col_ids += column_view.tab_col_dic[idx][table_id]
                     col_ids = utils.to_long_tensor(list(set(col_ids)))
                     col_masks[idx][col_ids] = 0
-
-                self.predict(column_view, column_out, encoded_cols, col_masks)
+                if step is not None and decode_step_num == step:
+                    (
+                        gold_index,
+                        selected_idx,
+                        gold_prob,
+                        selected_prob,
+                    ) = self.predict_for_captum(
+                        column_view, column_out, encoded_cols, col_masks,
+                    )
+                    return (
+                        " ".join(col_names[0][gold_index]),
+                        " ".join(col_names[0][selected_idx]),
+                        gold_prob,
+                        selected_prob,
+                    )
+                self.predict(
+                    column_view,
+                    column_out,
+                    encoded_cols,
+                    col_masks,
+                    self.training or step is not None,
+                )
+                decode_step_num += 1
 
             if table_view:
                 # Get input: table encoding
@@ -142,28 +195,64 @@ class QGM_Transformer_Decoder(nn.Module):
 
                 # Get input mask
                 tab_masks = table_view.tab_mask
+                if step is not None and decode_step_num == step:
+                    (
+                        gold_index,
+                        selected_idx,
+                        gold_prob,
+                        selected_prob,
+                    ) = self.predict_for_captum(
+                        table_view, table_out, encoded_tabs, tab_masks,
+                    )
 
-                self.predict(table_view, table_out, encoded_tabs, tab_masks)
+                    return (
+                        " ".join(tab_names[0][gold_index]),
+                        " ".join(tab_names[0][selected_idx]),
+                        gold_prob,
+                        selected_prob,
+                    )
+                self.predict(
+                    table_view,
+                    table_out,
+                    encoded_tabs,
+                    tab_masks,
+                    self.training or step is not None,
+                )
+                decode_step_num += 1
 
             # Gather views to original batch state
             state.combine_views(action_view, column_view, table_view)
 
             # State Transition
             state.update_state()
-
+        assert step is None
         # get losses, preds
         return (
             (torch.stack(state.sketch_loss), torch.stack(state.detail_loss)),
             state.pred_history,
         )
 
-    def predict(self, view, out, src, src_mask):
+    def predict_for_captum(self, view, out, src, src_mask):
+        probs = torch.nn.functional.softmax(
+            utils.calculate_attention_weights(
+                src, out, source_mask=src_mask, affine_layer=self.att_affine_layer,
+            ),
+            dim=1,
+        )
+        gold_indices = view.get_gold()
+        gold_index = gold_indices[0]
+        selected_idx = torch.argmax(probs, 1)[-1].item()
+        gold_prob = probs[:, gold_index]
+        selected_prob = probs[:, selected_idx]
+        return gold_index, selected_idx, gold_prob, selected_prob
+
+    def predict(self, view, out, src, src_mask, pred_with_gold):
         # Calculate similarity
         probs = utils.calculate_attention_weights(
             src, out, source_mask=src_mask, affine_layer=self.att_affine_layer
         )
 
-        if self.training:
+        if pred_with_gold:
             pred_indices = view.get_gold()
             pred_probs = []
             for idx, item in enumerate(pred_indices):
@@ -175,7 +264,6 @@ class QGM_Transformer_Decoder(nn.Module):
 
         view.save_loss(pred_probs)
         view.save_pred(pred_indices)
-
 
     def get_accuracy(self, pred_qgm_actions, gold_qgm_actions):
         # process gold_qgm_actions

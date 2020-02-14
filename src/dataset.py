@@ -58,7 +58,11 @@ class Example:
         self.table_col_len = table_col_len
         self.col_pred = col_pred
         self.tgt_actions = tgt_actions
-        self.truth_actions = copy.deepcopy(tgt_actions)
+        self.truth_actions = (
+            copy.deepcopy(tgt_actions)
+            if tgt_actions
+            else copy.deepcopy(qgm_action).split(" ")
+        )
         self.qgm = qgm
         self.qgm_action = qgm_action
         self.sketch = list()
