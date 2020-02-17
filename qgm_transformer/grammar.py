@@ -1,7 +1,7 @@
 import torch.nn as nn
 
 
-class Grammar:
+class Grammar(nn.Module):
     def __init__(self, is_bert, manifesto_path):
         # Symbol
         self.symbols = {}
