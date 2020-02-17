@@ -1,19 +1,20 @@
 # -*- coding: utf-8 -*-
+import os
+import copy
 import json
 import time
-import pickle
-
-import copy
-import numpy as np
-import os
+import random
 import torch
-from nltk.stem import WordNetLemmatizer
+import pickle
+import numpy as np
 from tqdm import tqdm
+from nltk.stem import WordNetLemmatizer
 
 from src.dataset import Example
-from src.rule import lf
-from src.rule.semQL import Sup, Sel, Order, Root, Filter, A, N, C, T, Root1
-from qgm.utils import compare_boxes, filter_datas
+from semql.rule import lf
+from semql.rule.semQL import *
+from qgm.utils import filter_datas
+
 
 wordnet_lemmatizer = WordNetLemmatizer()
 
@@ -388,8 +389,7 @@ def epoch_train(
     sql_data,
     table_data,
     clip_grad,
-    is_transformer=True,
-    is_qgm=True,
+    model_name,
     is_train=True,
 ):
     if is_train:
@@ -405,10 +405,10 @@ def epoch_train(
     total_loss = {}
     for st in tqdm(range(0, len(sql_data), batch_size)):
         ed = st + batch_size if st + batch_size < len(perm) else len(perm)
-        examples = to_batch_seq(sql_data, table_data, perm, st, ed, is_qgm=is_qgm)
+        examples = to_batch_seq(sql_data, table_data, perm, st, ed, is_qgm="qgm" in model_name)
 
         result = model.forward(examples)
-        if is_transformer:
+        if model_name == "qgm_transformer":
             tmp = {key: [] for key in result[0].get_keys()}
             for losses in result:
                 for key, item in losses.get_loss_dic().items():
@@ -422,7 +422,7 @@ def epoch_train(
             for key, item in tmp.items():
                 total_loss[key] += [float(item)]
 
-        elif is_qgm:
+        elif model_name == "qgm":
             losses, pred_boxes = result
 
             # Combine losses
@@ -441,9 +441,8 @@ def epoch_train(
 
             loss = torch.mean(torch.stack(loss_list))
 
-        else:
+        elif model_name == "semql":
             sketch_prob_var, lf_prob_var = result
-
             # Save loss
             if not total_loss:
                 total_loss["sketch"] = []
@@ -454,6 +453,9 @@ def epoch_train(
                 total_loss["detail"] += [float(detail_loss)]
 
             loss = torch.mean(sketch_prob_var) + torch.mean(lf_prob_var)
+        else:
+            raise RuntimeError("Unsupported model")
+
         if is_train:
             loss.backward()
 
@@ -479,8 +481,7 @@ def epoch_acc(
     batch_size,
     sql_data,
     table_data,
-    is_transformer=True,
-    is_qgm=True,
+    model_name,
     return_details=False,
 ):
     model.eval()
@@ -490,18 +491,20 @@ def epoch_acc(
     example_list = []
     for st in tqdm(range(0, len(sql_data), batch_size)):
         ed = st + batch_size if st + batch_size < len(perm) else len(perm)
-        examples = to_batch_seq(sql_data, table_data, perm, st, ed, is_qgm=is_qgm)
+        examples = to_batch_seq(sql_data, table_data, perm, st, ed, is_qgm="qgm" in model_name)
         example_list += examples
-        if is_transformer:
+        if model_name == "qgm_transformer":
             pred += model.parse(examples)
             gold += [example.qgm_action for example in examples]
-        elif is_qgm:
+        elif model_name == "qgm":
             pred += model.parse(examples)
             gold += [example.qgm for example in examples]
-        else:
+        elif model_name == "semql":
             for example in examples:
                 pred += [model.parse([example])]
                 gold += [example.tgt_actions]
+        else:
+            raise RuntimeError("Unsupported model name")
 
     # Calculate acc
     total_acc, is_correct_list = model.decoder.get_accuracy(pred, gold)
@@ -513,7 +516,7 @@ def epoch_acc(
 
 
 def load_data_new(
-    sql_path, use_small=False, is_bert=False, is_simple_query=True, is_single_table=True
+    sql_path, use_small=False, is_bert=False, query_type="simple"
 ):
     sql_data = []
     print("Loading data from {}".format(sql_path))
@@ -535,74 +538,33 @@ def load_data_new(
         ]
 
     # Filter data with qgm that has nested query
-    sql_data = filter_datas(sql_data, is_simple_query, is_single_table)
+    sql_data = filter_datas(sql_data, query_type)
 
     return sql_data[:80] if use_small else sql_data
 
 
-def load_dataset(H_PARAMS, use_small=False):
-    is_bert = H_PARAMS["bert"] != -1
-    dataset_dir = H_PARAMS["data_path"]
-    dataset_names = H_PARAMS["data_names"]
-    is_simple_query = H_PARAMS["is_simple_query"]
-    is_single_table = H_PARAMS["is_single_table"]
-
-    print("Loading from datasets...")
-
-    train_lens = []
-    val_lens = []
-
-    train_datas = []
-    val_datas = []
+def load_dataset(is_toy, is_bert, dataset_path, query_type):
+    # Get paths
+    table_path = os.path.join(dataset_path, "tables.json")
+    train_path = os.path.join(dataset_path, "train.json")
+    val_path = os.path.join(dataset_path, "dev.json")
     table_data = []
-    for dataset_name in dataset_names:
-        dataset_path = os.path.join(dataset_dir, dataset_name)
-        print("Loading data from {}".format(dataset_path))
 
-        # Get paths
-        table_path = os.path.join(dataset_path, "tables.json")
-        train_path = os.path.join(dataset_path, "train.json")
-        val_path = os.path.join(dataset_path, "dev.json")
+    with open(table_path) as f:
+        table_data += json.load(f)
 
-        with open(table_path) as f:
-            table_data += json.load(f)
-
-        # Train
-        train_tmp = load_data_new(
-            train_path,
-            use_small=use_small,
-            is_bert=is_bert,
-            is_simple_query=is_simple_query,
-            is_single_table=is_single_table,
-        )
-        train_lens += [len(train_tmp)]
-        train_datas += [train_tmp]
-
-        # Dev
-        val_tmp = load_data_new(
-            val_path,
-            use_small=use_small,
-            is_bert=is_bert,
-            is_simple_query=is_simple_query,
-            is_single_table=is_single_table,
-        )
-        val_lens += [len(val_tmp)]
-        val_datas += [val_tmp]
+    # Load data
+    train_data = load_data_new(train_path, is_toy, is_bert, query_type)
+    val_data = load_data_new(val_path, is_toy, is_bert, query_type)
 
     # Tables as dictionary
     table_data = {table["db_id"]: table for table in table_data}
 
     # Show dataset length
-    print("Total training set: {}".format(sum(train_lens)))
-    for idx in range(len(dataset_names)):
-        print("{}: {}".format(dataset_names[idx], train_lens[idx]))
+    print("Total training set: {}".format(len(train_data)))
+    print("Total validation set: {}\n".format(len(val_data)))
 
-    print("\nTotal val set: {}".format(sum(val_lens)))
-    for idx in range(len(dataset_names)):
-        print("{}: {}".format(dataset_names[idx], val_lens[idx]))
-    print("\n")
-
-    return train_datas, val_datas, table_data
+    return train_data, val_data, table_data
 
 
 def save_checkpoint(model, checkpoint_name):
@@ -736,3 +698,14 @@ def calculate_total_acc(total_accs, data_lens):
     total_acc = {key: value / sum(data_lens) for key, value in total_acc.items()}
 
     return total_acc
+
+
+def set_randome_seed(seed):
+    torch.autograd.set_detect_anomaly(True)
+    # Set random seed
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+

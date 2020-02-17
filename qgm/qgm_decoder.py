@@ -221,10 +221,11 @@ class BatchState:
 
 
 class QGM_Decoder(nn.Module):
-    def __init__(self, emb_dim):
+    def __init__(self, cfg):
         super(QGM_Decoder, self).__init__()
         # att_vec_dim = 128
         # input_dim = emb_dim * 2
+        emb_dim = cfg.embed_size
         att_vec_dim = emb_dim
         input_dim = emb_dim + att_vec_dim
 

@@ -19,8 +19,32 @@ Run `train.py` to train the model.
 
 ##### Arguments
 
-* `--train_config:` Path to jsonnet file that contains training settings  
-* `--cuda:` GPU number  
+Now support hydra to pass arguments.
+config design is as below
+
+config
+ |
+ |-- dataset
+ |   |
+ |   |-- spider
+ |   |-- patients
+ |   |-- wikisql
+ |   |-- wikitablequestions
+ |
+ |-- model
+ |   | 
+ |   |-- semql
+ |   |-- qgm
+ |   |-- qgm_transformer
+ |
+ |-- train    
+     |
+     |-- train_config1
+     |-- train_config2
+     |-- etc..
+
+* You can select config file or change any argument with the command line `python train.py cuda=1 model=qgm dataset=wikisql`
+* Or create your own config file under *config/train/* for convenience.
 
 #### Testing
 
@@ -34,5 +58,6 @@ Run `eval.py` to evaluate the model
 
 #### tensorboard
 
-* After running train.py, run `tensorboard --logdir ./logs --bind_all` in terminal
+* After running train.py, run `tensorboard --logdir ./logs --bind_all --port [port_num]` in terminal
 * check http://[ip]:6006
+

@@ -8,3 +8,4 @@ transformers
 jsonnet
 scikit-learn
 captum
+hydra-core

@@ -9,9 +9,9 @@
 import argparse
 import traceback
 
-from src.rule.graph import Graph
-from src.rule.semQL import Sup, Sel, Order, Root, Filter, A, N, C, T, Root1
-from src.rule.sem_utils import alter_inter, alter_not_in, alter_column0, load_dataSets
+from semql.rule import Graph
+from semql.rule import Sup, Sel, Order, Root, Filter, A, N, C, T, Root1
+from semql.rule.sem_utils import alter_inter, alter_column0, load_dataSets
 
 
 def split_logical_form(lf):

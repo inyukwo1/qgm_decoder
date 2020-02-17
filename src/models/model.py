@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-# @Time    : 2019/5/25
-# @Author  : Jiaqi&Zecheng
-# @File    : model.py
-# @Software: PyCharm
-"""
 import torch
 import torch.nn as nn
 import torch.nn.utils
@@ -37,17 +31,14 @@ MODELS = [
 
 
 class IRNet(BasicModel):
-    def __init__(self, H_PARAMS, is_qgm=True, is_cuda=False):
+    def __init__(self, cfg):
         super(IRNet, self).__init__()
-        self.h_params = H_PARAMS
-        self.is_bert = H_PARAMS["bert"] != -1
-        self.is_cuda = is_cuda
-        self.is_qgm = is_qgm
-        self.is_transformer = H_PARAMS["is_transformer"]
-        self.use_column_pointer = H_PARAMS["column_pointer"]
-        self.use_sentence_features = H_PARAMS["sentence_features"]
+        self.cfg = cfg
+        self.is_bert = cfg.is_bert
+        self.is_cuda = cfg.cuda != -1
+        self.decoder_name = cfg.model_name
 
-        if is_cuda:
+        if self.is_cuda:
             self.new_long_tensor = torch.cuda.LongTensor
             self.new_tensor = torch.cuda.FloatTensor
         else:
@@ -55,23 +46,23 @@ class IRNet(BasicModel):
             self.new_tensor = torch.FloatTensor
         if self.is_bert:
             model_class, tokenizer_class, pretrained_weight, dim = MODELS[
-                H_PARAMS["bert"]
+                cfg.bert
             ]
-            self.h_params["hidden_size"] = dim
-            self.h_params["hidden_size"] = dim
-            self.h_params["col_embed_size"] = dim
-            self.h_params["embed_size"] = dim
-            self.h_params["att_vec_size"] = dim
+            cfg.hidden_size = dim
+            cfg.col_embed_size = dim
+            cfg.embed_size = dim
+            att_vec_size = dim
+
         self.encoder_lstm = nn.LSTM(
-            H_PARAMS["embed_size"],
-            H_PARAMS["hidden_size"] // 2,
+            cfg.embed_size,
+            cfg.hidden_size // 2,
             bidirectional=True,
             batch_first=True,
         )
 
-        action_embed_size = self.h_params["action_embed_size"]
-        col_embed_size = self.h_params["col_embed_size"]
-        hidden_size = self.h_params["hidden_size"]
+        action_embed_size = cfg.action_embed_size
+        col_embed_size = cfg.col_embed_size
+        hidden_size = cfg.hidden_size
 
         self.decoder_cell_init = nn.Linear(hidden_size, hidden_size)
 
@@ -84,22 +75,22 @@ class IRNet(BasicModel):
             batch_first=True,
         )
 
-        self.dropout = nn.Dropout(self.h_params["dropout"])
+        self.dropout = nn.Dropout(cfg.dropout)
         self.captum_iden = nn.Dropout(0.000001)
 
         # QGM Decoer
-        if self.is_transformer:
-            self.decoder = QGM_Transformer_Decoder(self.is_bert)
-        elif self.is_qgm:
-            self.decoder = QGM_Decoder(self.h_params["embed_size"])
+        if self.decoder_name == "qgm_transformer":
+            self.decoder = QGM_Transformer_Decoder(cfg)
+        elif self.decoder_name == "qgm":
+            self.decoder = QGM_Decoder(cfg)
+        elif self.decoder_name == "semql":
+            self.decoder = SemQL_Decoder(cfg)
         else:
-            self.decoder = SemQL_Decoder(H_PARAMS, is_cuda)
+            raise RuntimeError("Unsupported decoder name")
 
         self.without_bert_params = list(self.parameters(recurse=True))
         if self.is_bert:
-            model_class, tokenizer_class, pretrained_weight, dim = MODELS[
-                self.h_params["bert"]
-            ]
+            model_class, tokenizer_class, pretrained_weight, dim = MODELS[cfg.bert]
             self.transformer_encoder = model_class.from_pretrained(pretrained_weight)
             self.tokenizer = tokenizer_class.from_pretrained(pretrained_weight)
             # self.tokenizer.add_special_tokens({"additional_special_tokens": ["[table]", "[column]", "[value]"]})
@@ -111,8 +102,8 @@ class IRNet(BasicModel):
                 dim, dim // 2, batch_first=True, bidirectional=True
             )
 
-            self.h_params["hidden_size"] = dim
-            self.h_params["col_embed_size"] = dim
+            self.cfg.hidden_size = dim
+            self.cfg.col_embed_size = dim
 
     def transformer_encode(self, batch: Batch):
         B = len(batch)
@@ -284,27 +275,27 @@ class IRNet(BasicModel):
     def forward_until_step(self, src_embeddings, examples, step):
         batch = Batch(examples, is_cuda=self.is_cuda)
 
-        if self.h_params["bert"] == -1:
-            (
-                src_encodings,
-                table_embedding,
-                schema_embedding,
-                last_cell,
-            ) = self.lstm_encode(batch, src_embeddings)
-        else:
+        if self.is_bert:
             (
                 src_encodings,
                 table_embedding,
                 schema_embedding,
                 last_cell,
             ) = self.transformer_encode(batch)
+        else:
+            (
+                src_encodings,
+                table_embedding,
+                schema_embedding,
+                last_cell,
+            ) = self.lstm_encode(batch, src_embeddings)
             if src_encodings is None:
                 return None, None
         src_encodings = self.captum_iden(src_encodings)
 
         dec_init_vec = self.init_decoder_state(last_cell)
 
-        if self.is_transformer:
+        if self.decoder_name == "qgm_transformer":
             src_mask = batch.src_token_mask
             col_mask = batch.table_token_mask
             tab_mask = batch.schema_token_mask
@@ -336,7 +327,7 @@ class IRNet(BasicModel):
                 batch.table_names_iter,
             )
 
-        elif self.is_qgm:
+        elif self.decoder_name == "qgm":
             src_mask = batch.src_token_mask
             col_mask = batch.table_token_mask
             tab_mask = batch.schema_token_mask
@@ -357,7 +348,7 @@ class IRNet(BasicModel):
             pred_action, pred_score = self.decoder.decode_until_step(
                 b_indices, None, dec_init_vec, prev_box=None, gold_boxes=batch.qgm
             )
-        else:
+        elif self.decoder_name == "semql":
             (
                 gold_action,
                 pred_action,
@@ -372,20 +363,16 @@ class IRNet(BasicModel):
                 dec_init_vec,
                 step,
             )
+        else:
+            raise RuntimeError("Unsupported Decoder name")
+
         return gold_action, pred_action, gold_score, pred_score
 
     def forward(self, examples):
         # now should implement the examples
         batch = Batch(examples, is_cuda=self.is_cuda)
 
-        if self.h_params["bert"] == -1:
-            (
-                src_encodings,
-                table_embedding,
-                schema_embedding,
-                last_cell,
-            ) = self.lstm_encode(batch)
-        else:
+        if self.is_bert:
             (
                 src_encodings,
                 table_embedding,
@@ -394,11 +381,18 @@ class IRNet(BasicModel):
             ) = self.transformer_encode(batch)
             if src_encodings is None:
                 return None, None
+        else:
+            (
+                src_encodings,
+                table_embedding,
+                schema_embedding,
+                last_cell,
+            ) = self.lstm_encode(batch)
         src_encodings = self.captum_iden(src_encodings)
 
         dec_init_vec = self.init_decoder_state(last_cell)
 
-        if self.is_transformer:
+        if self.decoder_name == "qgm_transformer":
             src_mask = batch.src_token_mask
             col_mask = batch.table_token_mask
             tab_mask = batch.schema_token_mask
@@ -429,7 +423,7 @@ class IRNet(BasicModel):
 
             return losses
 
-        elif self.is_qgm:
+        elif self.decoder_name == "qgm":
             src_mask = batch.src_token_mask
             col_mask = batch.table_token_mask
             tab_mask = batch.schema_token_mask
@@ -450,7 +444,7 @@ class IRNet(BasicModel):
                 b_indices, None, dec_init_vec, prev_box=None, gold_boxes=batch.qgm
             )
             return losses, pred_boxes
-        else:
+        elif self.decoder_name == "semql":
             sketch_prob_var, lf_prob_var = self.decoder.decode_forward(
                 examples,
                 batch,
@@ -460,11 +454,22 @@ class IRNet(BasicModel):
                 dec_init_vec,
             )
             return sketch_prob_var, lf_prob_var
+        else:
+            raise RuntimeError("Unsupported Decoder Name")
 
     def parse(self, examples):
         with torch.no_grad():
             batch = Batch(examples, is_cuda=self.is_cuda)
-            if self.h_params["bert"] == -1:
+            if self.is_bert:
+                (
+                    src_encodings,
+                    table_embedding,
+                    schema_embedding,
+                    last_cell,
+                ) = self.transformer_encode(batch)
+                if src_encodings is None:
+                    return None, None
+            else:
                 src_encodings, (last_state, last_cell) = self.encode(
                     batch.src_sents, batch.src_sents_len, None
                 )
@@ -488,10 +493,10 @@ class IRNet(BasicModel):
                 )
 
                 tab_ctx = (
-                    src_encodings.unsqueeze(1) * embedding_differ.unsqueeze(3)
+                        src_encodings.unsqueeze(1) * embedding_differ.unsqueeze(3)
                 ).sum(2)
                 schema_ctx = (
-                    src_encodings.unsqueeze(1) * schema_differ.unsqueeze(3)
+                        src_encodings.unsqueeze(1) * schema_differ.unsqueeze(3)
                 ).sum(2)
 
                 table_embedding = table_embedding + tab_ctx
@@ -509,19 +514,10 @@ class IRNet(BasicModel):
                 table_embedding = table_embedding + col_type_var
 
                 schema_embedding = schema_embedding + tab_type_var
-            else:
-                (
-                    src_encodings,
-                    table_embedding,
-                    schema_embedding,
-                    last_cell,
-                ) = self.transformer_encode(batch)
-                if src_encodings is None:
-                    return None, None
 
             dec_init_vec = self.init_decoder_state(last_cell)
 
-            if self.is_transformer:
+            if self.decoder_name == "qgm_transformer":
                 src_mask = batch.src_token_mask
                 col_mask = batch.table_token_mask
                 tab_mask = batch.schema_token_mask
@@ -552,7 +548,7 @@ class IRNet(BasicModel):
 
                 return pred
 
-            elif self.is_qgm:
+            elif self.decoder_name == "qgm":
                 src_mask = batch.src_token_mask
                 col_mask = batch.table_token_mask
                 tab_mask = batch.schema_token_mask
@@ -574,7 +570,7 @@ class IRNet(BasicModel):
                 )
 
                 return pred_boxes
-            else:
+            elif self.decoder_name == "semql":
                 completed_beams, _ = self.decoder.decode_parse(
                     batch,
                     src_encodings,
@@ -587,6 +583,8 @@ class IRNet(BasicModel):
                     completed_beams[0].actions if completed_beams else []
                 )
                 return highest_prob_actions
+            else:
+                raise RuntimeError("Unsupported decoder name")
 
     def init_decoder_state(self, enc_last_cell):
         h_0 = self.decoder_cell_init(enc_last_cell)

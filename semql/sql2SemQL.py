@@ -17,7 +17,7 @@ import copy
 from utils import load_dataSets
 
 sys.path.append("..")
-from src.rule.semQL import Root1, Root, N, A, C, T, Sel, Sup, Filter, Order
+from semql.rule import Root1, Root, N, A, C, T, Sel, Sup, Filter, Order
 
 
 class Parser:

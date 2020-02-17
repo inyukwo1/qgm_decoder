@@ -19,7 +19,7 @@ from torch.utils.tensorboard import SummaryWriter
 torch.autograd.set_detect_anomaly(True)
 
 load_model = "logs/semql_simple_multi_spider/model/best_model.pt"
-config_file = "train_config/semql_simple_multi.jsonnet"
+config_file = "train_config/tmp/semql_simple_multi.jsonnet"
 # Load Training Info
 H_PARAMS = json.loads(_jsonnet.evaluate_file(config_file))
 

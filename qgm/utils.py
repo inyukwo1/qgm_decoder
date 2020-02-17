@@ -316,13 +316,13 @@ def compare_boxes(pred_qgm, gold_qgm):
     return total_acc, is_correct_list
 
 
-def filter_datas(sql_data, is_simple_query, is_single_table):
+def filter_datas(sql_data, query_type):
     filtered_datas = []
     for data in sql_data:
         flag = True
         if "FROM (" in data["query"]:
             flag = False
-        if is_simple_query:
+        if query_type in ["simple", "join"]:
             for box in data["qgm"]:
                 if (
                     box["body"]["quantifier_types"]
@@ -333,7 +333,7 @@ def filter_datas(sql_data, is_simple_query, is_single_table):
                 if box["operator"] in IUE_INDICES:
                     flag = False
                 # single table only
-                if is_single_table and len(box["body"]["quantifier_types"]) > 1:
+                if query_type == "simple" and len(box["body"]["quantifier_types"]) > 1:
                     flag = False
                 if box["body"]["local_predicates"]:
                     for item in box["body"]["local_predicates"]:
@@ -350,11 +350,9 @@ def filter_datas(sql_data, is_simple_query, is_single_table):
             # Filter datas in wikitablequestions that has hard operator
             if " + " in data["query"]:
                 flag = False
-            """
             # Filter OR in local predicate
             if ' OR ' in data['query']:
                 flag = False
-            """
 
         if flag:
             filtered_datas += [data]

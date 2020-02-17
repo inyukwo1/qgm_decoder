@@ -8,7 +8,7 @@
 
 import copy
 
-from src.rule import semQL
+from semql.rule import semQL
 
 
 class ActionInfo(object):

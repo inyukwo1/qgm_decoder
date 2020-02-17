@@ -1,90 +1,59 @@
 import os
-import json
 import copy
-import random
-import _jsonnet
-import argparse
+import hydra
 import datetime
-import itertools
 
 import torch
 import torch.optim as optim
-import numpy as np
+from RAdam.radam import RAdam
+from torch.utils.tensorboard import SummaryWriter
 
 from src import utils
 from src.models.model import IRNet
-from torch.utils.tensorboard import SummaryWriter
-from RAdam.radam import RAdam
 
 
-if __name__ == "__main__":
-    torch.autograd.set_detect_anomaly(True)
-    # Parse Arguments
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--train_config", type=str, default="", help="Path for train config json file"
-    )
-    parser.add_argument(
-        "--debugging", action="store_true", help="Run in debugging mode"
-    )
-    parser.add_argument(
-        "--toy",
-        action="store_true",
-        help="If set, use small data; used for fast debugging.",
-    )
-
-    parser.add_argument("--load_model", type=str, default="", help="saved model path")
-    parser.add_argument("--cuda", type=int, default="-1", help="GPU number")
-    args = parser.parse_args()
-
-    # Load Training Info
-    H_PARAMS = json.loads(_jsonnet.evaluate_file(args.train_config))
+@hydra.main(config_path="config/config.yaml")
+def train(cfg):
+    os.chdir("../../../")
 
     # Set random seed
-    torch.manual_seed(H_PARAMS["seed"])
-    if args.cuda:
-        torch.cuda.manual_seed(H_PARAMS["seed"])
-    np.random.seed(H_PARAMS["seed"])
-    random.seed(H_PARAMS["seed"])
+    utils.set_randome_seed(cfg.seed)
 
     # Load dataset
-    train_datas, val_datas, table_data = utils.load_dataset(
-        H_PARAMS, use_small=args.toy
-    )
+    train_data, val_data, table_data = utils.load_dataset(cfg.toy, cfg.is_bert, cfg.dataset.path, cfg.query_type)
 
     # Set model
-    if args.cuda != -1:
-        torch.cuda.set_device(args.cuda)
-    model = IRNet(H_PARAMS, is_qgm=H_PARAMS["is_qgm"], is_cuda=args.cuda != -1)
-    if args.cuda != -1:
+    if cfg.cuda != -1:
+        torch.cuda.set_device(cfg.cuda)
+    model = IRNet(cfg)
+    if cfg.cuda != -1:
         model.cuda()
 
     # Set optimizer
-
     optimizer_cls = (
         RAdam
-        if H_PARAMS["optimizer"] == "radam"
-        else eval("torch.optim.%s" % H_PARAMS["optimizer"])
+        if cfg.optimizer == "radam"
+        else eval("torch.optim.%s" % cfg.optimizer)
     )
-    optimizer = optimizer_cls(model.without_bert_params, lr=H_PARAMS["lr"])
-    if H_PARAMS["bert"] != -1:
+    optimizer = optimizer_cls(model.without_bert_params, lr=cfg.lr)
+    if cfg.is_bert:
         bert_optimizer = optimizer_cls(
-            model.transformer_encoder.parameters(), lr=H_PARAMS["bert_lr"]
+            model.transformer_encoder.parameters(), lr=cfg.bert_lr
         )
     else:
         bert_optimizer = None
-    print("Enable Learning Rate Scheduler: ", H_PARAMS["lr_scheduler"])
-    if H_PARAMS["lr_scheduler"]:
+    print("Enable Learning Rate Scheduler: ", cfg.lr_scheduler)
+    if cfg.lr_scheduler:
         scheduler = optim.lr_scheduler.MultiStepLR(
             optimizer,
-            milestones=H_PARAMS["milestones"],
-            gamma=H_PARAMS["lr_scheduler_gamma"],
+            milestones=cfg.milestones,
+            gamma=cfg.lr_scheduler_gamma,
         )
         scheduler_bert = (
             optim.lr_scheduler.MultiStepLR(
                 bert_optimizer,
-                milestones=H_PARAMS["milestones"],
-                gamma=H_PARAMS["lr_scheduler_gamma"],
+                milestones=cfg.milestones,
+                gamma=cfg.lr_scheduler_gamma,
             )
             if bert_optimizer
             else None
@@ -93,10 +62,10 @@ if __name__ == "__main__":
         scheduler = None
         scheduler_bert = None
 
-    if args.load_model:
-        print("load pretrained model from {}".format(args.load_model))
+    if cfg.load_model:
+        print("load pretrained model from {}".format(cfg.load_model))
         pretrained_model = torch.load(
-            args.load_model, map_location=lambda storage, loc: storage
+            cfg.load_model, map_location=lambda storage, loc: storage
         )
         pretrained_modeled = copy.deepcopy(pretrained_model)
         for k in pretrained_model.keys():
@@ -105,15 +74,11 @@ if __name__ == "__main__":
 
         model.load_state_dict(pretrained_modeled)
 
-    model.word_emb = (
-        utils.load_word_emb(H_PARAMS["glove_embed_path"])
-        if H_PARAMS["bert"] == -1
-        else None
-    )
+    model.word_emb = None if cfg.is_bert else utils.load_word_emb(cfg.glove_embed_path)
 
     # Log path
     log_path = os.path.join(
-        H_PARAMS["log_path"], "debugging" if args.debugging else H_PARAMS["log_key"]
+        cfg.log_path, "debugging" if cfg.debugging else cfg.tag
     )
     log_model_path = os.path.join(log_path, "model")
 
@@ -121,15 +86,15 @@ if __name__ == "__main__":
     summary_writer = SummaryWriter(log_path)
 
     # Log hyper-parameters
-    with open(os.path.join(log_path, "config.jsonnet"), "w") as f:
-        f.write(str(H_PARAMS))
+    with open(os.path.join(log_path, "config.yaml"), "w") as f:
+        f.write(str(cfg))
 
     # Create Save directory
     if not os.path.exists(log_model_path):
         os.mkdir(log_model_path)
 
     best_val_acc = 0
-    for epoch in range(1, H_PARAMS["max_epoch"]):
+    for epoch in range(1, cfg.max_epoch):
         print(
             "\nEpoch: {}  lr: {:.2e}  step: {}  Time: {}".format(
                 epoch,
@@ -144,12 +109,11 @@ if __name__ == "__main__":
             model,
             optimizer,
             bert_optimizer,
-            H_PARAMS["batch_size"],
-            list(itertools.chain.from_iterable(train_datas)),
+            cfg.batch_size,
+            train_data,
             table_data,
-            H_PARAMS["clip_grad"],
-            is_transformer=H_PARAMS["is_transformer"],
-            is_qgm=H_PARAMS["is_qgm"],
+            cfg.clip_grad,
+            cfg.model_name,
         )
 
         utils.logging_to_tensorboard(
@@ -157,86 +121,53 @@ if __name__ == "__main__":
         )
 
         # Evaluation
-        if not epoch % H_PARAMS["eval_freq"] or epoch == H_PARAMS["epoch"]:
+        if not epoch % cfg.eval_freq or epoch == cfg.epoch:
             print("Evaluation:")
-            dataset_names = H_PARAMS["data_names"]
+            dataset_name = cfg.dataset.name
 
-            val_losses = []
-            val_total_accs = []
-            train_total_accs = []
-            for idx, dataset_name in enumerate(dataset_names):
-                train_data = train_datas[idx]
-                val_data = val_datas[idx]
+            train_acc = utils.epoch_acc(
+                    model,
+                    cfg.batch_size,
+                    train_data,
+                    table_data,
+                    cfg.model_name)
 
-                train_total_accs += [
-                    utils.epoch_acc(
-                        model,
-                        H_PARAMS["batch_size"],
-                        train_data,
-                        table_data,
-                        is_transformer=H_PARAMS["is_transformer"],
-                        is_qgm=H_PARAMS["is_qgm"],
-                    )
-                ]
-                val_losses += [
-                    utils.epoch_train(
-                        model,
-                        optimizer,
-                        bert_optimizer,
-                        H_PARAMS["batch_size"],
-                        val_data,
-                        table_data,
-                        H_PARAMS["clip_grad"],
-                        is_transformer=H_PARAMS["is_transformer"],
-                        is_qgm=H_PARAMS["is_qgm"],
-                        is_train=False,
-                    )
-                ]
-                val_total_accs += [
-                    utils.epoch_acc(
-                        model,
-                        H_PARAMS["batch_size"],
-                        val_data,
-                        table_data,
-                        is_transformer=H_PARAMS["is_transformer"],
-                        is_qgm=H_PARAMS["is_qgm"],
-                    )
-                ]
-
-                # Logging to tensorboard
-                utils.logging_to_tensorboard(
-                    summary_writer,
-                    "{}_train_acc/".format(dataset_name),
-                    train_total_accs[idx],
-                    epoch,
+            val_loss = utils.epoch_train(
+                    model,
+                    optimizer,
+                    bert_optimizer,
+                    cfg.batch_size,
+                    val_data,
+                    table_data,
+                    cfg.clip_grad,
+                    cfg.model_name,
+                    is_train=False)
+            val_acc = utils.epoch_acc(
+                    model,
+                    cfg.batch_size,
+                    val_data,
+                    table_data,
+                    cfg.model_name,
                 )
-                utils.logging_to_tensorboard(
-                    summary_writer,
-                    "{}_val_loss/".format(dataset_name),
-                    val_losses[idx],
-                    epoch,
-                )
-                utils.logging_to_tensorboard(
-                    summary_writer,
-                    "{}_val_acc/".format(dataset_name),
-                    val_total_accs[idx],
-                    epoch,
-                )
-
-            # Calculate Total Acc
-            train_acc = utils.calculate_total_acc(
-                train_total_accs, [len(datas) for datas in train_datas]
-            )
-            val_acc = utils.calculate_total_acc(
-                val_total_accs, [len(datas) for datas in val_datas]
-            )
 
             # Logging to tensorboard
             utils.logging_to_tensorboard(
-                summary_writer, "Total_train_acc/", train_acc, epoch
+                summary_writer,
+                "{}_train_acc/".format(dataset_name),
+                train_acc,
+                epoch,
             )
             utils.logging_to_tensorboard(
-                summary_writer, "Total_val_acc/", val_acc, epoch
+                summary_writer,
+                "{}_val_loss/".format(dataset_name),
+                val_loss,
+                epoch,
+            )
+            utils.logging_to_tensorboard(
+                summary_writer,
+                "{}_val_acc/".format(dataset_name),
+                val_acc,
+                epoch,
             )
 
             # Save if total_acc is higher
@@ -255,16 +186,13 @@ if __name__ == "__main__":
 
             # Print Accuracy
             print("Total Train Acc: {}".format(train_acc["total"]))
-            for idx in range(len(dataset_names)):
-                print(
-                    "{}: {}".format(dataset_names[idx], train_total_accs[idx]["total"])
-                )
-            print("\nTotal Val Acc: {}".format(val_acc["total"]))
-            for idx in range(len(dataset_names)):
-                print("{}: {}".format(dataset_names[idx], val_total_accs[idx]["total"]))
-            print("\n")
+            print("Total Val Acc: {}\n".format(val_acc["total"]))
 
         # Change learning rate
         scheduler.step()
         if scheduler_bert:
             scheduler_bert.step()
+
+
+if __name__ == "__main__":
+    train()

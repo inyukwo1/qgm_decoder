@@ -64,14 +64,10 @@ class BasicModel(nn.Module):
         packed_src_token_embed = pack_padded_sequence(
             src_token_embed, src_sents_len, batch_first=True
         )
-        # src_encodings: (tgt_query_len, batch_size, hidden_size)
         src_encodings, (last_state, last_cell) = self.encoder_lstm(
             packed_src_token_embed
         )
         src_encodings, _ = pad_packed_sequence(src_encodings, batch_first=True)
-        # src_encodings: (batch_size, tgt_query_len, hidden_size)
-        # src_encodings = src_encodings.permute(1, 0, 2)
-        # (batch_size, hidden_size * 2)
         last_state = torch.cat([last_state[0], last_state[1]], -1)
         last_cell = torch.cat([last_cell[0], last_cell[1]], -1)
 
@@ -109,7 +105,7 @@ class BasicModel(nn.Module):
                     map(
                         lambda x: self.word_emb.get(
                             x,
-                            np.zeros(self.h_params["col_embed_size"], dtype=np.float32),
+                            np.zeros(self.cfg.col_embed_size, dtype=np.float32),
                         ),
                         one_q,
                     )
@@ -133,7 +129,7 @@ class BasicModel(nn.Module):
         max_len = max(val_len)
 
         val_emb_array = np.zeros(
-            (B, max_len, self.h_params["col_embed_size"]), dtype=np.float32
+            (B, max_len, self.cfg.col_embed_size), dtype=np.float32
         )
         for i in range(B):
             for t in range(len(val_embs[i])):
@@ -149,7 +145,7 @@ class BasicModel(nn.Module):
             os.makedirs(dir_name)
 
         params = {
-            "h_params": self.h_params,
+            "cfg": self.cfg,
             "vocab": self.vocab,
             "grammar": self.grammar,
             "state_dict": self.state_dict(),

@@ -4,11 +4,10 @@ import torch.nn.utils
 from torch.autograd import Variable
 
 import torch
-from src.rule import semQL
+from semql.rule import semQL, semQL as define_rule
 from transformers import *
 from src.models import nn_utils
 from src.beam import Beams, ActionInfo
-from src.rule import semQL as define_rule
 from src.models.pointer_net import PointerNet
 
 # Transformers has a unified API
@@ -33,13 +32,12 @@ DETAIL_LIST = ["A", "C", "T"]
 
 
 class SemQL_Decoder(nn.Module):
-    def __init__(self, H_PARAMS, is_cuda=True):
+    def __init__(self, cfg):
         super(SemQL_Decoder, self).__init__()
-        self.h_params = H_PARAMS
-        self.is_cuda = is_cuda
+        self.cfg = cfg
+        self.is_cuda = cfg.cuda != -1
         self.grammar = semQL.Grammar()
-        self.use_column_pointer = H_PARAMS["column_pointer"]
-        self.use_sentence_features = H_PARAMS["sentence_features"]
+        self.use_column_pointer = cfg.column_pointer
 
         if self.is_cuda:
             self.new_long_tensor = torch.cuda.LongTensor
@@ -48,25 +46,22 @@ class SemQL_Decoder(nn.Module):
             self.new_long_tensor = torch.LongTensor
             self.new_tensor = torch.FloatTensor
         self.encoder_lstm = nn.LSTM(
-            H_PARAMS["embed_size"],
-            H_PARAMS["hidden_size"] // 2,
+            cfg.embed_size,
+            cfg.hidden_size // 2,
             bidirectional=True,
             batch_first=True,
         )
 
-        action_embed_size = self.h_params["action_embed_size"]
-        col_embed_size = self.h_params["col_embed_size"]
-        hidden_size = self.h_params["hidden_size"]
-        att_vec_size = self.h_params["att_vec_size"]
-        input_dim = (
-            self.h_params["action_embed_size"]
-            + self.h_params["att_vec_size"]
-            + self.h_params["type_embed_size"]
-        )
+        action_embed_size = cfg.action_embed_size
+        col_embed_size = cfg.col_embed_size
+        hidden_size = cfg.hidden_size
+        att_vec_size = cfg.att_vec_size
+        type_embed_size = cfg.type_embed_size
+        input_dim = action_embed_size + att_vec_size + type_embed_size
 
         self.decode_max_time_step = 40
         self.action_embed_size = action_embed_size
-        self.type_embed_size = self.h_params["type_embed_size"]
+        self.type_embed_size = type_embed_size
         self.lf_decoder_lstm = nn.LSTMCell(input_dim, hidden_size)
 
         self.sketch_decoder_lstm = nn.LSTMCell(input_dim, hidden_size)
@@ -88,7 +83,7 @@ class SemQL_Decoder(nn.Module):
             len(self.grammar.prod2id), action_embed_size
         )
         self.type_embed = nn.Embedding(
-            len(self.grammar.type2id), self.h_params["type_embed_size"]
+            len(self.grammar.type2id), type_embed_size
         )
         self.production_readout_b = nn.Parameter(
             torch.FloatTensor(len(self.grammar.prod2id)).zero_()
@@ -100,14 +95,14 @@ class SemQL_Decoder(nn.Module):
 
         self.read_out_act = (
             torch.tanh
-            if self.h_params["readout"] == "non_linear"
+            if cfg.readout == "non_linear"
             else nn_utils.identity
         )
 
         self.query_vec_to_action_embed = nn.Linear(
             att_vec_size,
             action_embed_size,
-            bias=self.h_params["readout"] == "non_linear",
+            bias=cfg.readout == "non_linear",
         )
 
         self.production_readout = lambda q: torch.nn.functional.linear(
@@ -116,20 +111,20 @@ class SemQL_Decoder(nn.Module):
             self.production_readout_b,
         )
 
-        self.q_att = nn.Linear(hidden_size, self.h_params["embed_size"])
+        self.q_att = nn.Linear(hidden_size, cfg.embed_size)
 
         self.column_rnn_input = nn.Linear(col_embed_size, action_embed_size, bias=False)
         self.table_rnn_input = nn.Linear(col_embed_size, action_embed_size, bias=False)
 
         self.column_pointer_net = PointerNet(
-            hidden_size, col_embed_size, attention_type=self.h_params["column_att"]
+            hidden_size, col_embed_size, attention_type=cfg.column_att
         )
 
         self.table_pointer_net = PointerNet(
-            hidden_size, col_embed_size, attention_type=self.h_params["column_att"]
+            hidden_size, col_embed_size, attention_type=cfg.column_att
         )
 
-        self.dropout = nn.Dropout(self.h_params["dropout"])
+        self.dropout = nn.Dropout(cfg.dropout)
 
         # initial the embedding layers
         nn.init.xavier_normal_(self.production_embed.weight.data)

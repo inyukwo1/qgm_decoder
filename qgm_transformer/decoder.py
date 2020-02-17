@@ -8,12 +8,13 @@ from qgm_transformer.transformer import TransformerDecoderLayer, TransformerDeco
 
 
 class QGM_Transformer_Decoder(nn.Module):
-    def __init__(self, is_bert):
+    def __init__(self, cfg):
         super(QGM_Transformer_Decoder, self).__init__()
         # Grammar
         mani_path = (
             "/home/hkkang/debugging/irnet_qgm_transformer/qgm_transformer/qgm.manifesto"
         )
+        is_bert = cfg.is_bert
         self.grammar = Grammar(is_bert, mani_path)
 
         # Decode Layers
