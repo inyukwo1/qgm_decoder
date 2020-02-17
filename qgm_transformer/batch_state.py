@@ -241,7 +241,9 @@ class TransformerBatchState:
 
     def save_loss(self, loss):
         for idx, b_idx in enumerate(self.b_indices):
-            self.loss[b_idx].add(-loss[idx], self.nonterminal_stack[b_idx][0], self.pred_history[b_idx])
+            self.loss[b_idx].add(
+                -loss[idx], self.nonterminal_stack[b_idx][0], self.pred_history[b_idx]
+            )
 
     def save_pred(self, preds):
         for idx, b_idx in enumerate(self.b_indices):

@@ -61,7 +61,11 @@ if __name__ == "__main__":
 
     # Set optimizer
 
-    optimizer_cls = RAdam if H_PARAMS["optimizer"] == "radam" else eval("torch.optim.%s" % H_PARAMS["optimizer"])
+    optimizer_cls = (
+        RAdam
+        if H_PARAMS["optimizer"] == "radam"
+        else eval("torch.optim.%s" % H_PARAMS["optimizer"])
+    )
     optimizer = optimizer_cls(model.without_bert_params, lr=H_PARAMS["lr"])
     if H_PARAMS["bert"] != -1:
         bert_optimizer = optimizer_cls(
