@@ -1,6 +1,7 @@
 import copy
 import torch
 import qgm_transformer.utils as utils
+from qgm_transformer.QGMLoss import QGMLoss
 
 
 class TransformerBatchState:
@@ -38,8 +39,7 @@ class TransformerBatchState:
         self.nonterminal_stack = [
             [grammar.get_start_symbol_id()] for _ in range(self.get_b_size())
         ]
-        self.sketch_loss = [torch.tensor(0.0).cuda() for _ in range(self.get_b_size())]
-        self.detail_loss = [torch.tensor(0.0).cuda() for _ in range(self.get_b_size())]
+        self.loss = [QGMLoss(self.grammar) for _ in range(self.get_b_size())]
         self.pred_history = [[] for _ in range(self.get_b_size())]
 
     def _make_view(self, view_indices, state_type):
@@ -60,8 +60,7 @@ class TransformerBatchState:
             state_type=state_type,
         )
         new_view.step_cnt = self.step_cnt
-        new_view.sketch_loss = self.sketch_loss
-        new_view.detail_loss = self.detail_loss
+        new_view.loss = self.loss
         new_view.pred_history = copy.deepcopy(self.pred_history)
         new_view.nonterminal_stack = copy.deepcopy(self.nonterminal_stack)
         return new_view
@@ -75,10 +74,7 @@ class TransformerBatchState:
                 )
                 self.nonterminal_stack[b_idx] = view.nonterminal_stack[b_idx]
                 self.pred_history[b_idx] = view.pred_history[b_idx]
-                if view.state_type == "action":
-                    self.sketch_loss[b_idx] = view.sketch_loss[b_idx]
-                else:
-                    self.detail_loss[b_idx] = view.detail_loss[b_idx]
+                self.loss[b_idx] = self.loss[b_idx]
 
     def _get_view_indices(self):
         # Parse view indices
@@ -245,10 +241,7 @@ class TransformerBatchState:
 
     def save_loss(self, loss):
         for idx, b_idx in enumerate(self.b_indices):
-            if self.state_type == "action":
-                self.sketch_loss[b_idx] -= loss[idx]
-            else:
-                self.detail_loss[b_idx] -= loss[idx]
+            self.loss[b_idx].add(-loss[idx], self.nonterminal_stack[b_idx][0], self.pred_history[b_idx])
 
     def save_pred(self, preds):
         for idx, b_idx in enumerate(self.b_indices):

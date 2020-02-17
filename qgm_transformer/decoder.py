@@ -230,7 +230,7 @@ class QGM_Transformer_Decoder(nn.Module):
         assert step is None
         # get losses, preds
         return (
-            (torch.stack(state.sketch_loss), torch.stack(state.detail_loss)),
+            state.loss,
             state.pred_history,
         )
 

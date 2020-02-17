@@ -409,17 +409,19 @@ def epoch_train(
 
         result = model.forward(examples)
         if is_transformer:
-            sketch_losses, detail_losses = result
-            if not total_loss:
-                total_loss["sketch"] = []
-                total_loss["detail"] = []
-                total_loss["total"] = []
-            for sketch_loss, detail_loss in zip(sketch_losses, detail_losses):
-                total_loss["sketch"] += [float(sketch_loss)]
-                total_loss["detail"] += [float(detail_loss)]
-                total_loss["total"] += [float(sketch_loss) + float(detail_loss)]
+            tmp = {key: [] for key in result[0].get_keys()}
+            for losses in result:
+                for key, item in losses.get_loss_dic().items():
+                    tmp[key] += [item]
+            tmp = {key: torch.mean(torch.stack(item)) for key, item in tmp.items()}
+            loss = tmp["sketch"] + tmp["detail"]
 
-            loss = torch.mean(sketch_losses) + torch.mean(detail_losses)
+            # Save
+            if not total_loss:
+                total_loss = {key: [] for key in result[0].get_keys()}
+            for key, item in tmp.items():
+                total_loss[key] += [float(item)]
+
         elif is_qgm:
             losses, pred_boxes = result
 
