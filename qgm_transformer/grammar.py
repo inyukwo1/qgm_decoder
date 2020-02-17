@@ -3,6 +3,7 @@ import torch.nn as nn
 
 class Grammar(nn.Module):
     def __init__(self, is_bert, manifesto_path):
+        super(Grammar, self).__init__()
         # Symbol
         self.symbols = {}
         self.terminals = []
