@@ -1,0 +1,4 @@
+dataset:
+  name: patients
+  path: ./data/patients
+  types: [train, dev, test]

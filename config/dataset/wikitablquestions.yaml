@@ -1,0 +1,4 @@
+dataset:
+  name: wikitablequestions
+  path: ./data/wikitablequestions
+  types: [train, dev, test]

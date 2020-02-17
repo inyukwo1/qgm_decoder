@@ -1,0 +1,7 @@
+dataset:
+  name: spider
+  path: ./data/spider
+  types: [train, dev]
+
+
+

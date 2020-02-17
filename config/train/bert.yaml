@@ -1,0 +1,5 @@
+tag: bert
+is_bert: true
+bert: 0
+bert_lr: 1e-4
+batch_size: 2

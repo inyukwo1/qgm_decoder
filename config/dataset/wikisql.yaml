@@ -1,0 +1,4 @@
+dataset:
+  name: wikisql
+  path: ./data/wikisql
+  types: [train, dev, test]
