@@ -11,7 +11,9 @@ from torch.utils.tensorboard import SummaryWriter
 
 from src import utils
 from src.models.model import IRNet
+
 log = logging.getLogger(__name__)
+
 
 @hydra.main(config_path="config/config.yaml")
 def train(cfg):
@@ -109,11 +111,11 @@ def train(cfg):
         )
 
         utils.logging_to_tensorboard(
-            summary_writer, "Total_train_loss/", train_loss, epoch
+            summary_writer, "{}_train_loss/".format(dataset_name), train_loss, epoch
         )
 
         # Evaluation
-        if not epoch % cfg.eval_freq or epoch == cfg.epoch:
+        if not epoch % cfg.eval_freq or epoch == cfg.max_epoch:
             log.info("Evaluation:")
             dataset_name = cfg.dataset.name
 

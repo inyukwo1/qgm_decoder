@@ -1,6 +1,6 @@
 hydra:
   run:
-    dir: outputs/${now:%m-%d}/${tag}
+    dir: logs/${now:%m-%d}/${tag}
   sweep:
     dir: multirun/${now:%m-%d}/${tag}
     subdir: ${hydra.job.num}

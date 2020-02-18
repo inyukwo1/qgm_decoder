@@ -12,6 +12,9 @@ from transformers import *
 from qgm_transformer.decoder import QGM_Transformer_Decoder
 
 
+from encoder.encoder import transformer_encoder
+
+
 # Transformers has a unified API
 # for 8 transformer architectures and 30 pretrained weights.
 #          Model          | Tokenizer          | Pretrained weights shortcut
@@ -44,41 +47,30 @@ class IRNet(BasicModel):
         else:
             self.new_long_tensor = torch.LongTensor
             self.new_tensor = torch.FloatTensor
+
         if self.is_bert:
-            model_class, tokenizer_class, pretrained_weight, dim = MODELS[
-                cfg.bert
-            ]
-            cfg.hidden_size = dim
-            cfg.col_embed_size = dim
-            cfg.embed_size = dim
-            att_vec_size = dim
+            model_class, tokenizer_class, pretrained_weight, dim = MODELS[cfg.bert]
+            cfg.att_vec_size = dim
+            self.embed_size = dim
+        else:
+            self.embed_size = 300
+
+        hidden_size = cfg.hidden_size
 
         self.encoder_lstm = nn.LSTM(
-            cfg.embed_size,
-            cfg.hidden_size // 2,
-            bidirectional=True,
-            batch_first=True,
+            self.embed_size, hidden_size // 2, bidirectional=True, batch_first=True,
         )
-
-        action_embed_size = cfg.action_embed_size
-        col_embed_size = cfg.col_embed_size
-        hidden_size = cfg.hidden_size
+        # self.table_linear = nn.Linear(self.embed_size, hidden_size)
+        # self.schema_linear = nn.Linear(self.embed_size, hidden_size)
 
         self.decoder_cell_init = nn.Linear(hidden_size, hidden_size)
 
-        self.col_type = nn.Linear(9, col_embed_size)
-        self.tab_type = nn.Linear(5, col_embed_size)
-        self.sketch_encoder = nn.LSTM(
-            action_embed_size,
-            action_embed_size // 2,
-            bidirectional=True,
-            batch_first=True,
-        )
-
+        self.col_type = nn.Linear(9, hidden_size)
+        self.tab_type = nn.Linear(5, hidden_size)
         self.dropout = nn.Dropout(cfg.dropout)
         self.captum_iden = nn.Dropout(0.000001)
 
-        # QGM Decoer
+        # QGM Decoder
         if self.decoder_name == "qgm_transformer":
             self.decoder = QGM_Transformer_Decoder(cfg)
         elif self.decoder_name == "qgm":
@@ -91,7 +83,7 @@ class IRNet(BasicModel):
         self.without_bert_params = list(self.parameters(recurse=True))
         if self.is_bert:
             model_class, tokenizer_class, pretrained_weight, dim = MODELS[cfg.bert]
-            self.transformer_encoder = model_class.from_pretrained(pretrained_weight)
+            self.bert_encoder = model_class.from_pretrained(pretrained_weight)
             self.tokenizer = tokenizer_class.from_pretrained(pretrained_weight)
             # self.tokenizer.add_special_tokens({"additional_special_tokens": ["[table]", "[column]", "[value]"]})
             self.transformer_dim = dim
@@ -102,10 +94,7 @@ class IRNet(BasicModel):
                 dim, dim // 2, batch_first=True, bidirectional=True
             )
 
-            self.cfg.hidden_size = dim
-            self.cfg.col_embed_size = dim
-
-    def transformer_encode(self, batch: Batch):
+    def bert_encode(self, batch: Batch):
         B = len(batch)
         sentences = batch.src_sents
         col_sets = batch.table_sents
@@ -119,8 +108,8 @@ class IRNet(BasicModel):
         col_types = []
         for b in range(B):
             word_start_ends = []
-            # question = "[CLS]"
-            question = "<cls>"
+            question = "[CLS]"
+            # question = "<cls>"
             for word in sentences[b]:
                 start = len(self.tokenizer.tokenize(question))
                 for one_word in word:
@@ -130,8 +119,8 @@ class IRNet(BasicModel):
             col_start_ends = []
             for cols in col_sets[b]:
                 start = len(self.tokenizer.tokenize(question))
-                # question += " [SEP]"
-                question += " <sep>"
+                question += " [SEP]"
+                # question += " <sep>"
                 for one_word in cols:
                     question += " " + one_word
                 end = len(self.tokenizer.tokenize(question))
@@ -139,8 +128,8 @@ class IRNet(BasicModel):
             tab_start_ends = []
             for tabs in table_sets[b]:
                 start = len(self.tokenizer.tokenize(question))
-                # question += " [SEP]"
-                question += "<sep>"
+                question += " [SEP]"
+                # question += "<sep>"
                 for one_word in tabs:
                     question += " " + one_word
                 end = len(self.tokenizer.tokenize(question))
@@ -167,7 +156,7 @@ class IRNet(BasicModel):
         encoded_questions = torch.tensor(encoded_questions)
         if torch.cuda.is_available():
             encoded_questions = encoded_questions.cuda()
-        embedding = self.transformer_encoder(encoded_questions)[0]
+        embedding = self.bert_encoder(encoded_questions)[0]
         src_encodings = []
         table_embedding = []
         schema_embedding = []
@@ -239,6 +228,7 @@ class IRNet(BasicModel):
 
         table_embedding = self.gen_x_batch(batch.table_sents)
         schema_embedding = self.gen_x_batch(batch.table_names)
+
         # get emb differ
         embedding_differ = self.embedding_cosine(
             src_embedding=src_embedding,
@@ -251,6 +241,9 @@ class IRNet(BasicModel):
             table_embedding=schema_embedding,
             table_unk_mask=batch.schema_token_mask,
         )
+
+        # table_embedding = self.table_linear(table_embedding)
+        # schema_embedding = self.schema_linear(schema_embedding)
 
         tab_ctx = (src_encodings.unsqueeze(1) * embedding_differ.unsqueeze(3)).sum(2)
         schema_ctx = (src_encodings.unsqueeze(1) * schema_differ.unsqueeze(3)).sum(2)
@@ -281,7 +274,7 @@ class IRNet(BasicModel):
                 table_embedding,
                 schema_embedding,
                 last_cell,
-            ) = self.transformer_encode(batch)
+            ) = self.bert_encode(batch)
         else:
             (
                 src_encodings,
@@ -372,13 +365,18 @@ class IRNet(BasicModel):
         # now should implement the examples
         batch = Batch(examples, is_cuda=self.is_cuda)
 
+        # src = self.gen_x_batch(batch.src_sents)
+        # col = self.gen_x_batch(batch.table_sents)
+        # tab = self.gen_x_batch(batch.table_names_iter)
+        # output = transformer_encoder(src, col, tab, batch.src_token_mask, batch.table_token_mask, batch.schema_token_mask)
+
         if self.is_bert:
             (
                 src_encodings,
                 table_embedding,
                 schema_embedding,
                 last_cell,
-            ) = self.transformer_encode(batch)
+            ) = self.bert_encode(batch)
             if src_encodings is None:
                 return None, None
         else:
@@ -466,7 +464,7 @@ class IRNet(BasicModel):
                     table_embedding,
                     schema_embedding,
                     last_cell,
-                ) = self.transformer_encode(batch)
+                ) = self.bert_encode(batch)
                 if src_encodings is None:
                     return None, None
             else:
@@ -492,11 +490,14 @@ class IRNet(BasicModel):
                     table_unk_mask=batch.schema_token_mask,
                 )
 
+                # table_embedding = self.table_linear(table_embedding)
+                # schema_embedding = self.schema_linear(schema_embedding)
+
                 tab_ctx = (
-                        src_encodings.unsqueeze(1) * embedding_differ.unsqueeze(3)
+                    src_encodings.unsqueeze(1) * embedding_differ.unsqueeze(3)
                 ).sum(2)
                 schema_ctx = (
-                        src_encodings.unsqueeze(1) * schema_differ.unsqueeze(3)
+                    src_encodings.unsqueeze(1) * schema_differ.unsqueeze(3)
                 ).sum(2)
 
                 table_embedding = table_embedding + tab_ctx

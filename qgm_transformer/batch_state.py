@@ -173,7 +173,7 @@ class TransformerBatchState:
         mask = mask.unsqueeze(1).repeat(1, tgt_size, 1).float()
 
         # To -inf
-        mask[mask==1] = torch.tensor(float('-inf'))
+        # mask[mask==1] = torch.tensor(float('-inf'))
 
         return mask
 

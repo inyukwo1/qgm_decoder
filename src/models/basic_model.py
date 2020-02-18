@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-# @Time    : 2019/5/26
-# @Author  : Jiaqi&Zecheng
-# @File    : basic_model.py
-# @Software: PyCharm
-"""
 
 import numpy as np
 import os
@@ -104,8 +98,7 @@ class BasicModel(nn.Module):
                 q_val = list(
                     map(
                         lambda x: self.word_emb.get(
-                            x,
-                            np.zeros(self.cfg.col_embed_size, dtype=np.float32),
+                            x, np.zeros(self.embed_size, dtype=np.float32),
                         ),
                         one_q,
                     )
@@ -128,9 +121,7 @@ class BasicModel(nn.Module):
             val_len[i] = len(q_val)
         max_len = max(val_len)
 
-        val_emb_array = np.zeros(
-            (B, max_len, self.cfg.col_embed_size), dtype=np.float32
-        )
+        val_emb_array = np.zeros((B, max_len, self.embed_size), dtype=np.float32)
         for i in range(B):
             for t in range(len(val_embs[i])):
                 val_emb_array[i, t, :] = val_embs[i][t]

@@ -4,24 +4,27 @@ import torch.nn as nn
 import qgm_transformer.utils as utils
 from qgm_transformer.grammar import Grammar
 from qgm_transformer.batch_state import TransformerBatchState
-from qgm_transformer.transformer import TransformerDecoderLayer, TransformerDecoder
+from qgm_transformer.transformer_decoder import (
+    TransformerDecoderLayer,
+    TransformerDecoder,
+)
 
 
 class QGM_Transformer_Decoder(nn.Module):
     def __init__(self, cfg):
         super(QGM_Transformer_Decoder, self).__init__()
         # Grammar
-        mani_path = (
-            "/home/hkkang/debugging/irnet_qgm_transformer/qgm_transformer/qgm.manifesto"
-        )
         is_bert = cfg.is_bert
-        self.grammar = Grammar(is_bert, mani_path)
+        grammar_path = cfg.grammar_path
+        hidden_size = cfg.hidden_size
+        self.grammar = Grammar(is_bert, grammar_path, hidden_size)
 
         # Decode Layers
-        dim = 1024 if is_bert else 300
-        d_model = 1024 if is_bert else 300
+        dim = 1024 if is_bert else hidden_size
+        d_model = 1024 if is_bert else hidden_size
         self.dim = dim
-        self.nhead = 8 if is_bert else 6
+        self.nhead = cfg.nhead
+        self.layer_num = cfg.layer_num
         self.att_affine_layer = nn.Linear(dim, dim)
         self.tgt_affine_layer = nn.Linear(dim, dim)
         self.tgt_linear_layer = nn.Linear(dim * 2, d_model)
@@ -29,7 +32,9 @@ class QGM_Transformer_Decoder(nn.Module):
 
         # Transformer Layers
         decoder_layer = TransformerDecoderLayer(d_model=d_model, nhead=self.nhead)
-        self.transformer_decoder = TransformerDecoder(decoder_layer, num_layers=3)
+        self.transformer_decoder = TransformerDecoder(
+            decoder_layer, num_layers=self.layer_num
+        )
         self._init_positional_embedding(d_model)
 
     def _init_positional_embedding(self, d_model, dropout=0.1, max_len=5000):
@@ -88,9 +93,15 @@ class QGM_Transformer_Decoder(nn.Module):
 
             # Decode
             tgt = self.pos_encode(tgt)
-            out = self.transformer_decoder(
-                tgt, memory, memory_mask=memory_mask
-            ).transpose(0, 1)
+            if True:
+                out = self.transformer_decoder(
+                    tgt, memory, memory_mask=memory_mask
+                ).transpose(0, 1)
+            else:
+                memory_key_padding_mask = state.get_memory_key_padding_mask()
+                out = self.transformer_decoder(
+                    tgt, memory, memory_key_padding_mask=memory_key_padding_mask
+                ).transpose(0, 1)
             out = self.out_linear_layer(out[:, -1:, :])
 
             # Get views

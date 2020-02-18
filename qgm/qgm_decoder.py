@@ -19,7 +19,6 @@ from qgm.utils import (
     get_is_asc,
     get_box_with_op_type,
     compare_boxes,
-    assert_dim,
 )
 
 
@@ -225,7 +224,7 @@ class QGM_Decoder(nn.Module):
         super(QGM_Decoder, self).__init__()
         # att_vec_dim = 128
         # input_dim = emb_dim * 2
-        emb_dim = cfg.embed_size
+        emb_dim = 1024 if cfg.is_bert else 300
         att_vec_dim = emb_dim
         input_dim = emb_dim + att_vec_dim
 

@@ -9,6 +9,7 @@ from transformers import *
 from src.models import nn_utils
 from src.beam import Beams, ActionInfo
 from src.models.pointer_net import PointerNet
+log = logging.getLogger(__name__)
 
 # Transformers has a unified API
 # for 8 transformer architectures and 30 pretrained weights.
@@ -35,6 +36,7 @@ class SemQL_Decoder(nn.Module):
     def __init__(self, cfg):
         super(SemQL_Decoder, self).__init__()
         self.cfg = cfg
+        self.embed_size = 1024 if cfg.is_bert else 300
         self.is_cuda = cfg.cuda != -1
         self.grammar = semQL.Grammar()
         self.use_column_pointer = cfg.column_pointer
@@ -45,19 +47,16 @@ class SemQL_Decoder(nn.Module):
         else:
             self.new_long_tensor = torch.LongTensor
             self.new_tensor = torch.FloatTensor
-        self.encoder_lstm = nn.LSTM(
-            cfg.embed_size,
-            cfg.hidden_size // 2,
-            bidirectional=True,
-            batch_first=True,
-        )
 
         action_embed_size = cfg.action_embed_size
-        col_embed_size = cfg.col_embed_size
         hidden_size = cfg.hidden_size
         att_vec_size = cfg.att_vec_size
         type_embed_size = cfg.type_embed_size
         input_dim = action_embed_size + att_vec_size + type_embed_size
+
+        self.encoder_lstm = nn.LSTM(
+            self.embed_size, hidden_size // 2, bidirectional=True, batch_first=True,
+        )
 
         self.decode_max_time_step = 40
         self.action_embed_size = action_embed_size
@@ -82,9 +81,7 @@ class SemQL_Decoder(nn.Module):
         self.production_embed = nn.Embedding(
             len(self.grammar.prod2id), action_embed_size
         )
-        self.type_embed = nn.Embedding(
-            len(self.grammar.type2id), type_embed_size
-        )
+        self.type_embed = nn.Embedding(len(self.grammar.type2id), type_embed_size)
         self.production_readout_b = nn.Parameter(
             torch.FloatTensor(len(self.grammar.prod2id)).zero_()
         )
@@ -94,15 +91,11 @@ class SemQL_Decoder(nn.Module):
         )
 
         self.read_out_act = (
-            torch.tanh
-            if cfg.readout == "non_linear"
-            else nn_utils.identity
+            torch.tanh if cfg.readout == "non_linear" else nn_utils.identity
         )
 
         self.query_vec_to_action_embed = nn.Linear(
-            att_vec_size,
-            action_embed_size,
-            bias=cfg.readout == "non_linear",
+            att_vec_size, action_embed_size, bias=cfg.readout == "non_linear",
         )
 
         self.production_readout = lambda q: torch.nn.functional.linear(
@@ -111,17 +104,17 @@ class SemQL_Decoder(nn.Module):
             self.production_readout_b,
         )
 
-        self.q_att = nn.Linear(hidden_size, cfg.embed_size)
+        self.q_att = nn.Linear(hidden_size, self.embed_size)
 
-        self.column_rnn_input = nn.Linear(col_embed_size, action_embed_size, bias=False)
-        self.table_rnn_input = nn.Linear(col_embed_size, action_embed_size, bias=False)
+        self.column_rnn_input = nn.Linear(self.embed_size, action_embed_size, bias=False)
+        self.table_rnn_input = nn.Linear(self.embed_size, action_embed_size, bias=False)
 
         self.column_pointer_net = PointerNet(
-            hidden_size, col_embed_size, attention_type=cfg.column_att
+            hidden_size, self.embed_size, attention_type=cfg.column_att
         )
 
         self.table_pointer_net = PointerNet(
-            hidden_size, col_embed_size, attention_type=cfg.column_att
+            hidden_size, self.embed_size, attention_type=cfg.column_att
         )
 
         self.dropout = nn.Dropout(cfg.dropout)
@@ -130,7 +123,7 @@ class SemQL_Decoder(nn.Module):
         nn.init.xavier_normal_(self.production_embed.weight.data)
         nn.init.xavier_normal_(self.type_embed.weight.data)
         nn.init.xavier_normal_(self.N_embed.weight.data)
-        print("Use Column Pointer: ", True if self.use_column_pointer else False)
+        log.info("Use Column Pointer: {}".format(True if self.use_column_pointer else False))
 
     def decode_forward(
         self,
@@ -455,12 +448,16 @@ class SemQL_Decoder(nn.Module):
                         action_probs[e_id].append(act_prob_t_i)
                     else:
                         pass
-            if (
-                isinstance(examples[0].tgt_actions[t], define_rule.C)
-                or isinstance(examples[0].tgt_actions[t], define_rule.T)
-                or isinstance(examples[0].tgt_actions[t], define_rule.A)
-            ):
-                detail_t += 1
+            try:
+                if (
+                    isinstance(examples[0].tgt_actions[t], define_rule.C)
+                    or isinstance(examples[0].tgt_actions[t], define_rule.T)
+                    or isinstance(examples[0].tgt_actions[t], define_rule.A)
+                ):
+                    detail_t += 1
+            except:
+                pass
+
             h_tm1 = (h_t, cell_t)
             att_tm1 = att_t
         lf_prob_var = torch.stack(

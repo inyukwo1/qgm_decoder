@@ -16,7 +16,7 @@ clip_grad: 5
 # Default training setup
 lr: 1e-3
 is_bert: false
-batch_size: 32
+batch_size: 64
 lr_scheduler: true
 lr_scheduler_gamma: 5e-1
 milestones: [40, 70]

@@ -2,7 +2,7 @@ import torch.nn as nn
 
 
 class Grammar(nn.Module):
-    def __init__(self, is_bert, manifesto_path):
+    def __init__(self, is_bert, grammar_path, hidden_size):
         super(Grammar, self).__init__()
         # Symbol
         self.symbols = {}
@@ -15,13 +15,13 @@ class Grammar(nn.Module):
         self.actions = {}
         self.action_to_action_id = {}
         self.action_id_to_action = {}
-        self._create_grammar(manifesto_path)
+        self._create_grammar(grammar_path)
         self.terminals = [
             key for key in self.symbols.keys() if key not in self.actions.keys()
         ]
 
         # Embeddings
-        emb_dim = 1024 if is_bert else 300
+        emb_dim = 1024 if is_bert else hidden_size
         self.symbol_emb = nn.Embedding(len(self.symbols), emb_dim).cuda()
         self.action_emb = nn.Embedding(len(self.action_to_action_id), emb_dim).cuda()
 
@@ -154,8 +154,4 @@ class Grammar(nn.Module):
 
 
 if __name__ == "__main__":
-    mani_path = (
-        "/home/hkkang/debugging/irnet_qgm_transformer/qgm_transformer/qgm.manifesto"
-    )
-    grammar = Grammar(mani_path)
-    stop = 1
+    pass
