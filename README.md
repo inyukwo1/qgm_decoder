@@ -38,10 +38,16 @@ config
  |   |-- qgm_transformer
  |
  |-- train    
+ |   |
+ |   |-- train_config1
+ |   |-- train_config2
+ |   |-- etc..
+ |
+ |--hydra
      |
-     |-- train_config1
-     |-- train_config2
-     |-- etc..
+     |-- output
+     |-- job_logging
+
 
 * You can select config file or change any argument with the command line `python train.py cuda=1 model=qgm dataset=wikisql`
 * Or create your own config file under *config/train/* for convenience.

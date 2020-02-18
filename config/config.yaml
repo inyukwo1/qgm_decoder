@@ -1,16 +1,15 @@
 defaults:
+  - hydra/job_logging: custom.yaml
+  - hydra/output: custom.yaml
   - model: qgm_transformer.yaml
   - dataset: spider.yaml
   - train: default.yaml
+
 
 # Default model settings
 seed: 100
 glove_embed_path: ./data/glove.42B.300d.txt
 log_path: ./logs
-embed_size: 300
-col_embed_size: 300
-action_embed_size: 128
-type_embed_size: 128
 hidden_size: 300
 dropout: 0.3
 clip_grad: 5
@@ -18,7 +17,7 @@ clip_grad: 5
 # Default training setup
 lr: 1e-3
 is_bert: false
-batch_size: 64
+batch_size: 32
 lr_scheduler: true
 lr_scheduler_gamma: 5e-1
 milestones: [40, 70]
