@@ -170,9 +170,17 @@ class TransformerBatchState:
         mask = self.src_mask.repeat(nhead, 1)
 
         # Expand as length of tgt
-        mask = mask.unsqueeze(1).repeat(1, tgt_size, 1)
+        mask = mask.unsqueeze(1).repeat(1, tgt_size, 1).float()
+
+        # To -inf
+        mask[mask==1] = torch.tensor(float('-inf'))
 
         return mask
+
+    def get_memory_key_padding_mask(self):
+        # Expand as nhead
+        mask = self.src_mask
+        return mask.bool()
 
     def get_tgt(self, affine_layer, linear_layer):
         # Get prev symbols
