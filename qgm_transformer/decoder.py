@@ -17,6 +17,7 @@ class QGM_Transformer_Decoder(nn.Module):
         is_bert = cfg.is_bert
         grammar_path = cfg.grammar_path
         hidden_size = cfg.hidden_size
+        self.is_additive_mask = cfg.is_additive_mask
         self.grammar = Grammar(is_bert, grammar_path, hidden_size)
 
         # Decode Layers
@@ -93,7 +94,7 @@ class QGM_Transformer_Decoder(nn.Module):
 
             # Decode
             tgt = self.pos_encode(tgt)
-            if True:
+            if self.is_additive_mask:
                 out = self.transformer_decoder(
                     tgt, memory, memory_mask=memory_mask
                 ).transpose(0, 1)

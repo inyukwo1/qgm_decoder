@@ -10,8 +10,6 @@ from qgm.qgm_decoder import QGM_Decoder
 from semql.semql_decoder import SemQL_Decoder
 from transformers import *
 from qgm_transformer.decoder import QGM_Transformer_Decoder
-
-
 from encoder.encoder import transformer_encoder
 
 
@@ -365,10 +363,10 @@ class IRNet(BasicModel):
         # now should implement the examples
         batch = Batch(examples, is_cuda=self.is_cuda)
 
-        # src = self.gen_x_batch(batch.src_sents)
-        # col = self.gen_x_batch(batch.table_sents)
-        # tab = self.gen_x_batch(batch.table_names_iter)
-        # output = transformer_encoder(src, col, tab, batch.src_token_mask, batch.table_token_mask, batch.schema_token_mask)
+        src = self.gen_x_batch(batch.src_sents)
+        col = self.gen_x_batch(batch.table_sents)
+        tab = self.gen_x_batch(batch.table_names_iter)
+        src_encodings, table_embedding, schema_embedding = transformer_encoder(src, col, tab, batch.src_token_mask, batch.table_token_mask, batch.schema_token_mask)
 
         if self.is_bert:
             (

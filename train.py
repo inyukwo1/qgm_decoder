@@ -110,6 +110,8 @@ def train(cfg):
             cfg.model_name,
         )
 
+        dataset_name = cfg.dataset.name
+
         utils.logging_to_tensorboard(
             summary_writer, "{}_train_loss/".format(dataset_name), train_loss, epoch
         )
@@ -117,7 +119,6 @@ def train(cfg):
         # Evaluation
         if not epoch % cfg.eval_freq or epoch == cfg.max_epoch:
             log.info("Evaluation:")
-            dataset_name = cfg.dataset.name
 
             train_acc = utils.epoch_acc(
                 model, cfg.batch_size, train_data, table_data, cfg.model_name
