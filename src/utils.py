@@ -9,6 +9,7 @@ import pickle
 import numpy as np
 from tqdm import tqdm
 from nltk.stem import WordNetLemmatizer
+import logging
 
 from src.dataset import Example
 from semql.rule import lf
@@ -17,6 +18,7 @@ from qgm.utils import filter_datas
 
 
 wordnet_lemmatizer = WordNetLemmatizer()
+log = logging.getLogger(__name__)
 
 
 def idx2seq(seq, indices, cur_idx):
@@ -69,7 +71,7 @@ def seq2idx(seq):
 
 
 def load_word_emb(file_name, use_small=False):
-    print("Loading word embedding from %s" % file_name)
+    log.info("Loading word embedding from {}".format(file_name))
     ret = {}
 
     cache_name = file_name.replace("txt", "pkl")
@@ -405,7 +407,9 @@ def epoch_train(
     total_loss = {}
     for st in tqdm(range(0, len(sql_data), batch_size)):
         ed = st + batch_size if st + batch_size < len(perm) else len(perm)
-        examples = to_batch_seq(sql_data, table_data, perm, st, ed, is_qgm="qgm" in model_name)
+        examples = to_batch_seq(
+            sql_data, table_data, perm, st, ed, is_qgm="qgm" in model_name
+        )
 
         result = model.forward(examples)
         if model_name == "qgm_transformer":
@@ -477,12 +481,7 @@ def epoch_train(
 
 
 def epoch_acc(
-    model,
-    batch_size,
-    sql_data,
-    table_data,
-    model_name,
-    return_details=False,
+    model, batch_size, sql_data, table_data, model_name, return_details=False,
 ):
     model.eval()
     perm = list(range(len(sql_data)))
@@ -491,7 +490,9 @@ def epoch_acc(
     example_list = []
     for st in tqdm(range(0, len(sql_data), batch_size)):
         ed = st + batch_size if st + batch_size < len(perm) else len(perm)
-        examples = to_batch_seq(sql_data, table_data, perm, st, ed, is_qgm="qgm" in model_name)
+        examples = to_batch_seq(
+            sql_data, table_data, perm, st, ed, is_qgm="qgm" in model_name
+        )
         example_list += examples
         if model_name == "qgm_transformer":
             pred += model.parse(examples)
@@ -515,11 +516,9 @@ def epoch_acc(
         return total_acc
 
 
-def load_data_new(
-    sql_path, use_small=False, is_bert=False, query_type="simple"
-):
+def load_data_new(sql_path, use_small=False, is_bert=False, query_type="simple"):
     sql_data = []
-    print("Loading data from {}".format(sql_path))
+    log.info("Loading data from {}".format(sql_path))
 
     with open(sql_path) as f:
         data = lower_keys(json.load(f))
@@ -561,8 +560,8 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type):
     table_data = {table["db_id"]: table for table in table_data}
 
     # Show dataset length
-    print("Total training set: {}".format(len(train_data)))
-    print("Total validation set: {}\n".format(len(val_data)))
+    log.info("Total training set: {}".format(len(train_data)))
+    log.info("Total validation set: {}\n".format(len(val_data)))
 
     return train_data, val_data, table_data
 
@@ -708,4 +707,3 @@ def set_randome_seed(seed):
         torch.cuda.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
-

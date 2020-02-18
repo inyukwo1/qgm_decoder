@@ -1,10 +1,9 @@
 defaults:
-  - hydra/job_logging: custom.yaml
-  - hydra/output: custom.yaml
-  - model: qgm_transformer.yaml
-  - dataset: spider.yaml
-  - train: default.yaml
-
+  - hydra/job_logging: custom
+  - hydra/output: custom
+  - model: qgm_transformer
+  - dataset: spider
+  - train: default
 
 # Default model settings
 seed: 100
@@ -32,3 +31,4 @@ load_model: false
 toy: false
 debugging: false
 tag: tag
+
