@@ -1,8 +1,9 @@
 import torch.nn as nn
 
 
-class Grammar:
+class Grammar(nn.Module):
     def __init__(self, is_bert, manifesto_path):
+        super(Grammar, self).__init__()
         # Symbol
         self.symbols = {}
         self.terminals = []
@@ -124,10 +125,15 @@ class Grammar:
         return tmp
 
     def get_action_id(self, symbol, idx):
-        self.action_to_action_id[(symbol, idx)]
+        return self.action_to_action_id[(symbol, idx)]
 
     def get_next_action(self, symbol, idx):
         return self.actions[symbol][idx]
+
+    def get_next_symbols(self, action):
+        symbol = action[0]
+        action_subid = action[1]
+        return self.actions[symbol][action_subid].split(" ")
 
     def get_next_actions(self, symbol):
         return self.actions[symbol]

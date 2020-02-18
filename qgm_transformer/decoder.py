@@ -5,15 +5,14 @@ import qgm_transformer.utils as utils
 from qgm_transformer.grammar import Grammar
 from qgm_transformer.batch_state import TransformerBatchState
 from qgm_transformer.transformer import TransformerDecoderLayer, TransformerDecoder
+from qgm_transformer.treepos_encoder import TreePosEncoder
 
 
 class QGM_Transformer_Decoder(nn.Module):
     def __init__(self, is_bert):
         super(QGM_Transformer_Decoder, self).__init__()
         # Grammar
-        mani_path = (
-            "/home/hkkang/debugging/irnet_qgm_transformer/qgm_transformer/qgm.manifesto"
-        )
+        mani_path = "./qgm_transformer/qgm.manifesto"
         self.grammar = Grammar(is_bert, mani_path)
 
         # Decode Layers
@@ -22,9 +21,13 @@ class QGM_Transformer_Decoder(nn.Module):
         self.dim = dim
         self.nhead = 8 if is_bert else 6
         self.att_affine_layer = nn.Linear(dim, dim)
+        self.action_att = nn.Linear(dim, dim)
+        self.col_att = nn.Linear(dim, dim)
+        self.tab_att = nn.Linear(dim, dim)
         self.tgt_affine_layer = nn.Linear(dim, dim)
         self.tgt_linear_layer = nn.Linear(dim * 2, d_model)
         self.out_linear_layer = nn.Linear(d_model, dim)
+        self.pos_encoder = TreePosEncoder(4, 15, dim, self.grammar)
 
         # Transformer Layers
         decoder_layer = TransformerDecoderLayer(d_model=d_model, nhead=self.nhead)
@@ -82,11 +85,13 @@ class QGM_Transformer_Decoder(nn.Module):
         while not state.is_done():
             # Get sub-mini-batch
             memory = state.get_memory()
-            tgt = state.get_tgt(self.tgt_affine_layer, self.tgt_linear_layer)
+            tgt = state.get_tgt(
+                self.pos_encoder, self.tgt_affine_layer, self.tgt_linear_layer
+            )
             memory_mask = state.get_memory_mask(self.nhead, tgt_size=tgt.shape[0])
 
             # Decode
-            tgt = self.pos_encode(tgt)
+            # tgt = self.pos_encode(tgt)
             out = self.transformer_decoder(
                 tgt, memory, memory_mask=memory_mask
             ).transpose(0, 1)

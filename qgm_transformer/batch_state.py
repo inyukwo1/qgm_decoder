@@ -1,6 +1,7 @@
 import copy
 import torch
 import qgm_transformer.utils as utils
+from qgm_transformer.treepos_encoder import TreePosEncoder
 
 
 class TransformerBatchState:
@@ -178,7 +179,7 @@ class TransformerBatchState:
 
         return mask
 
-    def get_tgt(self, affine_layer, linear_layer):
+    def get_tgt(self, pos_encoder, affine_layer, linear_layer):
         # Get prev symbols
         prev_actions = [
             self.pred_history[b_idx] if self.pred_history[b_idx] else []
@@ -198,6 +199,7 @@ class TransformerBatchState:
         action_embs = torch.zeros(
             self.get_b_size(), 1, self.grammar.action_emb.embedding_dim
         ).cuda()
+
         if self.step_cnt > 0:
             stacked_action_emb_list = []
             for b_idx, actions in enumerate(prev_actions):
@@ -218,12 +220,19 @@ class TransformerBatchState:
                                 )
                             )
                         ]
-                stacked_action_emb_list += [torch.stack(action_emb_list)]
-            action_embs = torch.cat(
-                (action_embs, torch.stack(stacked_action_emb_list)), dim=1
-            )
+                action_emb_list += [
+                    torch.zeros(self.grammar.action_emb.embedding_dim).cuda()
+                ]
+                pos_encoding = pos_encoder.action_seq_to_pos_encoding(actions)
+                stacked_action_emb_list += [
+                    torch.stack(action_emb_list) + pos_encoding[: len(actions) + 1]
+                ]
+            action_embs = torch.stack(stacked_action_emb_list)
+            # action_embs = torch.cat(
+            #     (torch.stack(stacked_action_emb_list), action_embs), dim=1
+            # )
 
-        # Linear Layer
+        # Linear Layer,
         action_embs = affine_layer(action_embs)
 
         # Concatenate

@@ -39,7 +39,6 @@ class SemQL_Decoder(nn.Module):
         self.is_cuda = is_cuda
         self.grammar = semQL.Grammar()
         self.use_column_pointer = H_PARAMS["column_pointer"]
-        self.use_sentence_features = H_PARAMS["sentence_features"]
 
         if self.is_cuda:
             self.new_long_tensor = torch.cuda.LongTensor
