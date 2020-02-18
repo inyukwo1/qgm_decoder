@@ -165,18 +165,6 @@ class TransformerBatchState:
     def get_memory(self):
         return self.encoded_src.transpose(0, 1)
 
-    def get_memory_mask(self, nhead, tgt_size):
-        # Expand as nhead
-        mask = self.src_mask.repeat(nhead, 1)
-
-        # Expand as length of tgt
-        mask = mask.unsqueeze(1).repeat(1, tgt_size, 1).float()
-
-        # To -inf
-        # mask[mask==1] = torch.tensor(float('-inf'))
-
-        return mask
-
     def get_memory_key_padding_mask(self):
         # Expand as nhead
         mask = self.src_mask

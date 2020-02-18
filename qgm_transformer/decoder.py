@@ -17,7 +17,6 @@ class QGM_Transformer_Decoder(nn.Module):
         is_bert = cfg.is_bert
         grammar_path = cfg.grammar_path
         hidden_size = cfg.hidden_size
-        self.is_additive_mask = cfg.is_additive_mask
         self.grammar = Grammar(is_bert, grammar_path, hidden_size)
 
         # Decode Layers
@@ -90,19 +89,13 @@ class QGM_Transformer_Decoder(nn.Module):
             # Get sub-mini-batch
             memory = state.get_memory()
             tgt = state.get_tgt(self.tgt_affine_layer, self.tgt_linear_layer)
-            memory_mask = state.get_memory_mask(self.nhead, tgt_size=tgt.shape[0])
+            memory_key_padding_mask = state.get_memory_key_padding_mask()
 
             # Decode
             tgt = self.pos_encode(tgt)
-            if self.is_additive_mask:
-                out = self.transformer_decoder(
-                    tgt, memory, memory_mask=memory_mask
-                ).transpose(0, 1)
-            else:
-                memory_key_padding_mask = state.get_memory_key_padding_mask()
-                out = self.transformer_decoder(
-                    tgt, memory, memory_key_padding_mask=memory_key_padding_mask
-                ).transpose(0, 1)
+            out = self.transformer_decoder(
+                tgt, memory, memory_key_padding_mask=memory_key_padding_mask
+            ).transpose(0, 1)
             out = self.out_linear_layer(out[:, -1:, :])
 
             # Get views
