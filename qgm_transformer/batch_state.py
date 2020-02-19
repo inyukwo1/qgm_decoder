@@ -2,6 +2,7 @@ import copy
 import torch
 import qgm_transformer.utils as utils
 from qgm_transformer.QGMLoss import QGMLoss
+import random
 
 
 class TransformerBatchState:
@@ -120,6 +121,72 @@ class TransformerBatchState:
 
         return action_view, column_view, table_view
 
+    def history_action_indices(self):
+        b_history_action_emb_indices = []
+        b_history_action_nodes = []
+        b_history_action_gold_indices = []
+        for b_idx in self.b_indices:
+            emb_indices = []
+            action_nodes = []
+            gold_indices = []
+            for idx, action in enumerate(self.pred_history[b_idx]):
+                if action[0] not in {"T", "C"}:
+                    emb_indices.append(idx)
+                    action_nodes.append(action[0])
+                    gold_indices.append(self.grammar.action_to_action_id[action])
+            emb_indices = torch.tensor(emb_indices).cuda()
+            gold_indices = torch.tensor(gold_indices).cuda()
+            b_history_action_emb_indices.append(emb_indices)
+            b_history_action_nodes.append(action_nodes)
+            b_history_action_gold_indices.append(gold_indices)
+        return (
+            b_history_action_emb_indices,
+            b_history_action_nodes,
+            b_history_action_gold_indices,
+        )
+
+    def history_col_indices(self):
+        b_history_col_emb_indices = []
+        b_history_tab_indices = []
+        b_history_col_gold_indices = []
+        for b_idx in self.b_indices:
+            col_indices = []
+            tab_indices = []
+            gold_indices = []
+            for idx, action in enumerate(self.pred_history[b_idx]):
+                if action[0] == "C":
+                    col_indices.append(idx)
+                    gold_indices.append(action[1])
+                if action[0] == "T":
+                    tab_indices.append(action[1])
+            col_indices = torch.tensor(col_indices).cuda()
+            b_history_col_emb_indices.append(col_indices)
+            b_history_tab_indices.append(tab_indices)
+            b_history_col_gold_indices.append(gold_indices)
+        return (
+            b_history_col_emb_indices,
+            b_history_tab_indices,
+            b_history_col_gold_indices,
+        )
+
+    def history_tab_indices(self):
+        b_history_tab_emb_indices = []
+        b_history_tab_gold_indices = []
+        for b_idx in self.b_indices:
+            tab_indices = []
+            gold_indices = []
+            for idx, action in enumerate(self.pred_history[b_idx]):
+                if action[0] == "T":
+                    tab_indices.append(idx)
+                    gold_indices.append(action[1])
+            tab_indices = torch.tensor(tab_indices).cuda()
+            b_history_tab_emb_indices.append(tab_indices)
+            b_history_tab_gold_indices.append(gold_indices)
+        return (
+            b_history_tab_emb_indices,
+            b_history_tab_gold_indices,
+        )
+
     def update_state(self):
         # Increase step count
         self.step_cnt += 1
@@ -170,7 +237,7 @@ class TransformerBatchState:
         mask = self.src_mask
         return mask.bool()
 
-    def get_tgt(self, affine_layer, linear_layer):
+    def get_tgt(self, affine_layer, linear_layer, training):
         # Get prev symbols
         prev_actions = [
             self.pred_history[b_idx] if self.pred_history[b_idx] else []
@@ -195,24 +262,29 @@ class TransformerBatchState:
             for b_idx, actions in enumerate(prev_actions):
                 action_emb_list = []
                 for s_idx, action in enumerate(actions):
-                    # Table
-                    if action[0] == "T":
-                        action_emb_list += [self.encoded_tab[b_idx][action[1]]]
-                    # Column
-                    elif action[0] == "C":
-                        action_emb_list += [self.encoded_col[b_idx][action[1]]]
-                    # Action
-                    else:
+                    if training and random.randint(0, 100) < 10:
                         action_emb_list += [
-                            self.grammar.action_emb(
-                                utils.to_long_tensor(
-                                    self.grammar.action_to_action_id[action]
-                                )
-                            )
+                            torch.zeros(self.grammar.action_emb.embedding_dim).cuda()
                         ]
+                    else:
+                        # Table
+                        if action[0] == "T":
+                            action_emb_list += [self.encoded_tab[b_idx][action[1]]]
+                        # Column
+                        elif action[0] == "C":
+                            action_emb_list += [self.encoded_col[b_idx][action[1]]]
+                        # Action
+                        else:
+                            action_emb_list += [
+                                self.grammar.action_emb(
+                                    utils.to_long_tensor(
+                                        self.grammar.action_to_action_id[action]
+                                    )
+                                )
+                            ]
                 stacked_action_emb_list += [torch.stack(action_emb_list)]
             action_embs = torch.cat(
-                (action_embs, torch.stack(stacked_action_emb_list)), dim=1
+                (torch.stack(stacked_action_emb_list), action_embs), dim=1
             )
 
         # Linear Layer
@@ -240,6 +312,9 @@ class TransformerBatchState:
             self.loss[b_idx].add(
                 -loss[idx], self.nonterminal_stack[b_idx][0], self.pred_history[b_idx]
             )
+
+    def save_aux_loss(self, b_idx, loss):
+        self.loss[b_idx].add_aux(-loss)
 
     def save_pred(self, preds):
         for idx, b_idx in enumerate(self.b_indices):

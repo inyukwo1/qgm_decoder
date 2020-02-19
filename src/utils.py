@@ -418,7 +418,7 @@ def epoch_train(
                 for key, item in losses.get_loss_dic().items():
                     tmp[key] += [item]
             tmp = {key: torch.mean(torch.stack(item)) for key, item in tmp.items()}
-            loss = tmp["sketch"] + tmp["detail"]
+            loss = tmp["sketch"] + tmp["detail"] + tmp["aux"]
 
             # Save
             if not total_loss:

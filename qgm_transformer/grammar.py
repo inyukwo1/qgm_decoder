@@ -145,8 +145,10 @@ class Grammar(nn.Module):
     def get_action_len(self):
         return len(self.action_to_action_id)
 
-    def get_next_possible_action_ids(self, symbol_id):
-        symbol = self.symbol_id_to_symbol[symbol_id]
+    def get_next_possible_action_ids(self, symbol):
+        if isinstance(symbol, int):
+            symbol_id = symbol
+            symbol = self.symbol_id_to_symbol[symbol_id]
         return [
             self.action_to_action_id[(symbol, idx)]
             for idx in range(len(self.actions[symbol]))

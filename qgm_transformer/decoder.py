@@ -88,7 +88,9 @@ class QGM_Transformer_Decoder(nn.Module):
         while not state.is_done():
             # Get sub-mini-batch
             memory = state.get_memory()
-            tgt = state.get_tgt(self.tgt_affine_layer, self.tgt_linear_layer)
+            tgt = state.get_tgt(
+                self.tgt_affine_layer, self.tgt_linear_layer, self.training
+            )
             memory_key_padding_mask = state.get_memory_key_padding_mask()
 
             # Decode
@@ -96,7 +98,11 @@ class QGM_Transformer_Decoder(nn.Module):
             out = self.transformer_decoder(
                 tgt, memory, memory_key_padding_mask=memory_key_padding_mask
             ).transpose(0, 1)
-            out = self.out_linear_layer(out[:, -1:, :])
+            out_all = self.out_linear_layer(out)
+            out = out_all[:, -1:, :]
+
+            if self.training:
+                self.history_train(state, out_all)
 
             # Get views
             action_view, column_view, table_view = state.get_views()
@@ -239,6 +245,135 @@ class QGM_Transformer_Decoder(nn.Module):
             state.loss,
             state.pred_history,
         )
+
+    def history_train(self, state, out):
+        (
+            b_history_action_emb_indices,
+            b_history_action_nodes,
+            b_history_action_gold_indices,
+        ) = state.history_action_indices()
+        for (
+            b_idx,
+            (
+                history_action_emb_indices,
+                history_action_nodes,
+                history_action_gold_indices,
+            ),
+        ) in enumerate(
+            zip(
+                b_history_action_emb_indices,
+                b_history_action_nodes,
+                b_history_action_gold_indices,
+            )
+        ):
+            if len(history_action_emb_indices) == 0:
+                continue
+            action_out = out[b_idx, history_action_emb_indices].unsqueeze(1)
+            action_emb = self.grammar.action_emb.weight.contiguous()
+            action_emb = action_emb.unsqueeze(0).repeat(
+                len(history_action_emb_indices), 1, 1
+            )
+            next_action_ids = utils.array_to_tensor(
+                [
+                    self.grammar.get_next_possible_action_ids(cur_node)
+                    for cur_node in history_action_nodes
+                ]
+            )
+
+            action_masks = torch.ones(
+                len(history_action_emb_indices),
+                self.grammar.get_action_len(),
+                dtype=torch.long,
+            ).cuda()
+            for idx, item in enumerate(next_action_ids):
+                action_masks[idx][item] = 0
+            probs = torch.nn.functional.softmax(
+                utils.calculate_attention_weights(
+                    action_emb,
+                    action_out,
+                    source_mask=action_masks,
+                    affine_layer=self.att_affine_layer,
+                ),
+                dim=1,
+            )
+            for idx, item in enumerate(history_action_gold_indices):
+                state.save_aux_loss(b_idx, probs[idx][item])
+
+        (
+            b_history_col_emb_indices,
+            b_history_tab_indices,
+            b_history_col_gold_indices,
+        ) = state.history_col_indices()
+        for (
+            b_idx,
+            (history_col_emb_indices, history_tab_indices, history_col_gold_indices,),
+        ) in enumerate(
+            zip(
+                b_history_col_emb_indices,
+                b_history_tab_indices,
+                b_history_col_gold_indices,
+            )
+        ):
+            if len(history_col_emb_indices) == 0:
+                continue
+            col_out = out[b_idx, history_col_emb_indices].unsqueeze(1)
+            col_emb = state.encoded_col[b_idx]
+            col_emb = col_emb.unsqueeze(0).repeat(len(history_col_emb_indices), 1, 1)
+
+            # Get input mask
+            col_masks = torch.ones(
+                (len(history_col_emb_indices), col_emb.shape[1]), dtype=torch.long,
+            ).cuda()
+
+            col_ids = []
+            for table_id in history_tab_indices:
+                col_ids += state.tab_col_dic[b_idx][table_id]
+            col_ids = torch.tensor(list(set(col_ids)), dtype=torch.long).cuda()
+            for idx in range(len(col_masks)):
+                col_masks[idx][col_ids] = 0
+
+            probs = torch.nn.functional.softmax(
+                utils.calculate_attention_weights(
+                    col_emb,
+                    col_out,
+                    source_mask=col_masks,
+                    affine_layer=self.att_affine_layer,
+                ),
+                dim=1,
+            )
+            for idx, item in enumerate(history_col_gold_indices):
+                state.save_aux_loss(b_idx, probs[idx][item])
+        (
+            b_history_tab_emb_indices,
+            b_history_tab_gold_indices,
+        ) = state.history_tab_indices()
+        for (b_idx, (history_tab_emb_indices, history_tab_gold_indices),) in enumerate(
+            zip(b_history_tab_emb_indices, b_history_tab_gold_indices,)
+        ):
+            if len(history_tab_emb_indices) == 0:
+                continue
+            tab_out = out[b_idx, history_tab_emb_indices].unsqueeze(1)
+            tab_emb = state.encoded_tab[b_idx]
+            tab_emb = tab_emb.unsqueeze(0).repeat(len(history_tab_emb_indices), 1, 1)
+
+            # Get input mask
+            tab_masks = (
+                state.tab_mask[b_idx]
+                .unsqueeze(0)
+                .repeat(len(history_tab_emb_indices), 1)
+            )
+
+            probs = torch.nn.functional.softmax(
+                utils.calculate_attention_weights(
+                    tab_emb,
+                    tab_out,
+                    source_mask=tab_masks,
+                    affine_layer=self.att_affine_layer,
+                ),
+                dim=1,
+            )
+            for idx, item in enumerate(history_tab_gold_indices):
+                state.save_aux_loss(b_idx, probs[idx][item])
 
     def predict_for_captum(self, view, out, src, src_mask):
         probs = torch.nn.functional.softmax(

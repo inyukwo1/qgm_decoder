@@ -5,13 +5,13 @@ def array_to_tensor(batch_array):
     b_size = len(batch_array)
     max_len = max([len(item) for item in batch_array])
 
-    tensor = torch.zeros((b_size, max_len), dtype=torch.long)
+    tensor = torch.zeros(b_size, max_len, dtype=torch.long).cuda()
 
     for idx in range(b_size):
         length = len(batch_array[idx])
-        tensor[idx][:length] = torch.tensor(batch_array[idx])
+        tensor[idx][:length] = torch.tensor(batch_array[idx], dtype=torch.long).cuda()
 
-    return tensor.cuda()
+    return tensor
 
 
 def to_long_tensor(batch_list):
