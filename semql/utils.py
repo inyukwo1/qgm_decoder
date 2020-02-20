@@ -62,66 +62,73 @@ def load_dataSets(args):
 
 
 def group_header(toks, idx, num_toks, header_toks):
-    for endIdx in reversed(range(idx + 1, num_toks + 1)):
-        sub_toks = toks[idx:endIdx]
+    for endIdx in reversed(range(idx + 1, num_toks+1)):
+        sub_toks = toks[idx: endIdx]
         sub_toks = " ".join(sub_toks)
         if sub_toks in header_toks:
             return endIdx, sub_toks
     return idx, None
 
-
 def fully_part_header(toks, idx, num_toks, header_toks):
-    for endIdx in reversed(range(idx + 1, num_toks + 1)):
-        sub_toks = toks[idx:endIdx]
+    for endIdx in reversed(range(idx + 1, num_toks+1)):
+        sub_toks = toks[idx: endIdx]
         if len(sub_toks) > 1:
             sub_toks = " ".join(sub_toks)
             if sub_toks in header_toks:
                 return endIdx, sub_toks
     return idx, None
 
-
 def partial_header(toks, idx, header_toks):
     def check_in(list_one, list_two):
         if len(set(list_one) & set(list_two)) == len(list_one) and (len(list_two) <= 3):
             return True
+    headers = []
 
     for endIdx in reversed(range(idx + 1, len(toks))):
-        sub_toks = toks[idx : min(endIdx, len(toks))]
+        sub_toks = toks[idx: min(endIdx, len(toks))]
         if len(sub_toks) > 1:
             flag_count = 0
             tmp_heads = None
-            for heads in header_toks:
+            for head_idx, heads in enumerate(header_toks):
                 if check_in(sub_toks, heads):
                     flag_count += 1
                     tmp_heads = heads
-            if flag_count == 1:
-                return endIdx, tmp_heads
-    return idx, None
-
+                    headers.append(heads)
+            if flag_count > 0:
+                return endIdx, tmp_heads, headers
+    return idx, None, None
 
 def symbol_filter(questions):
     question_tmp_q = []
     for q_id, q_val in enumerate(questions):
-        if (
-            len(q_val) > 2
-            and q_val[0] in ["'", '"', "`", "鈥�", "鈥�"]
-            and q_val[-1] in ["'", '"', "`", "鈥�"]
-        ):
+        if len(q_val) > 2 and q_val[0] in ["'", '"', '`', '鈥�', '鈥�'] and q_val[-1] in ["'", '"', '`', '鈥�']:
             question_tmp_q.append("'")
             question_tmp_q += ["".join(q_val[1:-1])]
             question_tmp_q.append("'")
-        elif len(q_val) > 2 and q_val[0] in ["'", '"', "`", "鈥�"]:
+        elif len(q_val) > 2 and q_val[0] in ["'", '"', '`', '鈥�'] :
             question_tmp_q.append("'")
             question_tmp_q += ["".join(q_val[1:])]
-        elif len(q_val) > 2 and q_val[-1] in ["'", '"', "`", "鈥�"]:
+        elif len(q_val) > 2 and q_val[-1] in ["'", '"', '`', '鈥�']:
             question_tmp_q += ["".join(q_val[0:-1])]
             question_tmp_q.append("'")
-        elif q_val in ["'", '"', "`", "鈥�", "鈥�", "``", "''"]:
+        elif q_val in ["'", '"', '`', '鈥�', '鈥�', '``', "''"]:
             question_tmp_q += ["'"]
         else:
             question_tmp_q += [q_val]
     return question_tmp_q
 
+
+def group_db(toks, idx, num_toks, col_value_set):
+    cols = []
+    for endIdx in reversed(range(idx + 1, num_toks + 1)):
+        sub_toks = toks[idx: endIdx]
+        sub_toks = " ".join(sub_toks)
+        for col in col_value_set:
+            if sub_toks.lower() in col_value_set[col] or lemma(sub_toks.lower()) in col_value_set[col]:
+                cols.append(col)
+        if cols:
+            return endIdx, sub_toks, cols
+    return idx, None, cols
 
 def group_values(toks, idx, num_toks):
     def check_isupper(tok_lists):
@@ -131,53 +138,42 @@ def group_values(toks, idx, num_toks):
         return True
 
     for endIdx in reversed(range(idx + 1, num_toks + 1)):
-        sub_toks = toks[idx:endIdx]
+        sub_toks = toks[idx: endIdx]
 
         if len(sub_toks) > 1 and check_isupper(sub_toks) is True:
             return endIdx, sub_toks
         if len(sub_toks) == 1:
-            if (
-                sub_toks[0][0].isupper()
-                and sub_toks[0].lower() not in VALUE_FILTER
-                and sub_toks[0].lower().isalnum() is True
-            ):
+            if sub_toks[0][0].isupper() and sub_toks[0].lower() not in VALUE_FILTER and \
+                            sub_toks[0].lower().isalnum() is True:
                 return endIdx, sub_toks
     return idx, None
 
 
 def group_digital(toks, idx):
-    test = toks[idx].replace(":", "")
-    test = test.replace(".", "")
+    test = toks[idx].replace(':', '')
+    test = test.replace('.', '')
     if test.isdigit():
         return True
     else:
         return False
 
-
 def group_symbol(toks, idx, num_toks):
-    if toks[idx - 1] == "'":
-        for i in range(0, min(3, num_toks - idx)):
+    if toks[idx-1] == "'":
+        for i in range(0, min(3, num_toks-idx)):
             if toks[i + idx] == "'":
-                return i + idx, toks[idx : i + idx]
+                return i + idx, toks[idx:i+idx]
     return idx, None
 
 
 def num2year(tok):
-    if (
-        len(str(tok)) == 4
-        and str(tok).isdigit()
-        and int(str(tok)[:2]) < 22
-        and int(str(tok)[:2]) > 15
-    ):
+    if len(str(tok)) == 4 and str(tok).isdigit() and int(str(tok)[:2]) < 22 and int(str(tok)[:2]) > 15:
         return True
     return False
-
 
 def set_header(toks, header_toks, tok_concol, idx, num_toks):
     def check_in(list_one, list_two):
         if set(list_one) == set(list_two):
             return True
-
     for endIdx in range(idx, num_toks):
         toks += tok_concol[endIdx]
         if len(tok_concol[endIdx]) > 1:
@@ -186,7 +182,6 @@ def set_header(toks, header_toks, tok_concol, idx, num_toks):
             if check_in(toks, heads):
                 return heads
     return None
-
 
 def re_lemma(string):
     lema = lemma(string.lower())
