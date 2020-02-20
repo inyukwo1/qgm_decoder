@@ -88,6 +88,10 @@ def load_word_emb(file_name, use_small=False):
                     ret[info[0]] = np.array(list(map(lambda x: float(x), info[1:])))
         with open(cache_name, "wb") as cache_file:
             pickle.dump(ret, cache_file)
+    # Add key words
+    key_words = ["[db]", "[table]", "[column]", "[value]"]
+    for key_word in key_words:
+        ret[key_word] = np.random.randn(300)
     return ret
 
 
