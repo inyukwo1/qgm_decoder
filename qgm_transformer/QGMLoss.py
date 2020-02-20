@@ -21,6 +21,7 @@ class QGMLoss:
         self.grammar = grammar
 
     def _get_key(self, action_node, prev_actions):
+        key = None
         if action_node == self.grammar.symbol_to_symbol_id["B"]:
             key = "predicate_num"
         elif action_node == self.grammar.symbol_to_symbol_id["Q"]:
@@ -30,23 +31,34 @@ class QGMLoss:
         elif action_node == self.grammar.symbol_to_symbol_id["P"]:
             key = "predicate_num"
         elif action_node == self.grammar.symbol_to_symbol_id["A"]:
+            # 끝까지 봐서 H 면 head_agg 바로 전이 O 면 predicate_agg
             if prev_actions[-1][0] == "O":
                 key = "predicate_agg"
-            elif prev_actions[-1][0] == "H":
-                key = "head_agg"
             else:
-                raise RuntimeError("Should not be here {}:{}".format(prev_actions, action_node))
+                for action in reversed(prev_actions):
+                    if action[0] in ["A", "C"]:
+                        continue
+                    elif action[0] == "H":
+                        key = "head_agg"
+                        break
+                if not key:
+                    raise RuntimeError("Should not be here {}:{}".format(prev_actions, action_node))
         elif action_node == self.grammar.symbol_to_symbol_id["O"]:
             key = "predicate_op"
         elif action_node == self.grammar.symbol_to_symbol_id["T"]:
             key = "quantifier_tab"
         elif action_node == self.grammar.symbol_to_symbol_id["C"]:
-            if prev_actions[-2][0] == "H":
-                key = "head_col"
-            elif prev_actions[-2][0] == "O":
+            # 끝까지 봐서 H 면 head_col바로 전이 O 면 predicate_col
+            if prev_actions[-2][0] == "O":
                 key = "predicate_col"
             else:
-                raise RuntimeError("Should not be here {}:{}".format(prev_actions, action_node))
+                for action in reversed(prev_actions[:-1]):
+                    if action[0] in ["A", "C"]:
+                        continue
+                    elif action[0] == "H":
+                        key = "head_col"
+                if not key:
+                    raise RuntimeError("Should not be here {}:{}".format(prev_actions, action_node))
         else:
             raise RuntimeError("Should not be here {}:{}".format(prev_actions, action_node))
         return key

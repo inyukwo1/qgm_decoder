@@ -34,8 +34,10 @@ NotLike = NotLike
 
 <Grammar_start>
 B ::= Q H P | Q H
-Q ::= T Q | T
-H ::= A C H | A C
+#Q ::= T Q | T
+Q ::= T | T T | T T T | T T T T | T T T T T | T T T T T T
+#H ::= A C H | A C
+H ::= A C | A C A C | A C A C A C | A C A C A C A C | A C A C A C A C A C
 P ::= O A C P | O A C
 A ::= N | CNT | MIN | MAX | AVG | SUM
 O ::= Not | Between | = | > | < | >= | <= | != | In | Like | Is | Exists | NotIn | NotLike

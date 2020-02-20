@@ -8,15 +8,29 @@ def create_qgm_action(qgm_boxes):
     actions = "B({}) ".format(0 if qgm_box["body"]["local_predicates"] else 1)
 
     # Q
+    """
     q_len = len(qgm_box["body"]["quantifiers"])
     for idx, quantifier in enumerate(qgm_box["body"]["quantifiers"]):
         actions += "Q({}) ".format(1 if idx + 1 == q_len else 0)
         actions += "T({}) ".format(quantifier)
+    """
+    q_len = len(qgm_box["body"]["quantifiers"])
+    actions += "Q({}) ".format(q_len - 1)
+    for idx, quantifier in enumerate(qgm_box["body"]["quantifiers"]):
+        actions += "T({}) ".format(quantifier)
+
 
     # H
+    """
     h_len = len(qgm_box["head"])
     for idx, head in enumerate(qgm_box["head"]):
         actions += "H({}) ".format(1 if idx + 1 == h_len else 0)
+        actions += "A({}) ".format(head[0])
+        actions += "C({}) ".format(head[1])
+    """
+    h_len = len(qgm_box["head"])
+    actions += "H({}) ".format(h_len - 1)
+    for idx, head in enumerate(qgm_box["head"]):
         actions += "A({}) ".format(head[0])
         actions += "C({}) ".format(head[1])
 
@@ -33,7 +47,8 @@ def create_qgm_action(qgm_boxes):
 
 
 if __name__ == "__main__":
-    dataset_names = ["spider", "wikisql", "wikitablequestions"]
+    #dataset_names = ["spider", "wikisql", "wikitablequestions"]
+    dataset_names = ["spider"]
     data_types = ["dev", "train", "test"]
 
     for dataset_name in dataset_names:
