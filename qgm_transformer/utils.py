@@ -18,7 +18,7 @@ def to_long_tensor(batch_list):
     return torch.tensor(batch_list, dtype=torch.long).cuda()
 
 
-def calculate_attention_weights(source, query, source_mask=None, affine_layer=None):
+def calculate_attention_weights(source, query, source_mask=None, affine_layer=None, log_softmax=True):
     if affine_layer:
         source = affine_layer(source)
     weight_scores = torch.bmm(source, query.transpose(1, 2)).squeeze(-1)
@@ -27,7 +27,10 @@ def calculate_attention_weights(source, query, source_mask=None, affine_layer=No
     if source_mask is not None:
         weight_scores.data.masked_fill_(source_mask.bool(), -float("inf"))
 
-    weight_probs = torch.log_softmax(weight_scores, dim=-1)
+    if log_softmax:
+        weight_probs = torch.log_softmax(weight_scores, dim=-1)
+    else:
+        weight_probs = torch.softmax(weight_scores, dim=-1)
 
     return weight_probs
 

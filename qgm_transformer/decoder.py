@@ -4,10 +4,6 @@ import torch.nn as nn
 import qgm_transformer.utils as utils
 from qgm_transformer.grammar import Grammar
 from qgm_transformer.batch_state import TransformerBatchState
-from qgm_transformer.transformer_decoder import (
-    TransformerDecoderLayer,
-    TransformerDecoder,
-)
 
 
 class QGM_Transformer_Decoder(nn.Module):
@@ -30,11 +26,16 @@ class QGM_Transformer_Decoder(nn.Module):
         self.tgt_linear_layer = nn.Linear(dim * 2, d_model)
         self.out_linear_layer = nn.Linear(d_model, dim)
 
+        # LSTM Decoder
+        self.lstm_decoder = nn.LSTMCell(dim*3, dim)
+
+        """
         # Transformer Layers
         decoder_layer = TransformerDecoderLayer(d_model=d_model, nhead=self.nhead)
         self.transformer_decoder = TransformerDecoder(
             decoder_layer, num_layers=self.layer_num
         )
+        """
         self._init_positional_embedding(d_model)
 
     def _init_positional_embedding(self, d_model, dropout=0.1, max_len=5000):
@@ -55,6 +56,7 @@ class QGM_Transformer_Decoder(nn.Module):
 
     def forward(
         self,
+        init_state,
         encoded_src,
         encoded_col,
         encoded_tab,
@@ -83,20 +85,33 @@ class QGM_Transformer_Decoder(nn.Module):
             gold_qgms,
         )
 
+        state.create_lstm_cell_state(init_state)
+
         # Decode
         decode_step_num = 0
         while not state.is_done():
             # Get sub-mini-batch
             memory = state.get_memory()
-            tgt = state.get_tgt(self.tgt_affine_layer, self.tgt_linear_layer)
-            memory_key_padding_mask = state.get_memory_key_padding_mask()
+            memory_mask = state.get_memory_key_padding_mask()
+            #tgt = state.get_tgt(self.tgt_affine_layer, self.tgt_linear_layer)
+            lstm_state = state.get_lstm_state()
+            #memory_key_padding_mask = state.get_memory_key_padding_mask()
 
             # Decode
-            tgt = self.pos_encode(tgt)
-            out = self.transformer_decoder(
-                tgt, memory, memory_key_padding_mask=memory_key_padding_mask
-            ).transpose(0, 1)
-            out = self.out_linear_layer(out[:, -1:, :])
+            # Get prev action emb
+            prev_action_emb = state.get_prev_action_emb()
+            # Get current node emb
+            current_node_emb = state.get_current_node_emb()
+            # Get attn b/w prev hidden and memory
+            mem_hid_att = self.attention(memory, memory_mask, lstm_state[0])
+            # Concatenate
+            lstm_input = torch.cat([prev_action_emb, current_node_emb, mem_hid_att], dim=-1)
+            # Input to LSTM
+            new_lstm_state = self.lstm_decoder(lstm_input, lstm_state)
+            # Save lstm state
+            state.save_lstm_state(new_lstm_state)
+            # linear and compute out
+            out = self.out_linear_layer(new_lstm_state[0])
 
             # Get views
             action_view, column_view, table_view = state.get_views()
@@ -105,12 +120,7 @@ class QGM_Transformer_Decoder(nn.Module):
             if action_view:
                 # Get input: last action
                 current_nodes = action_view.get_current_action_node()
-                next_action_ids = utils.array_to_tensor(
-                    [
-                        self.grammar.get_next_possible_action_ids(cur_node)
-                        for cur_node in current_nodes
-                    ]
-                )
+                next_action_ids = [ self.grammar.get_next_possible_action_ids(cur_node) for cur_node in current_nodes ]
 
                 # Get input mask
                 action_masks = torch.ones(
@@ -118,7 +128,7 @@ class QGM_Transformer_Decoder(nn.Module):
                     dtype=torch.long,
                 ).cuda()
                 for idx, item in enumerate(next_action_ids):
-                    action_masks[idx][item] = 0
+                    action_masks[idx][torch.tensor(item).cuda()] = 0
 
                 # action to action embedding
                 action_emb = self.grammar.action_emb.weight.contiguous()
@@ -239,6 +249,17 @@ class QGM_Transformer_Decoder(nn.Module):
             state.loss,
             state.pred_history,
         )
+
+    def attention(self, memory, memory_mask, hidden_state):
+        memory = memory.transpose(0, 1)
+        hidden_state = hidden_state.unsqueeze(1)
+        weights = utils.calculate_attention_weights(memory, hidden_state, source_mask=memory_mask, affine_layer=self.tgt_affine_layer, log_softmax=False)
+
+        memory = memory * weights.unsqueeze(-1)
+        memory = torch.sum(memory, dim=1)
+
+        return memory
+
 
     def predict_for_captum(self, view, out, src, src_mask):
         probs = torch.nn.functional.softmax(

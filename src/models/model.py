@@ -409,6 +409,7 @@ class IRNet(BasicModel):
                 tab_col_dic += [b_tmp]
 
             losses, pred = self.decoder(
+                dec_init_vec,
                 src_encodings,
                 table_embedding,
                 schema_embedding,
@@ -537,6 +538,7 @@ class IRNet(BasicModel):
                     tab_col_dic += [b_tmp]
 
                 losses, pred = self.decoder(
+                    dec_init_vec,
                     src_encodings,
                     table_embedding,
                     schema_embedding,

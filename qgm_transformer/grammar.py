@@ -124,6 +124,9 @@ class Grammar(nn.Module):
             tmp += [tmp2]
         return tmp
 
+    def action_to_symbol(self, action):
+        return self.symbol_to_symbol_id[action[0]]
+
     def get_action_id(self, symbol, idx):
         self.action_to_action_id[(symbol, idx)]
 
