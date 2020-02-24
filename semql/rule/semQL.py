@@ -35,6 +35,7 @@ class Grammar(object):
         self.is_sketch = is_sketch
         self.prod2id = {}
         self.type2id = {}
+        self.prodid2instance = {}
         self._init_grammar(Sel)
         self._init_grammar(Root)
         self._init_grammar(Sup)
@@ -58,8 +59,9 @@ class Grammar(object):
         :return:
         """
         production = Cls._init_grammar()
-        for p in production:
+        for id_c, p in production:
             self.prod2id[p] = self.begin
+            self.prodid2instance[self.begin] = Cls(id_c)
             self.begin += 1
         self.type2id[Cls] = self.type_id
         self.type_id += 1
@@ -70,7 +72,7 @@ class Grammar(object):
             self.id2prod[value] = key
 
     def get_production(self, Cls):
-        return Cls._init_grammar()
+        return [p for _, p in Cls._init_grammar()]
 
 
 class Action(object):
@@ -120,7 +122,7 @@ class Root1(Action):
         for id_x, value in enumerate(self.grammar_dict.values()):
             self.production_id[value] = id_x
 
-        return self.grammar_dict.values()
+        return self.grammar_dict.items()
 
     def __str__(self):
         return "Root1(" + str(self.id_c) + ")"
@@ -152,7 +154,7 @@ class Root(Action):
         for id_x, value in enumerate(self.grammar_dict.values()):
             self.production_id[value] = id_x
 
-        return self.grammar_dict.values()
+        return self.grammar_dict.items()
 
     def __str__(self):
         return "Root(" + str(self.id_c) + ")"
@@ -186,7 +188,7 @@ class N(Action):
         for id_x, value in enumerate(self.grammar_dict.values()):
             self.production_id[value] = id_x
 
-        return self.grammar_dict.values()
+        return self.grammar_dict.items()
 
     def __str__(self):
         return "N(" + str(self.id_c) + ")"
@@ -263,7 +265,7 @@ class A(Action):
         for id_x, value in enumerate(self.grammar_dict.values()):
             self.production_id[value] = id_x
 
-        return self.grammar_dict.values()
+        return self.grammar_dict.items()
 
     def __str__(self):
         return "A(" + str(self.id_c) + ")"
@@ -294,7 +296,7 @@ class Sel(Action):
         for id_x, value in enumerate(self.grammar_dict.values()):
             self.production_id[value] = id_x
 
-        return self.grammar_dict.values()
+        return self.grammar_dict.items()
 
     def __str__(self):
         return "Sel(" + str(self.id_c) + ")"
@@ -347,7 +349,7 @@ class Filter(Action):
         for id_x, value in enumerate(self.grammar_dict.values()):
             self.production_id[value] = id_x
 
-        return self.grammar_dict.values()
+        return self.grammar_dict.items()
 
     def __str__(self):
         return "Filter(" + str(self.id_c) + ")"
@@ -379,7 +381,7 @@ class Sup(Action):
         for id_x, value in enumerate(self.grammar_dict.values()):
             self.production_id[value] = id_x
 
-        return self.grammar_dict.values()
+        return self.grammar_dict.items()
 
     def __str__(self):
         return "Sup(" + str(self.id_c) + ")"
@@ -411,7 +413,7 @@ class Order(Action):
         for id_x, value in enumerate(self.grammar_dict.values()):
             self.production_id[value] = id_x
 
-        return self.grammar_dict.values()
+        return self.grammar_dict.items()
 
     def __str__(self):
         return "Order(" + str(self.id_c) + ")"

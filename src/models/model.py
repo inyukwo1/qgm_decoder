@@ -449,7 +449,7 @@ class IRNet(BasicModel):
             )
             return losses, pred_boxes
         elif self.decoder_name == "semql":
-            lf_prob_var = self.decoder.decode_forward(
+            lf_prob_var, _ = self.decoder.decode_forward(
                 examples,
                 batch,
                 src_encodings,
@@ -578,18 +578,15 @@ class IRNet(BasicModel):
 
                 return pred_boxes
             elif self.decoder_name == "semql":
-                completed_beams = self.decoder.decode_parse(
+                _, highest_prob_actions = self.decoder.decode_forward(
+                    None,
                     batch,
                     src_encodings,
                     table_embedding,
                     schema_embedding,
                     dec_init_vec,
-                    beam_size=5,
                 )
-                highest_prob_actions = (
-                    completed_beams[0].actions if completed_beams else []
-                )
-                return highest_prob_actions
+                return highest_prob_actions[0]
             else:
                 raise RuntimeError("Unsupported decoder name")
 

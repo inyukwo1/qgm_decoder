@@ -449,7 +449,6 @@ def epoch_train(
             lf_prob_var = result
             # Save loss
             if not total_loss:
-                total_loss["sketch"] = []
                 total_loss["detail"] = []
             for detail_loss in lf_prob_var:
                 total_loss["detail"] += [float(torch.mean(detail_loss))]

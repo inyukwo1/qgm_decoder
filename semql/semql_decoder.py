@@ -9,6 +9,7 @@ from transformers import *
 from src.models import nn_utils
 from src.beam import Beams, ActionInfo
 from src.models.pointer_net import PointerNet
+from copy import copy
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +34,43 @@ SKETCH_LIST = ["Root1", "Root", "Sel", "N", "Filter", "Sup", "Order"]
 DETAIL_LIST = ["A", "C", "T"]
 
 
+class history_or_gold_actions:
+    def __init__(self, examples, batch_size):
+        self.is_history = examples is None
+        self.examples = examples
+        self.beams = [Beams()] * batch_size
+
+    @property
+    def actions(self):
+        if self.is_history:
+            return [beam.actions for beam in self.beams]
+        else:
+            return [example.tgt_actions for example in self.examples]
+
+    def add_pred(self, b_idx, action):
+        if self.is_history:
+            self.beams[b_idx].apply_action(action)
+
+    def available(self, b_idx, t):
+        if self.is_history:
+            return self.beams[b_idx].get_availableClass() is not None
+        else:
+            return t < len(self.examples[b_idx].tgt_actions)
+
+    def availableclass(self, b_idx, t):
+        if self.is_history:
+            return self.beams[b_idx].get_availableClass()
+        else:
+            return type(self.examples[b_idx].tgt_actions[t])
+
+    def done(self, t):
+        if self.is_history:
+            return all([beam.completed for beam in self.beams])
+        else:
+            max_action_num = max([len(action) for action in self.actions])
+            return t >= max_action_num
+
+
 class SemQL_Decoder(nn.Module):
     def __init__(self, cfg):
         super(SemQL_Decoder, self).__init__()
@@ -40,7 +78,6 @@ class SemQL_Decoder(nn.Module):
         self.embed_size = 1024 if cfg.is_bert else 300
         self.is_cuda = cfg.cuda != -1
         self.grammar = semQL.Grammar()
-        self.use_column_pointer = cfg.column_pointer
 
         if self.is_cuda:
             self.new_long_tensor = torch.cuda.LongTensor
@@ -93,6 +130,8 @@ class SemQL_Decoder(nn.Module):
             self.production_readout_b,
         )
 
+        self.softmax = torch.nn.Softmax(dim=-1)
+
         self.q_att = nn.Linear(hidden_size, self.embed_size)
 
         self.column_rnn_input = nn.Linear(
@@ -114,9 +153,6 @@ class SemQL_Decoder(nn.Module):
         nn.init.xavier_normal_(self.production_embed.weight.data)
         nn.init.xavier_normal_(self.type_embed.weight.data)
         nn.init.xavier_normal_(self.N_embed.weight.data)
-        log.info(
-            "Use Column Pointer: {}".format(True if self.use_column_pointer else False)
-        )
 
     def decode_forward(
         self,
@@ -136,14 +172,15 @@ class SemQL_Decoder(nn.Module):
         zero_type_embed = Variable(self.new_tensor(self.type_embed_size).zero_())
 
         batch_table_dict = batch.col_table_dict
-        table_enable = np.zeros(shape=(len(examples)))
-        action_probs = [[] for _ in examples]
+        table_enable = np.zeros(shape=(len(batch)))
+        action_probs = [[]] * len(batch)
 
         h_tm1 = dec_init_vec
 
         detail_t = 0
-
-        for t in range(batch.max_action_num):
+        actions_for_input = history_or_gold_actions(examples, len(batch))
+        t = 0
+        while not actions_for_input.done(t) and t < self.decode_max_time_step:
             if t == 0:
                 # x = self.lf_begin_vec.unsqueeze(0).repeat(len(batch), 1)
                 x = Variable(
@@ -156,9 +193,10 @@ class SemQL_Decoder(nn.Module):
                 a_tm1_embeds = []
                 pre_types = []
 
-                for e_id, example in enumerate(examples):
-                    if t < len(example.tgt_actions):
-                        action_tm1 = example.tgt_actions[t - 1]
+                for b_idx in range(len(batch)):
+                    hist_actions = actions_for_input.actions[b_idx]
+                    if actions_for_input.available(b_idx, t):
+                        action_tm1 = hist_actions[t - 1]
                         if type(action_tm1) in [
                             define_rule.Root1,
                             define_rule.Root,
@@ -176,11 +214,11 @@ class SemQL_Decoder(nn.Module):
                         else:
                             if isinstance(action_tm1, define_rule.C):
                                 a_tm1_embed = self.column_rnn_input(
-                                    table_embedding[e_id, action_tm1.id_c]
+                                    table_embedding[b_idx, action_tm1.id_c]
                                 )
                             elif isinstance(action_tm1, define_rule.T):
                                 a_tm1_embed = self.column_rnn_input(
-                                    schema_embedding[e_id, action_tm1.id_c]
+                                    schema_embedding[b_idx, action_tm1.id_c]
                                 )
                             elif isinstance(action_tm1, define_rule.A):
                                 a_tm1_embed = self.production_embed.weight[
@@ -201,9 +239,11 @@ class SemQL_Decoder(nn.Module):
                 inputs = [a_tm1_embeds]
 
                 # tgt t-1 action type
-                for e_id, example in enumerate(examples):
-                    if t < len(example.tgt_actions):
-                        action_tm = example.tgt_actions[t - 1]
+                for b_idx in range(len(batch)):
+                    hist_actions = actions_for_input.actions[b_idx]
+
+                    if actions_for_input.available(b_idx, t):
+                        action_tm = hist_actions[t - 1]
                         pre_type = self.type_embed.weight[
                             self.grammar.type2id[type(action_tm)]
                         ]
@@ -232,32 +272,17 @@ class SemQL_Decoder(nn.Module):
                 return_att_weight=True,
             )
 
-            apply_rule_prob = torch.softmax(self.production_readout(att_t), dim=-1)
+            readout = self.production_readout(att_t)
+
             table_appear_mask_val = torch.from_numpy(table_appear_mask)
             if self.cuda:
                 table_appear_mask_val = table_appear_mask_val.cuda()
 
-            if self.use_column_pointer:
-                gate = torch.sigmoid(self.prob_att(att_t))
-                weights = self.column_pointer_net(
-                    src_encodings=table_embedding,
-                    query_vec=att_t.unsqueeze(0),
-                    src_token_mask=None,
-                ) * table_appear_mask_val * gate + self.column_pointer_net(
-                    src_encodings=table_embedding,
-                    query_vec=att_t.unsqueeze(0),
-                    src_token_mask=None,
-                ) * (
-                    1 - table_appear_mask_val
-                ) * (
-                    1 - gate
-                )
-            else:
-                weights = self.column_pointer_net(
-                    src_encodings=table_embedding,
-                    query_vec=att_t.unsqueeze(0),
-                    src_token_mask=batch.table_token_mask,
-                )
+            weights = self.column_pointer_net(
+                src_encodings=table_embedding,
+                query_vec=att_t.unsqueeze(0),
+                src_token_mask=batch.table_token_mask,
+            )
 
             weights.data.masked_fill_(batch.table_token_mask.bool(), -float("inf"))
 
@@ -317,27 +342,67 @@ class SemQL_Decoder(nn.Module):
                 else:
                     pass
 
-            for e_id, example in enumerate(examples):
-                if t < len(example.tgt_actions):
-                    action_t = example.tgt_actions[t]
-                    if isinstance(action_t, define_rule.C):
-                        table_appear_mask[e_id, action_t.id_c] = 1
-                        table_enable[e_id] = action_t.id_c
-                        act_prob_t_i = column_attention_weights[e_id, action_t.id_c]
-                        action_probs[e_id].append(act_prob_t_i)
-                    elif isinstance(action_t, define_rule.T):
-                        act_prob_t_i = table_weights[e_id, action_t.id_c]
-                        action_probs[e_id].append(act_prob_t_i)
-                    elif isinstance(action_t, define_rule.A):
-                        act_prob_t_i = apply_rule_prob[
-                            e_id, self.grammar.prod2id[action_t.production]
-                        ]
-                        action_probs[e_id].append(act_prob_t_i)
+            for b_idx in range(len(batch)):
+                if actions_for_input.available(b_idx, t):
+                    action_t = actions_for_input.availableclass(b_idx, t)
+                    if action_t is define_rule.C:
+                        ans = (
+                            examples[b_idx].tgt_actions[t].id_c
+                            if examples
+                            else torch.argmax(column_attention_weights[b_idx]).item()
+                        )
+                        actions_for_input.add_pred(b_idx, define_rule.C(ans))
+                        table_appear_mask[b_idx, ans] = 1
+                        table_enable[b_idx] = ans
+                        act_prob_t_i = column_attention_weights[b_idx, ans]
+                        action_probs[b_idx].append(act_prob_t_i)
+                    elif action_t is define_rule.T:
+                        ans = (
+                            examples[b_idx].tgt_actions[t].id_c
+                            if examples
+                            else torch.argmax(table_weights[b_idx]).item()
+                        )
+                        actions_for_input.add_pred(b_idx, define_rule.T(ans))
+                        act_prob_t_i = table_weights[b_idx, ans]
+                        action_probs[b_idx].append(act_prob_t_i)
                     else:
-                        act_prob_t_i = apply_rule_prob[
-                            e_id, self.grammar.prod2id[action_t.production]
+                        possible_productions = self.grammar.get_production(action_t)
+                        possible_production_ids = [
+                            self.grammar.prod2id[prod] for prod in possible_productions
                         ]
-                        action_probs[e_id].append(act_prob_t_i)
+                        not_possible_production_ids = [
+                            id
+                            for id in range(len(self.grammar.prod2id))
+                            if id not in possible_production_ids
+                        ]
+                        not_possible_mask = torch.ones(
+                            (len(self.grammar.prod2id),), dtype=torch.long
+                        ).cuda()
+                        for id in possible_production_ids:
+                            not_possible_mask[id] = 0
+                        readout[b_idx].data.masked_fill_(
+                            not_possible_mask.bool(), -float("inf")
+                        )
+                        apply_rule_prob = torch.nn.functional.softmax(
+                            readout[b_idx], dim=-1
+                        )
+                        argmax_idx = torch.argmax(
+                            apply_rule_prob[possible_production_ids]
+                        ).item()
+                        argmax_id = possible_production_ids[argmax_idx]
+                        ans = (
+                            self.grammar.prod2id[
+                                examples[b_idx].tgt_actions[t].production
+                            ]
+                            if examples
+                            else argmax_id
+                        )
+                        actions_for_input.add_pred(
+                            b_idx, copy(self.grammar.prodid2instance[ans])
+                        )
+                        act_prob_t_i = apply_rule_prob[ans]
+                        action_probs[b_idx].append(act_prob_t_i)
+
             try:
                 if (
                     isinstance(examples[0].tgt_actions[t], define_rule.C)
@@ -350,6 +415,8 @@ class SemQL_Decoder(nn.Module):
 
             h_tm1 = (h_t, cell_t)
             att_tm1 = att_t
+            t += 1
+
         lf_prob_var = torch.stack(
             [
                 torch.stack(action_probs_i, dim=0).log().sum()
@@ -359,7 +426,7 @@ class SemQL_Decoder(nn.Module):
         )
         assert step is None
 
-        return -lf_prob_var
+        return -lf_prob_var, actions_for_input.actions
 
     def decode_parse(
         self,
@@ -487,28 +554,11 @@ class SemQL_Decoder(nn.Module):
             if self.is_cuda:
                 table_appear_mask_val = table_appear_mask_val.cuda()
 
-            if self.use_column_pointer:
-                gate = torch.sigmoid(self.prob_att(att_t))
-                weights = self.column_pointer_net(
-                    src_encodings=exp_table_embedding,
-                    query_vec=att_t.unsqueeze(0),
-                    src_token_mask=None,
-                ) * table_appear_mask_val * gate + self.column_pointer_net(
-                    src_encodings=exp_table_embedding,
-                    query_vec=att_t.unsqueeze(0),
-                    src_token_mask=None,
-                ) * (
-                    1 - table_appear_mask_val
-                ) * (
-                    1 - gate
-                )
-                # weights = weights + self.col_attention_out(exp_embedding_differ).squeeze()
-            else:
-                weights = self.column_pointer_net(
-                    src_encodings=exp_table_embedding,
-                    query_vec=att_t.unsqueeze(0),
-                    src_token_mask=batch.table_token_mask,
-                )
+            weights = self.column_pointer_net(
+                src_encodings=exp_table_embedding,
+                query_vec=att_t.unsqueeze(0),
+                src_token_mask=batch.table_token_mask,
+            )
             # weights.data.masked_fill_(exp_col_pred_mask, -float('inf'))
 
             column_selection_log_prob = torch.log_softmax(weights, dim=-1)
