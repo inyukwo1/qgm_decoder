@@ -10,7 +10,8 @@ from qgm.qgm_decoder import QGM_Decoder
 from semql.semql_decoder import SemQL_Decoder
 from transformers import *
 from qgm_transformer.decoder import QGM_Transformer_Decoder
-from encoder.encoder import transformer_encoder
+
+# from encoder.encoder import transformer_encoder
 
 
 # Transformers has a unified API
@@ -366,7 +367,14 @@ class IRNet(BasicModel):
         src = self.gen_x_batch(batch.src_sents)
         col = self.gen_x_batch(batch.table_sents)
         tab = self.gen_x_batch(batch.table_names_iter)
-        src_encodings, table_embedding, schema_embedding = transformer_encoder(src, col, tab, batch.src_token_mask, batch.table_token_mask, batch.schema_token_mask)
+        # src_encodings, table_embedding, schema_embedding = transformer_encoder(
+        #     src,
+        #     col,
+        #     tab,
+        #     batch.src_token_mask,
+        #     batch.table_token_mask,
+        #     batch.schema_token_mask,
+        # )
 
         if self.is_bert:
             (
@@ -441,7 +449,7 @@ class IRNet(BasicModel):
             )
             return losses, pred_boxes
         elif self.decoder_name == "semql":
-            sketch_prob_var, lf_prob_var = self.decoder.decode_forward(
+            lf_prob_var = self.decoder.decode_forward(
                 examples,
                 batch,
                 src_encodings,
@@ -449,7 +457,7 @@ class IRNet(BasicModel):
                 schema_embedding,
                 dec_init_vec,
             )
-            return sketch_prob_var, lf_prob_var
+            return lf_prob_var
         else:
             raise RuntimeError("Unsupported Decoder Name")
 
@@ -570,7 +578,7 @@ class IRNet(BasicModel):
 
                 return pred_boxes
             elif self.decoder_name == "semql":
-                completed_beams, _ = self.decoder.decode_parse(
+                completed_beams = self.decoder.decode_parse(
                     batch,
                     src_encodings,
                     table_embedding,

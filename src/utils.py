@@ -446,17 +446,15 @@ def epoch_train(
             loss = torch.mean(torch.stack(loss_list))
 
         elif model_name == "semql":
-            sketch_prob_var, lf_prob_var = result
+            lf_prob_var = result
             # Save loss
             if not total_loss:
                 total_loss["sketch"] = []
                 total_loss["detail"] = []
-            for sketch_loss in sketch_prob_var:
-                total_loss["sketch"] += [float(sketch_loss)]
             for detail_loss in lf_prob_var:
-                total_loss["detail"] += [float(detail_loss)]
+                total_loss["detail"] += [float(torch.mean(detail_loss))]
 
-            loss = torch.mean(sketch_prob_var) + torch.mean(lf_prob_var)
+            loss = torch.mean(lf_prob_var)
         else:
             raise RuntimeError("Unsupported model")
 

@@ -9,6 +9,7 @@ from transformers import *
 from src.models import nn_utils
 from src.beam import Beams, ActionInfo
 from src.models.pointer_net import PointerNet
+
 log = logging.getLogger(__name__)
 
 # Transformers has a unified API
@@ -54,23 +55,11 @@ class SemQL_Decoder(nn.Module):
         type_embed_size = cfg.type_embed_size
         input_dim = action_embed_size + att_vec_size + type_embed_size
 
-        self.encoder_lstm = nn.LSTM(
-            self.embed_size, hidden_size // 2, bidirectional=True, batch_first=True,
-        )
-
         self.decode_max_time_step = 40
         self.action_embed_size = action_embed_size
         self.type_embed_size = type_embed_size
         self.lf_decoder_lstm = nn.LSTMCell(input_dim, hidden_size)
-
-        self.sketch_decoder_lstm = nn.LSTMCell(input_dim, hidden_size)
-
-        self.att_sketch_linear = nn.Linear(hidden_size, hidden_size, bias=False)
         self.att_lf_linear = nn.Linear(hidden_size, hidden_size, bias=False)
-
-        self.sketch_att_vec_linear = nn.Linear(
-            hidden_size + hidden_size, att_vec_size, bias=False
-        )
         self.lf_att_vec_linear = nn.Linear(
             hidden_size + hidden_size, att_vec_size, bias=False
         )
@@ -106,7 +95,9 @@ class SemQL_Decoder(nn.Module):
 
         self.q_att = nn.Linear(hidden_size, self.embed_size)
 
-        self.column_rnn_input = nn.Linear(self.embed_size, action_embed_size, bias=False)
+        self.column_rnn_input = nn.Linear(
+            self.embed_size, action_embed_size, bias=False
+        )
         self.table_rnn_input = nn.Linear(self.embed_size, action_embed_size, bias=False)
 
         self.column_pointer_net = PointerNet(
@@ -123,7 +114,9 @@ class SemQL_Decoder(nn.Module):
         nn.init.xavier_normal_(self.production_embed.weight.data)
         nn.init.xavier_normal_(self.type_embed.weight.data)
         nn.init.xavier_normal_(self.N_embed.weight.data)
-        log.info("Use Column Pointer: {}".format(True if self.use_column_pointer else False))
+        log.info(
+            "Use Column Pointer: {}".format(True if self.use_column_pointer else False)
+        )
 
     def decode_forward(
         self,
@@ -137,116 +130,10 @@ class SemQL_Decoder(nn.Module):
     ):
         table_appear_mask = batch.table_appear_mask
 
-        utterance_encodings_sketch_linear = self.att_sketch_linear(src_encodings)
         utterance_encodings_lf_linear = self.att_lf_linear(src_encodings)
-
-        h_tm1 = dec_init_vec
-        action_probs = [[] for _ in examples]
 
         zero_action_embed = Variable(self.new_tensor(self.action_embed_size).zero_())
         zero_type_embed = Variable(self.new_tensor(self.type_embed_size).zero_())
-
-        for t in range(batch.max_sketch_num):
-            if t == 0:
-                x = Variable(
-                    self.new_tensor(
-                        len(batch), self.sketch_decoder_lstm.input_size
-                    ).zero_(),
-                    requires_grad=False,
-                )
-            else:
-                a_tm1_embeds = []
-                pre_types = []
-                for e_id, example in enumerate(examples):
-
-                    if t < len(example.sketch):
-                        # get the last action
-                        # This is the action embedding
-                        action_tm1 = example.sketch[t - 1]
-                        if type(action_tm1) in [
-                            define_rule.Root1,
-                            define_rule.Root,
-                            define_rule.Sel,
-                            define_rule.Filter,
-                            define_rule.Sup,
-                            define_rule.N,
-                            define_rule.Order,
-                        ]:
-                            a_tm1_embed = self.production_embed.weight[
-                                self.grammar.prod2id[action_tm1.production]
-                            ]
-                        else:
-                            print(action_tm1, "only for sketch")
-                            quit()
-                            a_tm1_embed = zero_action_embed
-                            pass
-                    else:
-                        a_tm1_embed = zero_action_embed
-
-                    a_tm1_embeds.append(a_tm1_embed)
-
-                a_tm1_embeds = torch.stack(a_tm1_embeds)
-                inputs = [a_tm1_embeds]
-
-                for e_id, example in enumerate(examples):
-                    if t < len(example.sketch):
-                        action_tm = example.sketch[t - 1]
-                        pre_type = self.type_embed.weight[
-                            self.grammar.type2id[type(action_tm)]
-                        ]
-                    else:
-                        pre_type = zero_type_embed
-                    pre_types.append(pre_type)
-
-                pre_types = torch.stack(pre_types)
-
-                inputs.append(att_tm1)
-                inputs.append(pre_types)
-                x = torch.cat(inputs, dim=-1)
-
-            src_mask = batch.src_token_mask
-
-            (h_t, cell_t), att_t, aw = self.step(
-                x,
-                h_tm1,
-                src_encodings,
-                utterance_encodings_sketch_linear,
-                self.sketch_decoder_lstm,
-                self.sketch_att_vec_linear,
-                src_token_mask=src_mask,
-                return_att_weight=True,
-            )
-
-            # get the Root possibility
-            apply_rule_prob = torch.softmax(self.production_readout(att_t), dim=-1)
-
-            if t == step:
-                gold_action = examples[0].sketch[t].production
-                gold_action_id = self.grammar.prod2id[gold_action]
-                pred_action_id = torch.argmax(apply_rule_prob[-1]).item()
-                pred_action = self.grammar.id2prod[pred_action_id]
-                pred_probs = apply_rule_prob[:, pred_action_id]
-                gold_probs = apply_rule_prob[:, gold_action_id]
-                return gold_action, pred_action, gold_probs, pred_probs
-
-            for e_id, example in enumerate(examples):
-                if t < len(example.sketch):
-                    action_t = example.sketch[t]
-                    act_prob_t_i = apply_rule_prob[
-                        e_id, self.grammar.prod2id[action_t.production]
-                    ]
-                    action_probs[e_id].append(act_prob_t_i)
-
-            h_tm1 = (h_t, cell_t)
-            att_tm1 = att_t
-
-        sketch_prob_var = torch.stack(
-            [
-                torch.stack(action_probs_i, dim=0).log().sum()
-                for action_probs_i in action_probs
-            ],
-            dim=0,
-        )
 
         batch_table_dict = batch.col_table_dict
         table_enable = np.zeros(shape=(len(examples)))
@@ -447,7 +334,10 @@ class SemQL_Decoder(nn.Module):
                         ]
                         action_probs[e_id].append(act_prob_t_i)
                     else:
-                        pass
+                        act_prob_t_i = apply_rule_prob[
+                            e_id, self.grammar.prod2id[action_t.production]
+                        ]
+                        action_probs[e_id].append(act_prob_t_i)
             try:
                 if (
                     isinstance(examples[0].tgt_actions[t], define_rule.C)
@@ -469,7 +359,7 @@ class SemQL_Decoder(nn.Module):
         )
         assert step is None
 
-        return [-sketch_prob_var, -lf_prob_var]
+        return -lf_prob_var
 
     def decode_parse(
         self,
@@ -480,173 +370,7 @@ class SemQL_Decoder(nn.Module):
         dec_init_vec,
         beam_size=5,
     ):
-        utterance_encodings_sketch_linear = self.att_sketch_linear(src_encodings)
         utterance_encodings_lf_linear = self.att_lf_linear(src_encodings)
-
-        h_tm1 = dec_init_vec
-
-        t = 0
-        beams = [Beams(is_sketch=True)]
-        completed_beams = []
-
-        while len(completed_beams) < beam_size and t < self.decode_max_time_step:
-            hyp_num = len(beams)
-            exp_src_enconding = src_encodings.expand(
-                hyp_num, src_encodings.size(1), src_encodings.size(2)
-            )
-            exp_src_encodings_sketch_linear = utterance_encodings_sketch_linear.expand(
-                hyp_num,
-                utterance_encodings_sketch_linear.size(1),
-                utterance_encodings_sketch_linear.size(2),
-            )
-            if t == 0:
-                with torch.no_grad():
-                    x = Variable(
-                        self.new_tensor(1, self.sketch_decoder_lstm.input_size).zero_()
-                    )
-            else:
-                a_tm1_embeds = []
-                pre_types = []
-                for e_id, hyp in enumerate(beams):
-                    action_tm1 = hyp.actions[-1]
-                    if type(action_tm1) in [
-                        define_rule.Root1,
-                        define_rule.Root,
-                        define_rule.Sel,
-                        define_rule.Filter,
-                        define_rule.Sup,
-                        define_rule.N,
-                        define_rule.Order,
-                    ]:
-                        a_tm1_embed = self.production_embed.weight[
-                            self.grammar.prod2id[action_tm1.production]
-                        ]
-                    else:
-                        raise ValueError("unknown action %s" % action_tm1)
-
-                    a_tm1_embeds.append(a_tm1_embed)
-                a_tm1_embeds = torch.stack(a_tm1_embeds)
-                inputs = [a_tm1_embeds]
-
-                for e_id, hyp in enumerate(beams):
-                    action_tm = hyp.actions[-1]
-                    pre_type = self.type_embed.weight[
-                        self.grammar.type2id[type(action_tm)]
-                    ]
-                    pre_types.append(pre_type)
-
-                pre_types = torch.stack(pre_types)
-
-                inputs.append(att_tm1)
-                inputs.append(pre_types)
-                x = torch.cat(inputs, dim=-1)
-
-            (h_t, cell_t), att_t = self.step(
-                x,
-                h_tm1,
-                exp_src_enconding,
-                exp_src_encodings_sketch_linear,
-                self.sketch_decoder_lstm,
-                self.sketch_att_vec_linear,
-                src_token_mask=None,
-            )
-
-            apply_rule_log_prob = torch.log_softmax(
-                self.production_readout(att_t), dim=-1
-            )
-
-            new_hyp_meta = []
-            for hyp_id, hyp in enumerate(beams):
-                action_class = hyp.get_availableClass()
-                if action_class in [
-                    define_rule.Root1,
-                    define_rule.Root,
-                    define_rule.Sel,
-                    define_rule.Filter,
-                    define_rule.Sup,
-                    define_rule.N,
-                    define_rule.Order,
-                ]:
-                    possible_productions = self.grammar.get_production(action_class)
-                    for possible_production in possible_productions:
-                        prod_id = self.grammar.prod2id[possible_production]
-                        prod_score = apply_rule_log_prob[hyp_id, prod_id]
-                        new_hyp_score = hyp.score + prod_score.data.cpu()
-                        meta_entry = {
-                            "action_type": action_class,
-                            "prod_id": prod_id,
-                            "score": prod_score,
-                            "new_hyp_score": new_hyp_score,
-                            "prev_hyp_id": hyp_id,
-                        }
-                        new_hyp_meta.append(meta_entry)
-                else:
-                    raise RuntimeError("No right action class")
-
-            if not new_hyp_meta:
-                break
-
-            new_hyp_scores = torch.stack(
-                [x["new_hyp_score"] for x in new_hyp_meta], dim=0
-            )
-            top_new_hyp_scores, meta_ids = torch.topk(
-                new_hyp_scores,
-                k=min(new_hyp_scores.size(0), beam_size - len(completed_beams)),
-            )
-
-            live_hyp_ids = []
-            new_beams = []
-            for new_hyp_score, meta_id in zip(
-                top_new_hyp_scores.data.cpu(), meta_ids.data.cpu()
-            ):
-                action_info = ActionInfo()
-                hyp_meta_entry = new_hyp_meta[meta_id]
-                prev_hyp_id = hyp_meta_entry["prev_hyp_id"]
-                prev_hyp = beams[prev_hyp_id]
-                action_type_str = hyp_meta_entry["action_type"]
-                prod_id = hyp_meta_entry["prod_id"]
-                if prod_id < len(self.grammar.id2prod):
-                    production = self.grammar.id2prod[prod_id]
-                    action = action_type_str(
-                        list(action_type_str._init_grammar()).index(production)
-                    )
-                else:
-                    raise NotImplementedError
-
-                action_info.action = action
-                action_info.t = t
-                action_info.score = hyp_meta_entry["score"]
-                new_hyp = prev_hyp.clone_and_apply_action_info(action_info)
-                new_hyp.score = new_hyp_score
-                new_hyp.inputs.extend(prev_hyp.inputs)
-
-                if new_hyp.is_valid is False:
-                    continue
-
-                if new_hyp.completed:
-                    completed_beams.append(new_hyp)
-                else:
-                    new_beams.append(new_hyp)
-                    live_hyp_ids.append(prev_hyp_id)
-
-            if live_hyp_ids:
-                h_tm1 = (h_t[live_hyp_ids], cell_t[live_hyp_ids])
-                att_tm1 = att_t[live_hyp_ids]
-                beams = new_beams
-                t += 1
-            else:
-                break
-
-        # now get the sketch result
-        completed_beams.sort(key=lambda hyp: -hyp.score)
-        if len(completed_beams) == 0:
-            return [[], []]
-
-        sketch_actions = completed_beams[0].actions
-        # sketch_actions = examples.sketch
-
-        padding_sketch = self.padding_sketch(sketch_actions)
-
         batch_table_dict = batch.col_table_dict
 
         h_tm1 = dec_init_vec
@@ -810,59 +534,76 @@ class SemQL_Decoder(nn.Module):
 
             new_hyp_meta = []
             for hyp_id, hyp in enumerate(beams):
-                # TODO: should change this
-                if type(padding_sketch[t]) == define_rule.A:
-                    possible_productions = self.grammar.get_production(define_rule.A)
+                action_class = hyp.get_availableClass()
+                if action_class in [
+                    define_rule.Root1,
+                    define_rule.Root,
+                    define_rule.Sel,
+                    define_rule.Filter,
+                    define_rule.Sup,
+                    define_rule.N,
+                    define_rule.Order,
+                ]:
+                    possible_productions = self.grammar.get_production(action_class)
                     for possible_production in possible_productions:
                         prod_id = self.grammar.prod2id[possible_production]
                         prod_score = apply_rule_log_prob[hyp_id, prod_id]
-
                         new_hyp_score = hyp.score + prod_score.data.cpu()
                         meta_entry = {
-                            "action_type": define_rule.A,
+                            "action_type": action_class,
                             "prod_id": prod_id,
                             "score": prod_score,
                             "new_hyp_score": new_hyp_score,
                             "prev_hyp_id": hyp_id,
                         }
                         new_hyp_meta.append(meta_entry)
-
-                elif type(padding_sketch[t]) == define_rule.C:
-                    for col_id, _ in enumerate(batch.table_sents[0]):
-                        col_sel_score = column_selection_log_prob[hyp_id, col_id]
-                        new_hyp_score = hyp.score + col_sel_score.data.cpu()
-                        meta_entry = {
-                            "action_type": define_rule.C,
-                            "col_id": col_id,
-                            "score": col_sel_score,
-                            "new_hyp_score": new_hyp_score,
-                            "prev_hyp_id": hyp_id,
-                        }
-                        new_hyp_meta.append(meta_entry)
-                elif type(padding_sketch[t]) == define_rule.T:
-                    for t_id, _ in enumerate(batch.table_names[0]):
-                        t_sel_score = table_weights[hyp_id, t_id]
-                        new_hyp_score = hyp.score + t_sel_score.data.cpu()
-
-                        meta_entry = {
-                            "action_type": define_rule.T,
-                            "t_id": t_id,
-                            "score": t_sel_score,
-                            "new_hyp_score": new_hyp_score,
-                            "prev_hyp_id": hyp_id,
-                        }
-                        new_hyp_meta.append(meta_entry)
                 else:
-                    prod_id = self.grammar.prod2id[padding_sketch[t].production]
-                    new_hyp_score = hyp.score + torch.tensor(0.0)
-                    meta_entry = {
-                        "action_type": type(padding_sketch[t]),
-                        "prod_id": prod_id,
-                        "score": torch.tensor(0.0),
-                        "new_hyp_score": new_hyp_score,
-                        "prev_hyp_id": hyp_id,
-                    }
-                    new_hyp_meta.append(meta_entry)
+                    # TODO: should change this
+                    if action_class == define_rule.A:
+                        possible_productions = self.grammar.get_production(
+                            define_rule.A
+                        )
+                        for possible_production in possible_productions:
+                            prod_id = self.grammar.prod2id[possible_production]
+                            prod_score = apply_rule_log_prob[hyp_id, prod_id]
+
+                            new_hyp_score = hyp.score + prod_score.data.cpu()
+                            meta_entry = {
+                                "action_type": define_rule.A,
+                                "prod_id": prod_id,
+                                "score": prod_score,
+                                "new_hyp_score": new_hyp_score,
+                                "prev_hyp_id": hyp_id,
+                            }
+                            new_hyp_meta.append(meta_entry)
+
+                    elif action_class == define_rule.C:
+                        for col_id, _ in enumerate(batch.table_sents[0]):
+                            col_sel_score = column_selection_log_prob[hyp_id, col_id]
+                            new_hyp_score = hyp.score + col_sel_score.data.cpu()
+                            meta_entry = {
+                                "action_type": define_rule.C,
+                                "col_id": col_id,
+                                "score": col_sel_score,
+                                "new_hyp_score": new_hyp_score,
+                                "prev_hyp_id": hyp_id,
+                            }
+                            new_hyp_meta.append(meta_entry)
+                    elif action_class == define_rule.T:
+                        for t_id, _ in enumerate(batch.table_names[0]):
+                            t_sel_score = table_weights[hyp_id, t_id]
+                            new_hyp_score = hyp.score + t_sel_score.data.cpu()
+
+                            meta_entry = {
+                                "action_type": define_rule.T,
+                                "t_id": t_id,
+                                "score": t_sel_score,
+                                "new_hyp_score": new_hyp_score,
+                                "prev_hyp_id": hyp_id,
+                            }
+                            new_hyp_meta.append(meta_entry)
+                    else:
+                        raise AssertionError()
 
             if not new_hyp_meta:
                 break
@@ -929,7 +670,7 @@ class SemQL_Decoder(nn.Module):
                 break
 
         completed_beams.sort(key=lambda hyp: -hyp.score)
-        return [completed_beams, sketch_actions]
+        return completed_beams
 
     def padding_sketch(self, sketch):
         padding_result = []
