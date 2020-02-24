@@ -7,6 +7,7 @@ from qgm_transformer.QGMLoss import QGMLoss
 class TransformerBatchState:
     def __init__(
         self,
+        dec_init_vec,
         encoded_src,
         encoded_col,
         encoded_tab,
@@ -23,6 +24,7 @@ class TransformerBatchState:
         self.state_type = state_type
 
         # Embeddings
+        self.dec_init_vec = dec_init_vec
         self.encoded_src = encoded_src
         self.encoded_col = encoded_col
         self.encoded_tab = encoded_tab
@@ -47,6 +49,7 @@ class TransformerBatchState:
             return None
         # Narrowing the view
         new_view = TransformerBatchState(
+            self.dec_init_vec[view_indices],
             self.encoded_src[view_indices],
             self.encoded_col[view_indices],
             self.encoded_tab[view_indices],
@@ -133,6 +136,7 @@ class TransformerBatchState:
                 for idx, b_idx in enumerate(self.b_indices)
                 if self.nonterminal_stack[b_idx]
             ]
+        self.dec_init_vec = self.dec_init_vec[next_indices]
         self.encoded_src = self.encoded_src[next_indices]
         self.encoded_col = self.encoded_col[next_indices]
         self.encoded_tab = self.encoded_tab[next_indices]
@@ -170,7 +174,14 @@ class TransformerBatchState:
         mask = self.src_mask
         return mask.bool()
 
-    def get_tgt(self, affine_layer, linear_layer):
+    def get_tgt(
+        self,
+        affine_layer,
+        linear_layer,
+        h_num_embedding,
+        q_num_embedding,
+        p_num_embedding,
+    ):
         # Get prev symbols
         prev_actions = [
             self.pred_history[b_idx] if self.pred_history[b_idx] else []
@@ -194,6 +205,9 @@ class TransformerBatchState:
             stacked_action_emb_list = []
             for b_idx, actions in enumerate(prev_actions):
                 action_emb_list = []
+                q_num = 0
+                h_num = 0
+                p_num = 0
                 for s_idx, action in enumerate(actions):
                     # Table
                     if action[0] == "T":
@@ -210,9 +224,18 @@ class TransformerBatchState:
                                 )
                             )
                         ]
+                    if action[0] == "Q":
+                        q_num += 1
+                    elif action[0] == "H":
+                        h_num += 1
+                    elif action[0] == "P":
+                        p_num += 1
                 stacked_action_emb_list += [torch.stack(action_emb_list)]
+                action_embs[b_idx] += q_num_embedding(torch.LongTensor([q_num]).cuda())
+                action_embs[b_idx] += h_num_embedding(torch.LongTensor([h_num]).cuda())
+                action_embs[b_idx] += p_num_embedding(torch.LongTensor([p_num]).cuda())
             action_embs = torch.cat(
-                (action_embs, torch.stack(stacked_action_emb_list)), dim=1
+                (torch.stack(stacked_action_emb_list), action_embs), dim=1
             )
 
         # Linear Layer

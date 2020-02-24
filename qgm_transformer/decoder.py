@@ -30,11 +30,19 @@ class QGM_Transformer_Decoder(nn.Module):
         self.tgt_linear_layer = nn.Linear(dim * 2, d_model)
         self.out_linear_layer = nn.Linear(d_model, dim)
 
+        self.q_num_embedding = nn.Embedding(1000, dim)
+        self.h_num_embedding = nn.Embedding(1000, dim)
+        self.p_num_embedding = nn.Embedding(1000, dim)
+
         # Transformer Layers
         decoder_layer = TransformerDecoderLayer(d_model=d_model, nhead=self.nhead)
+        self.decoder_lstm = nn.LSTM(
+            d_model, d_model // 2, 3, dropout=0.1, bidirectional=True
+        )
         self.transformer_decoder = TransformerDecoder(
             decoder_layer, num_layers=self.layer_num
         )
+        self.decoder_affine_layer = nn.Linear(2 * dim, dim)
         self._init_positional_embedding(d_model)
 
     def _init_positional_embedding(self, d_model, dropout=0.1, max_len=5000):
@@ -55,6 +63,7 @@ class QGM_Transformer_Decoder(nn.Module):
 
     def forward(
         self,
+        dec_init_vec,
         encoded_src,
         encoded_col,
         encoded_tab,
@@ -71,6 +80,7 @@ class QGM_Transformer_Decoder(nn.Module):
             gold_qgms = [item.split(" ") for item in gold_qgms]
         # Mask Batch State
         state = TransformerBatchState(
+            dec_init_vec[0],
             encoded_src,
             encoded_col,
             encoded_tab,
@@ -88,15 +98,42 @@ class QGM_Transformer_Decoder(nn.Module):
         while not state.is_done():
             # Get sub-mini-batch
             memory = state.get_memory()
-            tgt = state.get_tgt(self.tgt_affine_layer, self.tgt_linear_layer)
+            tgt = state.get_tgt(
+                self.tgt_affine_layer,
+                self.tgt_linear_layer,
+                self.h_num_embedding,
+                self.q_num_embedding,
+                self.p_num_embedding,
+            )
             memory_key_padding_mask = state.get_memory_key_padding_mask()
 
             # Decode
             tgt = self.pos_encode(tgt)
+            seq_len, b_size, _ = list(tgt.size())
+            _, (out_lstm, _) = self.decoder_lstm(
+                tgt,
+                (
+                    torch.cat(
+                        (
+                            state.dec_init_vec[:, : self.dim // 2].unsqueeze(0),
+                            state.dec_init_vec[:, self.dim // 2 :].unsqueeze(0),
+                        ),
+                        dim=0,
+                    ).repeat(3, 1, 1),
+                    torch.zeros(6, b_size, self.dim // 2).cuda(),
+                ),
+            )
             out = self.transformer_decoder(
                 tgt, memory, memory_key_padding_mask=memory_key_padding_mask
             ).transpose(0, 1)
+
             out = self.out_linear_layer(out[:, -1:, :])
+
+            out = self.decoder_affine_layer(
+                torch.cat(
+                    (out, out_lstm[-1].unsqueeze(1), out_lstm[-2].unsqueeze(1)), dim=-1
+                )
+            )
 
             # Get views
             action_view, column_view, table_view = state.get_views()
@@ -241,11 +278,8 @@ class QGM_Transformer_Decoder(nn.Module):
         )
 
     def predict_for_captum(self, view, out, src, src_mask):
-        probs = torch.nn.functional.softmax(
-            utils.calculate_attention_weights(
-                src, out, source_mask=src_mask, affine_layer=self.att_affine_layer,
-            ),
-            dim=1,
+        probs = utils.calculate_attention_weights(
+            src, out, source_mask=src_mask, affine_layer=self.att_affine_layer,
         )
         gold_indices = view.get_gold()
         gold_index = gold_indices[0]
@@ -306,6 +340,9 @@ class QGM_Transformer_Decoder(nn.Module):
         for pred_qgm_action, gold_qgm_action in zip(
             pred_qgm_actions, parsed_gold_qgm_actions
         ):
+            print("PRED: {}".format(pred_qgm_action))
+            print("GOLD: {}".format(gold_qgm_action))
+            print("#############################")
             # Sketch
             pred_sketch = [
                 item for item in pred_qgm_action if item[0] not in ["A", "C", "T"]
