@@ -654,10 +654,7 @@ def write_eval_result_as(
             q_type_list = []
             for idx in range(len(sql_json["question_arg"])):
                 q = " ".join(sql_json["question_arg"][idx])
-                try:
-                    q_type = " ".join(sql_json["question_arg_type"][idx])
-                except:
-                    stop = 1
+                q_type = " ".join(sql_json["question_arg_type"][idx])
                 q_pad_len = max(len(q), len(q_type)) - len(q)
                 q_type_pad_len = max(len(q), len(q_type)) - len(q_type)
                 q_pad = " " * (q_pad_len // 2)

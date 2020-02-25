@@ -208,10 +208,7 @@ class LSTM_Decoder(nn.Module):
             if view.nonterminal_stack[0][0] in [self.col_symbol_id, self.tab_symbol_id]:
                 pred_indices = [item[1] for item in golds]
             else:
-                try:
-                    pred_indices = [self.grammar.action_to_aid[action] for action in golds]
-                except:
-                    stop = 1
+                pred_indices = [self.grammar.action_to_aid[action] for action in golds]
             pred_probs = [probs[idx][item] for idx, item in enumerate(pred_indices)]
         else:
             pred_probs, pred_indices = torch.topk(probs, 1)
