@@ -108,6 +108,7 @@ def train(cfg):
             table_data,
             cfg.clip_grad,
             cfg.model_name,
+            is_col_set=cfg.is_col_set,
         )
 
         dataset_name = cfg.dataset.name
@@ -121,7 +122,7 @@ def train(cfg):
             log.info("Evaluation:")
 
             train_acc = utils.epoch_acc(
-                model, cfg.batch_size, train_data, table_data, cfg.model_name
+                model, cfg.batch_size, train_data, table_data, cfg.model_name, cfg.is_col_set,
             )
 
             val_loss = utils.epoch_train(
@@ -133,10 +134,11 @@ def train(cfg):
                 table_data,
                 cfg.clip_grad,
                 cfg.model_name,
+                is_col_set=cfg.is_col_set,
                 is_train=False,
             )
             val_acc = utils.epoch_acc(
-                model, cfg.batch_size, val_data, table_data, cfg.model_name,
+                model, cfg.batch_size, val_data, table_data, cfg.model_name, cfg.is_col_set,
             )
 
             # Logging to tensorboard

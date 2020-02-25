@@ -1,0 +1,44 @@
+<Symbol_start>
+B # Box
+Q # Quantifier
+H # Head
+P # Predicate
+A # Aggregation Operator
+O # Predicate Operator
+T # Table
+C # Column
+E # Empty
+############### Agg operators
+N # None
+CNT # Count
+MIN # Minimum
+MAX # Maximum
+AVG # Average
+SUM # Summation
+############### Where operators
+Not # Not
+Between # Between
+= # Equal
+> # GreaterThan
+< # LessThan
+>= # GreaterAndEqual
+<= # LessAndEqual
+!= # NotEqual
+In # In
+Like # Like
+Is # Is
+Exists # Exists
+NotIn # NotIn
+NotLike # NotLike
+<Symbol_end>
+
+<Grammar_start>
+B ::= Q H P | Q H
+Q ::= T Q | T
+H ::= A C H | A C
+P ::= O A C P | O A C
+A ::= N | CNT | MIN | MAX | AVG | SUM
+O ::= Not | Between | = | > | < | >= | <= | != | In | Like | Is | Exists | NotIn | NotLike
+T ::= E
+C ::= E
+<Grammar_end>

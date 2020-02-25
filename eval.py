@@ -84,7 +84,7 @@ def evaluate(cfg):
 
     # Save outputs from train
     assert len(train_pred) == len(train_gold) and len(train_gold) == len(train_list)
-    if cfg.model_name == "qgm_transformer":
+    if cfg.model_name == "transformer":
         # Format pred
         tmp = []
         for pred in train_pred:
@@ -103,7 +103,7 @@ def evaluate(cfg):
 
     # Save outputs from dev
     assert len(dev_pred) == len(dev_gold) and len(dev_gold) == len(dev_list)
-    if cfg.model_name == "qgm_transformer":
+    if cfg.model_name == "transformer":
         # Format pred
         tmp = []
         for pred in dev_pred:

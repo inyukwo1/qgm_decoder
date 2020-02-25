@@ -18,7 +18,7 @@ def to_long_tensor(batch_list):
     return torch.tensor(batch_list, dtype=torch.long).cuda()
 
 
-def calculate_attention_weights(source, query, source_mask=None, affine_layer=None, log_softmax=True):
+def calculate_similarity(source, query, source_mask=None, affine_layer=None, log_softmax=True):
     if affine_layer:
         source = affine_layer(source)
     weight_scores = torch.bmm(source, query.transpose(1, 2)).squeeze(-1)

@@ -115,9 +115,9 @@ def get_table_colNames(tab_ids, tab_cols):
     return result
 
 
-def get_col_table_dict(tab_cols, tab_ids, sql, is_qgm=True):
+def get_col_table_dict(tab_cols, tab_ids, sql, is_col_set=True):
     table_dict = {}
-    cols = sql["col"] if is_qgm else sql["col_set"]
+    cols = sql["col_set"] if is_col_set else sql["col"]
     for c_id, c_v in enumerate(cols):
         for cor_id, cor_val in enumerate(tab_cols):
             if c_v == cor_val:
@@ -132,7 +132,7 @@ def get_col_table_dict(tab_cols, tab_ids, sql, is_qgm=True):
     col_table_dict[0] = [x for x in range(len(table_dict) - 1)]
 
     # Modify
-    if is_qgm:
+    if not is_col_set:
         col_table_dict = {
             idx: [item] if item != -1 else list(range(max(tab_ids) + 1))
             for idx, item in enumerate(tab_ids)
@@ -221,7 +221,7 @@ def schema_linking(
                             col_set_type[col_set_idx][3] += 1
 
 
-def process(sql, table, is_qgm=True):
+def process(sql, table, is_col_set=True):
 
     process_dict = {}
 
@@ -236,7 +236,7 @@ def process(sql, table, is_qgm=True):
     tab_cols = [col[1] for col in table["column_names"]]
     tab_ids = [col[0] for col in table["column_names"]]
 
-    cols = sql["col"] if is_qgm else sql["col_set"]
+    cols = sql["col_set"] if is_col_set else sql["col"]
     col_set_iter = [
         [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")] for x in cols
     ]
@@ -282,7 +282,7 @@ def process(sql, table, is_qgm=True):
     process_dict["table_names"] = table_names
     process_dict["tab_set_iter"] = tab_set_iter
     process_dict["qgm"] = sql["qgm"]
-    process_dict["qgm_action"] = sql["qgm_action"]
+    #process_dict["qgm_action"] = sql["qgm_action"]
 
     return process_dict
 
@@ -306,14 +306,13 @@ def is_valid(rule_label, col_set_table_dict, sql):
     return flag is False
 
 
-def to_batch_seq(sql_data, table_data, idxes, st, ed, is_qgm=True):
+def to_batch_seq(sql_data, table_data, idxes, st, ed, is_col_set=True):
     examples = []
-
     for i in range(st, ed):
         sql = sql_data[idxes[i]]
         table = table_data[sql["db_id"]]
 
-        process_dict = process(sql, table, is_qgm=is_qgm)
+        process_dict = process(sql, table, is_col_set=is_col_set)
 
         for c_id, col_ in enumerate(process_dict["col_set_iter"]):
             for q_id, ori in enumerate(process_dict["q_iter_small"]):
@@ -337,7 +336,7 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed, is_qgm=True):
         )
 
         col_table_dict = get_col_table_dict(
-            process_dict["tab_cols"], process_dict["tab_ids"], sql, is_qgm
+            process_dict["tab_cols"], process_dict["tab_ids"], sql, is_col_set
         )
         table_col_name = get_table_colNames(
             process_dict["tab_ids"], process_dict["col_iter"]
@@ -346,7 +345,7 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed, is_qgm=True):
         process_dict["col_set_iter"][0] = ["count", "number", "many"]
 
         rule_label = None
-        if "rule_label" in sql and not is_qgm:
+        if "rule_label" in sql:
             # handle the subquery on From cause
             if "from" in sql["rule_label"]:
                 continue
@@ -376,7 +375,8 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed, is_qgm=True):
             tokenized_src_sent=process_dict["col_set_type"],
             tgt_actions=rule_label,
             qgm=process_dict["qgm"],
-            qgm_action=process_dict["qgm_action"],
+            #qgm_action=process_dict["rule_label"],
+            qgm_action=rule_label,
         )
 
         example.sql_json = copy.deepcopy(sql)
@@ -396,6 +396,7 @@ def epoch_train(
     table_data,
     clip_grad,
     model_name,
+    is_col_set=True,
     is_train=True,
 ):
     if is_train:
@@ -412,11 +413,24 @@ def epoch_train(
     for st in tqdm(range(0, len(sql_data), batch_size)):
         ed = st + batch_size if st + batch_size < len(perm) else len(perm)
         examples = to_batch_seq(
-            sql_data, table_data, perm, st, ed, is_qgm="qgm" in model_name
+            sql_data, table_data, perm, st, ed, is_col_set=is_col_set
         )
 
         result = model.forward(examples)
-        if model_name == "qgm_transformer":
+        if model_name == "lstm":
+            tmp = {key: [] for key in result[0].get_keys()}
+            for losses in result:
+                for key, item in losses.get_dic().items():
+                    tmp[key] += [item]
+            tmp = {key: torch.mean(torch.stack(item)) for key, item in tmp.items()}
+            loss = tmp["sketch"] + tmp["detail"]
+
+            # Save
+            if not total_loss:
+                total_loss = {key: [] for key in result[0].get_keys()}
+            for key, item in tmp.items():
+                total_loss[key] += [float(item)]
+        elif model_name == "transformer":
             tmp = {key: [] for key in result[0].get_keys()}
             for losses in result:
                 for key, item in losses.get_loss_dic().items():
@@ -485,7 +499,7 @@ def epoch_train(
 
 
 def epoch_acc(
-    model, batch_size, sql_data, table_data, model_name, return_details=False,
+    model, batch_size, sql_data, table_data, model_name, is_col_set=True, return_details=False,
 ):
     model.eval()
     perm = list(range(len(sql_data)))
@@ -495,10 +509,18 @@ def epoch_acc(
     for st in tqdm(range(0, len(sql_data), batch_size)):
         ed = st + batch_size if st + batch_size < len(perm) else len(perm)
         examples = to_batch_seq(
-            sql_data, table_data, perm, st, ed, is_qgm="qgm" in model_name
+            sql_data, table_data, perm, st, ed, is_col_set=is_col_set,
         )
         example_list += examples
-        if model_name == "qgm_transformer":
+        if model_name == "lstm":
+            pred += model.parse(examples)
+            tmp = [model.decoder.grammar.create_data(example.qgm) for example in examples]
+            tmp2 = []
+            for item in tmp:
+                tmp2 += [[model.decoder.grammar.str_to_action(value) for value in item.split(" ")]]
+            tmp = tmp2
+            gold += tmp
+        elif model_name == "transformer":
             pred += model.parse(examples)
             gold += [example.qgm_action for example in examples]
         elif model_name == "qgm":
@@ -512,7 +534,7 @@ def epoch_acc(
             raise RuntimeError("Unsupported model name")
 
     # Calculate acc
-    total_acc, is_correct_list = model.decoder.get_accuracy(pred, gold)
+    total_acc, is_correct_list = model.decoder.grammar.cal_acc(pred, gold)
 
     if return_details:
         return total_acc, is_correct_list, pred, gold, example_list

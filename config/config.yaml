@@ -1,7 +1,7 @@
 defaults:
   - hydra/job_logging: custom
   - hydra/output: custom
-  - model: qgm_transformer
+  - model: transformer
   - dataset: spider
   - train: default
 

@@ -1,4 +1,4 @@
-model_name: qgm_transformer
+model_name: transformer
 layer_num: 3
 nhead: 6
-grammar_path: /home/hkkang/debugging/irnet_qgm_transformer/qgm_transformer/qgm.manifesto
+grammar_path: /home/hkkang/debugging/irnet_qgm_transformer/transformer/qgm.manifesto

@@ -1,19 +1,22 @@
 import math
 import torch
 import torch.nn as nn
-import qgm_transformer.utils as utils
-from qgm_transformer.grammar import Grammar
-from qgm_transformer.batch_state import TransformerBatchState
+import decoder.transformer.utils as utils
+from rule.grammar import Grammar
+from decoder.transformer.batch_state import TransformerBatchState
+from src.transformer_decoder import (
+    TransformerDecoderLayer,
+    TransformerDecoder,
+)
 
 
-class QGM_Transformer_Decoder(nn.Module):
+class Transformer_Decoder(nn.Module):
     def __init__(self, cfg):
-        super(QGM_Transformer_Decoder, self).__init__()
+        super(Transformer_Decoder, self).__init__()
         # Grammar
         is_bert = cfg.is_bert
         grammar_path = cfg.grammar_path
         hidden_size = cfg.hidden_size
-        self.grammar = Grammar(is_bert, grammar_path, hidden_size)
 
         # Decode Layers
         dim = 1024 if is_bert else hidden_size
@@ -26,19 +29,16 @@ class QGM_Transformer_Decoder(nn.Module):
         self.tgt_linear_layer = nn.Linear(dim * 2, d_model)
         self.out_linear_layer = nn.Linear(d_model, dim)
 
-        # LSTM Decoder
-        self.lstm_decoder = nn.LSTMCell(dim*3, dim)
+        self.grammar = Grammar(grammar_path, dim)
 
-        """
         # Transformer Layers
         decoder_layer = TransformerDecoderLayer(d_model=d_model, nhead=self.nhead)
         self.transformer_decoder = TransformerDecoder(
             decoder_layer, num_layers=self.layer_num
         )
-        """
         self._init_positional_embedding(d_model)
 
-    def _init_positional_embedding(self, d_model, dropout=0.1, max_len=5000):
+    def _init_positional_embedding(self, d_model, dropout=0.1, max_len=100):
         self.pos_dropout = nn.Dropout(p=dropout)
         pe = torch.zeros(max_len, d_model)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
@@ -56,21 +56,20 @@ class QGM_Transformer_Decoder(nn.Module):
 
     def forward(
         self,
-        init_state,
-        encoded_src,
-        encoded_col,
-        encoded_tab,
-        src_mask,
-        col_mask,
-        tab_mask,
-        tab_col_dic,
-        gold_qgms=None,
+        batch,
         step=None,  # for captum
         col_names=None,  # for captum
-        tab_names=None,  # for captum
-    ):
-        if gold_qgms:
-            gold_qgms = [item.split(" ") for item in gold_qgms]
+        tab_names=None): # for captum
+
+        encoded_src = batch.sen_encoding
+        encoded_col = batch.col_emb
+        encoded_tab = batch.tab_emb
+        src_mask = batch.sen_mask
+        col_mask = batch.col_mask
+        tab_mask = batch.tab_mask
+        tab_col_dic = batch.tab_col_dic
+        gold_qgms = [item.split(" ") if self.training else [] for item in batch.qgm_action]
+
         # Mask Batch State
         state = TransformerBatchState(
             encoded_src,
@@ -85,33 +84,20 @@ class QGM_Transformer_Decoder(nn.Module):
             gold_qgms,
         )
 
-        state.create_lstm_cell_state(init_state)
-
         # Decode
         decode_step_num = 0
         while not state.is_done():
             # Get sub-mini-batch
             memory = state.get_memory()
-            memory_mask = state.get_memory_key_padding_mask()
-            #tgt = state.get_tgt(self.tgt_affine_layer, self.tgt_linear_layer)
-            lstm_state = state.get_lstm_state()
-            #memory_key_padding_mask = state.get_memory_key_padding_mask()
+            tgt = state.get_tgt(self.tgt_affine_layer, self.tgt_linear_layer)
+            memory_key_padding_mask = state.get_memory_key_padding_mask()
 
             # Decode
-            # Get prev action emb
-            prev_action_emb = state.get_prev_action_emb()
-            # Get current node emb
-            current_node_emb = state.get_current_node_emb()
-            # Get attn b/w prev hidden and memory
-            mem_hid_att = self.attention(memory, memory_mask, lstm_state[0])
-            # Concatenate
-            lstm_input = torch.cat([prev_action_emb, current_node_emb, mem_hid_att], dim=-1)
-            # Input to LSTM
-            new_lstm_state = self.lstm_decoder(lstm_input, lstm_state)
-            # Save lstm state
-            state.save_lstm_state(new_lstm_state)
-            # linear and compute out
-            out = self.out_linear_layer(new_lstm_state[0])
+            tgt = self.pos_encode(tgt)
+            out = self.transformer_decoder(
+                tgt, memory, memory_key_padding_mask=memory_key_padding_mask
+            ).transpose(0, 1)
+            out = self.out_linear_layer(out[:, -1:, :])
 
             # Get views
             action_view, column_view, table_view = state.get_views()
@@ -128,7 +114,7 @@ class QGM_Transformer_Decoder(nn.Module):
                     dtype=torch.long,
                 ).cuda()
                 for idx, item in enumerate(next_action_ids):
-                    action_masks[idx][torch.tensor(item).cuda()] = 0
+                    action_masks[idx][item] = 0
 
                 # action to action embedding
                 action_emb = self.grammar.action_emb.weight.contiguous()
@@ -245,21 +231,11 @@ class QGM_Transformer_Decoder(nn.Module):
             state.update_state()
         assert step is None
         # get losses, preds
+
         return (
-            state.loss,
+            [item.get_loss_dic() for item in state.loss],
             state.pred_history,
         )
-
-    def attention(self, memory, memory_mask, hidden_state):
-        memory = memory.transpose(0, 1)
-        hidden_state = hidden_state.unsqueeze(1)
-        weights = utils.calculate_attention_weights(memory, hidden_state, source_mask=memory_mask, affine_layer=self.tgt_affine_layer, log_softmax=False)
-
-        memory = memory * weights.unsqueeze(-1)
-        memory = torch.sum(memory, dim=1)
-
-        return memory
-
 
     def predict_for_captum(self, view, out, src, src_mask):
         probs = torch.nn.functional.softmax(
@@ -293,88 +269,3 @@ class QGM_Transformer_Decoder(nn.Module):
 
         view.save_loss(pred_probs)
         view.save_pred(pred_indices)
-
-    def get_accuracy(self, pred_qgm_actions, gold_qgm_actions):
-        # process gold_qgm_actions
-        parsed_gold_qgm_actions = []
-        for qgm_action in gold_qgm_actions:
-            tmp = []
-            for item in qgm_action.split(" "):
-                symbol = item.split("(")[0]
-                idx = item.split("(")[1].split(")")[0]
-                tmp += [(symbol, int(idx))]
-            parsed_gold_qgm_actions += [tmp]
-
-        keys = [
-            "total",
-            "detail",
-            "sketch",
-            "head_num",
-            "head_agg",
-            "head_col",
-            "quantifier_num",
-            "quantifier_tab",
-            "local_predicate_num",
-            "local_predicate_op",
-            "local_predicate_agg",
-            "local_predicate_col",
-        ]
-        total_acc = {key: 0.0 for key in keys}
-
-        is_correct_list = []
-
-        assert len(pred_qgm_actions) == len(parsed_gold_qgm_actions)
-        for pred_qgm_action, gold_qgm_action in zip(
-            pred_qgm_actions, parsed_gold_qgm_actions
-        ):
-            # Sketch
-            pred_sketch = [
-                item for item in pred_qgm_action if item[0] not in ["A", "C", "T"]
-            ]
-            gold_sketch = [
-                item for item in gold_qgm_action if item[0] not in ["A", "C", "T"]
-            ]
-            sketch_is_correct = pred_sketch == gold_sketch
-
-            # Detail
-            pred_detail = [
-                item for item in pred_qgm_action if item[0] in ["A", "C", "T"]
-            ]
-            gold_detail = [
-                item for item in gold_qgm_action if item[0] in ["A", "C", "T"]
-            ]
-            detail_is_correct = pred_detail == gold_detail
-
-            # Total
-            total_is_correct = sketch_is_correct and detail_is_correct
-
-            total_acc["detail"] += detail_is_correct
-            total_acc["sketch"] += sketch_is_correct
-            total_acc["total"] += total_is_correct
-
-            is_correct_list += [total_is_correct]
-
-            # More detailed Accs
-            # Head Num
-            stop = 1
-
-            # Head agg
-
-            # Head col
-
-            # Quantifier Num
-
-            # Quantifier Tab
-
-            # Predicate Num
-
-            # Predicate op
-
-            # Predicate agg
-
-            # Predicate col
-
-        for key in total_acc.keys():
-            total_acc[key] = total_acc[key] / len(gold_qgm_actions)
-
-        return total_acc, is_correct_list

@@ -2,7 +2,8 @@
 
 semql_path="./semql/"
 qgm_path="./qgm/"
-dataset_names=("spider" "wikisql" "wikitablequestions")
+#dataset_names=("spider" "wikisql" "wikitablequestions")
+dataset_names=("spider")
 data_types=("train" "dev" "test")
 
 cd ${semql_path}

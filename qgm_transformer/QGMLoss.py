@@ -1,7 +1,7 @@
 import torch
 
 
-class QGMLoss:
+class Loss:
     def __init__(self, grammar):
         keys = [
             "head_agg",
@@ -20,8 +20,35 @@ class QGMLoss:
         self.loss = {key: torch.tensor(0.0).cuda() for key in keys}
         self.grammar = grammar
 
+    def add(self, value, action_node, prev_actions):
+        key = self._get_key(action_node, prev_actions)
+        assert key in self.loss.keys(), "key:{}".format(key)
+        self.loss[key] += value
+        if "col" in key or "agg" in key or "tab" in key:
+            self.loss["detail"] += value
+        else:
+            self.loss["sketch"] += value
+        self.loss["total"] += value
+
+    def get_loss_dic(self):
+        return self.loss
+
+    def get_loss(self, key):
+        return self.loss[key]
+
+    def get_total_loss(self):
+        return self.get_loss("total")
+
+    def get_keys(self):
+        return self.loss.keys()
+
+
+class QGMLoss(Loss):
+    def __init__(self, grammar):
+        super(QGMLoss, self).__init__(self, grammar)
+
+
     def _get_key(self, action_node, prev_actions):
-        key = None
         if action_node == self.grammar.symbol_to_symbol_id["B"]:
             key = "predicate_num"
         elif action_node == self.grammar.symbol_to_symbol_id["Q"]:
@@ -63,24 +90,31 @@ class QGMLoss:
             raise RuntimeError("Should not be here {}:{}".format(prev_actions, action_node))
         return key
 
-    def add(self, value, action_node, prev_actions):
-        key = self._get_key(action_node, prev_actions)
-        assert key in self.loss.keys(), "key:{}".format(key)
-        self.loss[key] += value
-        if "col" in key or "agg" in key or "tab" in key:
-            self.loss["detail"] += value
+class SemQLLoss(Loss):
+    def __init__(self, grammar):
+        super(SemQLLoss, self).__init__(grammar)
+
+    def _get_key(self, action_node, prev_action):
+        if action_node == self.grammar.symbol_to_symbol_id["Root1"]:
+            key = "predicate_num"
+        elif action_node == self.grammar.symbol_to_symbol_id["Root"]:
+            key = "predicate_num"
+        elif action_node == self.grammar.symbol_to_symbol_id["N"]:
+            key = "head_num"
+        elif action_node == self.grammar.symbol_to_symbol_id["Filter"]:
+            key = "predicate_num"
+        elif action_node == self.grammar.symbol_to_symbol_id["A"]:
+            if prev_action[-1][0] == "N":
+                key = "head_agg"
+            else:
+                key = "predicate_agg"
+        elif action_node == self.grammar.symbol_to_symbol_id["C"]:
+            if prev_action[-2][0] == "N":
+                key = "head_col"
+            else:
+                key = "predicate_col"
+        elif action_node == self.grammar.symbol_to_symbol_id["T"]:
+            key = "quantifier_tab"
         else:
-            self.loss["sketch"] += value
-        self.loss["total"] += value
-
-    def get_loss_dic(self):
-        return self.loss
-
-    def get_loss(self, key):
-        return self.loss[key]
-
-    def get_total_loss(self):
-        return self.get_loss("total")
-
-    def get_keys(self):
-        return self.loss.keys()
+            raise RuntimeError("Should not be here")
+        return key

@@ -1,8 +1,7 @@
 import copy
 import torch
-import qgm_transformer.utils as utils
-#from transformer.QGMLoss import QGMLoss
-from qgm_transformer.QGMLoss import SemQLLoss
+import decoder.transformer.utils as utils
+from rule.qgm.qgm_loss import QGMLoss
 
 
 class TransformerBatchState:
@@ -32,7 +31,7 @@ class TransformerBatchState:
         self.tab_mask = tab_mask
         self.tab_col_dic = tab_col_dic
         self.b_indices = b_indices
-        self.golds = golds
+        self.golds = copy.deepcopy(golds)
 
         # Not removing these variables when update (always stay in total batch view)
         self.step_cnt = 0
@@ -40,34 +39,8 @@ class TransformerBatchState:
         self.nonterminal_stack = [
             [grammar.get_start_symbol_id()] for _ in range(self.get_b_size())
         ]
-        self.loss = [SemQLLoss(self.grammar) for _ in range(self.get_b_size())]
+        self.loss = [QGMLoss(self.grammar) for _ in range(self.get_b_size())]
         self.pred_history = [[] for _ in range(self.get_b_size())]
-
-
-    def save_lstm_state(self, new_lstm_state):
-        for idx, b_idx, in enumerate(self.b_indices):
-            self.lstm_state[b_idx] = (new_lstm_state[0][idx], new_lstm_state[1][idx])
-
-
-    def create_lstm_cell_state(self, init_state):
-        # Split init_state with the batch size
-        state = []
-        for idx in range(len(init_state[0])):
-            state += [(init_state[0][idx], init_state[1][idx])]
-        self.lstm_state = state
-
-
-    def get_lstm_state(self):
-        hidden = []
-        cell = []
-        for idx, b_idx, in enumerate(self.b_indices):
-            hidden += [self.lstm_state[b_idx][0]]
-            cell += [self.lstm_state[b_idx][1]]
-        hidden = torch.stack(hidden, dim=0)
-        cell = torch.stack(cell, dim=0)
-        lstm_state = (hidden, cell)
-        return lstm_state
-
 
     def _make_view(self, view_indices, state_type):
         if not view_indices:
@@ -83,14 +56,13 @@ class TransformerBatchState:
             copy.deepcopy([self.tab_col_dic[idx] for idx in view_indices]),
             copy.deepcopy([self.b_indices[idx] for idx in view_indices]),
             self.grammar,
-            [self.golds[idx] for idx in view_indices],
+            copy.deepcopy([self.golds[idx] for idx in view_indices]),
             state_type=state_type,
         )
         new_view.step_cnt = self.step_cnt
         new_view.loss = self.loss
         new_view.pred_history = copy.deepcopy(self.pred_history)
         new_view.nonterminal_stack = copy.deepcopy(self.nonterminal_stack)
-        new_view.lstm_state = self.lstm_state
         return new_view
 
     def _combine_view(self, view):
@@ -102,9 +74,7 @@ class TransformerBatchState:
                 )
                 self.nonterminal_stack[b_idx] = view.nonterminal_stack[b_idx]
                 self.pred_history[b_idx] = view.pred_history[b_idx]
-                self.loss[b_idx] = view.loss[b_idx]
-                self.lstm_state[b_idx] = self.lstm_state[b_idx]
-
+                self.loss[b_idx] = self.loss[b_idx]
 
     def _get_view_indices(self):
         # Parse view indices
@@ -130,9 +100,9 @@ class TransformerBatchState:
         ) = self._get_view_indices()
 
         return (
-            out[action_view_indices].unsqueeze(1),
-            out[column_view_indices].unsqueeze(1),
-            out[table_view_indices].unsqueeze(1),
+            out[action_view_indices],
+            out[column_view_indices],
+            out[table_view_indices],
         )
 
     def get_views(self):
@@ -155,7 +125,7 @@ class TransformerBatchState:
         self.step_cnt += 1
 
         # Update Variables
-        if self.step_cnt == 40:
+        if self.step_cnt == 30:
             next_indices = []
         else:
             next_indices = [
@@ -199,41 +169,6 @@ class TransformerBatchState:
         # Expand as nhead
         mask = self.src_mask
         return mask.bool()
-
-    def get_current_node_emb(self):
-        symbols = [self.nonterminal_stack[b_idx][0] for b_idx in self.b_indices]
-        symbols = torch.tensor(symbols).cuda().long()
-        symbol_emb = self.grammar.symbol_emb(symbols)
-        return symbol_emb
-
-
-    def get_prev_action_emb(self):
-        # Get prev symbols
-        prev_actions = [
-            self.pred_history[b_idx][-1] if self.pred_history[b_idx] else []
-            for b_idx in self.b_indices
-        ]
-
-        if self.step_cnt == 0:
-            prev_action_emb = torch.zeros(len(self.b_indices), 300).cuda()
-        else:
-            # Get action ids
-            action_embs = []
-            for idx, action in enumerate(prev_actions):
-                if action[0] == "T":
-                    #b_idx = self.b_indices[idx]
-                    action_embs += [self.encoded_tab[idx][action[1]]]
-                elif action[0] == "C":
-                    #b_idx = self.b_indices[idx]
-                    action_embs += [self.encoded_col[idx][action[1]]]
-                else:
-                    action_id = self.grammar.action_to_action_id[action]
-                    action_id = torch.tensor(action_id).long().cuda()
-                    action_embs += [self.grammar.action_emb(action_id)]
-            prev_action_emb = torch.stack(action_embs)
-
-        return prev_action_emb
-
 
     def get_tgt(self, affine_layer, linear_layer):
         # Get prev symbols
@@ -302,8 +237,6 @@ class TransformerBatchState:
 
     def save_loss(self, loss):
         for idx, b_idx in enumerate(self.b_indices):
-            if loss[idx] != loss[idx]:
-                stop = 1
             self.loss[b_idx].add(
                 -loss[idx], self.nonterminal_stack[b_idx][0], self.pred_history[b_idx]
             )

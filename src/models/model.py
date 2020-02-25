@@ -10,7 +10,7 @@ from qgm.qgm_decoder import QGM_Decoder
 from semql.semql_decoder import SemQL_Decoder
 from transformers import *
 from qgm_transformer.decoder import QGM_Transformer_Decoder
-#from encoder.encoder import transformer_encoder
+from decoder.lstm.decoder import LSTM_Decoder
 
 
 # Transformers has a unified API
@@ -69,8 +69,10 @@ class IRNet(BasicModel):
         self.captum_iden = nn.Dropout(0.000001)
 
         # QGM Decoder
-        if self.decoder_name == "qgm_transformer":
+        if self.decoder_name == "transformer":
             self.decoder = QGM_Transformer_Decoder(cfg)
+        elif self.decoder_name == "lstm":
+            self.decoder = LSTM_Decoder(cfg)
         elif self.decoder_name == "qgm":
             self.decoder = QGM_Decoder(cfg)
         elif self.decoder_name == "semql":
@@ -286,7 +288,7 @@ class IRNet(BasicModel):
 
         dec_init_vec = self.init_decoder_state(last_cell)
 
-        if self.decoder_name == "qgm_transformer":
+        if self.decoder_name == "transformer":
             src_mask = batch.src_token_mask
             col_mask = batch.table_token_mask
             tab_mask = batch.schema_token_mask
@@ -363,13 +365,6 @@ class IRNet(BasicModel):
         # now should implement the examples
         batch = Batch(examples, is_cuda=self.is_cuda)
 
-        """
-        src = self.gen_x_batch(batch.src_sents)
-        col = self.gen_x_batch(batch.table_sents)
-        tab = self.gen_x_batch(batch.table_names_iter)
-        src_encodings, table_embedding, schema_embedding = transformer_encoder(src, col, tab, batch.src_token_mask, batch.table_token_mask, batch.schema_token_mask)
-        """
-
         if self.is_bert:
             (
                 src_encodings,
@@ -390,7 +385,42 @@ class IRNet(BasicModel):
 
         dec_init_vec = self.init_decoder_state(last_cell)
 
-        if self.decoder_name == "qgm_transformer":
+        if self.decoder_name == "lstm":
+            src_mask = batch.src_token_mask
+            col_mask = batch.table_token_mask
+            tab_mask = batch.schema_token_mask
+            col_tab_dic = batch.col_table_dict
+            tab_col_dic = []
+            for b_idx in range(len(col_tab_dic)):
+                b_tmp = []
+                tab_len = len(col_tab_dic[b_idx][0])
+                for t_idx in range(tab_len):
+                    tab_tmp = [
+                        idx
+                        for idx in range(len(col_tab_dic[b_idx]))
+                        if t_idx in col_tab_dic[b_idx][idx]
+                    ]
+                    b_tmp += [tab_tmp]
+                tab_col_dic += [b_tmp]
+            golds = [self.decoder.grammar.create_data(item) for item in batch.qgm]
+            tmp = []
+            for gold in golds:
+                tmp += [[self.decoder.grammar.str_to_action(item) for item in gold.split(" ")]]
+            golds = tmp
+            losses, pred = self.decoder(
+                                dec_init_vec,
+                                src_encodings,
+                                table_embedding,
+                                schema_embedding,
+                                src_mask,
+                                col_mask,
+                                tab_mask,
+                                col_tab_dic,
+                                tab_col_dic,
+                                golds,
+                                )
+            return losses
+        elif self.decoder_name == "transformer":
             src_mask = batch.src_token_mask
             col_mask = batch.table_token_mask
             tab_mask = batch.schema_token_mask
@@ -518,8 +548,41 @@ class IRNet(BasicModel):
                 schema_embedding = schema_embedding + tab_type_var
 
             dec_init_vec = self.init_decoder_state(last_cell)
-
-            if self.decoder_name == "qgm_transformer":
+            if self.decoder_name == "lstm":
+                src_mask = batch.src_token_mask
+                col_mask = batch.table_token_mask
+                tab_mask = batch.schema_token_mask
+                col_tab_dic = batch.col_table_dict
+                tab_col_dic = []
+                for b_idx in range(len(col_tab_dic)):
+                    b_tmp = []
+                    tab_len = len(col_tab_dic[b_idx][0])
+                    for t_idx in range(tab_len):
+                        tab_tmp = [
+                            idx
+                            for idx in range(len(col_tab_dic[b_idx]))
+                            if t_idx in col_tab_dic[b_idx][idx]
+                        ]
+                        b_tmp += [tab_tmp]
+                    tab_col_dic += [b_tmp]
+                golds = [self.decoder.grammar.create_data(item) for item in batch.qgm]
+                tmp = []
+                for gold in golds:
+                    tmp += [self.decoder.grammar.str_to_action(item) for item in gold.split(" ")]
+                golds = tmp
+                losses, pred = self.decoder(dec_init_vec,
+                                            src_encodings,
+                                            table_embedding,
+                                            schema_embedding,
+                                            src_mask,
+                                            col_mask,
+                                            tab_mask,
+                                            col_tab_dic,
+                                            tab_col_dic,
+                                            golds,
+                                            )
+                return pred
+            elif self.decoder_name == "transformer":
                 src_mask = batch.src_token_mask
                 col_mask = batch.table_token_mask
                 tab_mask = batch.schema_token_mask
