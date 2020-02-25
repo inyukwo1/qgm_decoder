@@ -129,6 +129,7 @@ class SemQL_Decoder(nn.Module):
             self.production_embed.weight,
             self.production_readout_b,
         )
+        self.att_affine_layer = nn.Linear(hidden_size, hidden_size)
 
         self.softmax = torch.nn.Softmax(dim=-1)
 
@@ -168,6 +169,7 @@ class SemQL_Decoder(nn.Module):
 
         utterance_encodings_lf_linear = self.att_lf_linear(src_encodings)
 
+        utterance_encodings_lf_linear = src_encodings
         zero_action_embed = Variable(self.new_tensor(self.action_embed_size).zero_())
         zero_type_embed = Variable(self.new_tensor(self.type_embed_size).zero_())
 
@@ -438,6 +440,7 @@ class SemQL_Decoder(nn.Module):
         beam_size=5,
     ):
         utterance_encodings_lf_linear = self.att_lf_linear(src_encodings)
+        utterance_encodings_lf_linear = src_encodings
         batch_table_dict = batch.col_table_dict
 
         h_tm1 = dec_init_vec

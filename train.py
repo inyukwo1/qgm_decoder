@@ -87,6 +87,9 @@ def train(cfg):
     if not os.path.exists(log_model_path):
         os.mkdir(log_model_path)
 
+    # train_acc = utils.epoch_acc(
+    #     model, cfg.batch_size, train_data, table_data, cfg.model_name
+    # )
     best_val_acc = 0
     for epoch in range(1, cfg.max_epoch):
         log.info(

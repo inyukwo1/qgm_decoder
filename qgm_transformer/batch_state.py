@@ -7,6 +7,7 @@ from qgm_transformer.QGMLoss import QGMLoss
 class TransformerBatchState:
     def __init__(
         self,
+        h_tm1,
         encoded_src,
         encoded_col,
         encoded_tab,
@@ -23,6 +24,7 @@ class TransformerBatchState:
         self.state_type = state_type
 
         # Embeddings
+        self.h_tm1 = h_tm1
         self.encoded_src = encoded_src
         self.encoded_col = encoded_col
         self.encoded_tab = encoded_tab
@@ -47,6 +49,7 @@ class TransformerBatchState:
             return None
         # Narrowing the view
         new_view = TransformerBatchState(
+            (self.h_tm1[0][:, view_indices, :], self.h_tm1[1][:, view_indices, :]),
             self.encoded_src[view_indices],
             self.encoded_col[view_indices],
             self.encoded_tab[view_indices],
@@ -133,6 +136,10 @@ class TransformerBatchState:
                 for idx, b_idx in enumerate(self.b_indices)
                 if self.nonterminal_stack[b_idx]
             ]
+        self.h_tm1 = (
+            self.h_tm1[0][:, next_indices, :],
+            self.h_tm1[1][:, next_indices, :],
+        )
         self.encoded_src = self.encoded_src[next_indices]
         self.encoded_col = self.encoded_col[next_indices]
         self.encoded_tab = self.encoded_tab[next_indices]

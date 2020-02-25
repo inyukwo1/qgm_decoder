@@ -27,7 +27,7 @@ def calculate_attention_weights(source, query, source_mask=None, affine_layer=No
     if source_mask is not None:
         weight_scores.data.masked_fill_(source_mask.bool(), -float("inf"))
 
-    weight_probs = torch.log_softmax(weight_scores, dim=-1)
+    weight_probs = torch.softmax(weight_scores, dim=-1)
 
     return weight_probs
 

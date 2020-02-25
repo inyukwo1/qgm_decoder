@@ -1,6 +1,7 @@
 import math
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import qgm_transformer.utils as utils
 from qgm_transformer.grammar import Grammar
 from qgm_transformer.batch_state import TransformerBatchState
@@ -8,6 +9,27 @@ from qgm_transformer.transformer_decoder import (
     TransformerDecoderLayer,
     TransformerDecoder,
 )
+from src.models.pointer_net import PointerNet
+
+
+def dot_prod_attention(h_t, src_encoding, src_encoding_att_linear, mask=None):
+    """
+    :param h_t: (batch_size, hidden_size)
+    :param src_encoding: (batch_size, src_sent_len, hidden_size * 2)
+    :param src_encoding_att_linear: (batch_size, src_sent_len, hidden_size)
+    :param mask: (batch_size, src_sent_len)
+    """
+    # (batch_size, src_sent_len)
+    att_weight = torch.bmm(src_encoding_att_linear, h_t.unsqueeze(2)).squeeze(2)
+    if mask is not None:
+        att_weight.data.masked_fill_(mask.bool(), float("-inf"))
+    att_weight = F.softmax(att_weight, dim=-1)
+
+    att_view = (att_weight.size(0), 1, att_weight.size(1))
+    # (batch_size, hidden_size)
+    ctx_vec = torch.bmm(att_weight.view(*att_view), src_encoding).squeeze(1)
+
+    return ctx_vec, att_weight
 
 
 class QGM_Transformer_Decoder(nn.Module):
@@ -30,12 +52,37 @@ class QGM_Transformer_Decoder(nn.Module):
         self.tgt_linear_layer = nn.Linear(dim * 2, d_model)
         self.out_linear_layer = nn.Linear(d_model, dim)
 
+        self.column_pointer_net = PointerNet(
+            hidden_size, hidden_size, attention_type="affine"
+        )
+
+        self.table_pointer_net = PointerNet(
+            hidden_size, hidden_size, attention_type="affine"
+        )
         # Transformer Layers
         decoder_layer = TransformerDecoderLayer(d_model=d_model, nhead=self.nhead)
         self.transformer_decoder = TransformerDecoder(
             decoder_layer, num_layers=self.layer_num
         )
         self._init_positional_embedding(d_model)
+        self.lstm_decoder = nn.LSTM(d_model, hidden_size)
+        self.att_lf_linear = nn.Linear(hidden_size, hidden_size, bias=False)
+
+        self.lf_att_vec_linear = nn.Linear(
+            hidden_size + hidden_size, hidden_size, bias=False
+        )
+        self.query_vec_to_action_embed = nn.Linear(
+            hidden_size, hidden_size, bias=False,
+        )
+        self.production_readout_b = nn.Parameter(
+            torch.FloatTensor(len(self.grammar.action_to_action_id)).zero_()
+        )
+        self.production_readout = lambda q: torch.nn.functional.linear(
+            self.query_vec_to_action_embed(q),
+            self.grammar.action_emb.weight,
+            self.production_readout_b,
+        )
+        self.dropout = nn.Dropout(cfg.dropout)
 
     def _init_positional_embedding(self, d_model, dropout=0.1, max_len=5000):
         self.pos_dropout = nn.Dropout(p=dropout)
@@ -55,6 +102,7 @@ class QGM_Transformer_Decoder(nn.Module):
 
     def forward(
         self,
+        dec_init_vec,
         encoded_src,
         encoded_col,
         encoded_tab,
@@ -71,6 +119,7 @@ class QGM_Transformer_Decoder(nn.Module):
             gold_qgms = [item.split(" ") for item in gold_qgms]
         # Mask Batch State
         state = TransformerBatchState(
+            (dec_init_vec[0].unsqueeze(0), dec_init_vec[1].unsqueeze(0)),
             encoded_src,
             encoded_col,
             encoded_tab,
@@ -83,6 +132,8 @@ class QGM_Transformer_Decoder(nn.Module):
             gold_qgms,
         )
 
+        h_tm1 = (dec_init_vec[0].unsqueeze(0), dec_init_vec[1].unsqueeze(0))
+
         # Decode
         decode_step_num = 0
         while not state.is_done():
@@ -91,12 +142,23 @@ class QGM_Transformer_Decoder(nn.Module):
             tgt = state.get_tgt(self.tgt_affine_layer, self.tgt_linear_layer)
             memory_key_padding_mask = state.get_memory_key_padding_mask()
 
+            out, (h_t, cell_t) = self.lstm_decoder(tgt, state.h_tm1)
+            ctx_t, alpha_t = dot_prod_attention(
+                h_t[0],
+                state.encoded_src,
+                self.att_lf_linear(state.encoded_src),
+                mask=None,
+            )
+            att_t = torch.tanh(self.lf_att_vec_linear(torch.cat([h_t[0], ctx_t], 1)))
+            out = self.dropout(att_t)
+            # out = out.unsqueeze(1)
+
             # Decode
-            tgt = self.pos_encode(tgt)
-            out = self.transformer_decoder(
-                tgt, memory, memory_key_padding_mask=memory_key_padding_mask
-            ).transpose(0, 1)
-            out = self.out_linear_layer(out[:, -1:, :])
+            # tgt = self.pos_encode(tgt)
+            # out = self.transformer_decoder(
+            #     tgt, memory, memory_key_padding_mask=memory_key_padding_mask
+            # ).transpose(0, 1)
+            # out = self.out_linear_layer(out[:, -1:, :])
 
             # Get views
             action_view, column_view, table_view = state.get_views()
@@ -145,8 +207,7 @@ class QGM_Transformer_Decoder(nn.Module):
 
                 self.predict(
                     action_view,
-                    action_out,
-                    action_emb,
+                    self.production_readout(action_out),
                     action_masks,
                     self.training or step is not None,
                 )
@@ -190,8 +251,11 @@ class QGM_Transformer_Decoder(nn.Module):
                     )
                 self.predict(
                     column_view,
-                    column_out,
-                    encoded_cols,
+                    self.column_pointer_net(
+                        src_encodings=encoded_cols,
+                        query_vec=column_out.unsqueeze(0),
+                        src_token_mask=col_masks,
+                    ),
                     col_masks,
                     self.training or step is not None,
                 )
@@ -221,8 +285,11 @@ class QGM_Transformer_Decoder(nn.Module):
                     )
                 self.predict(
                     table_view,
-                    table_out,
-                    encoded_tabs,
+                    self.table_pointer_net(
+                        src_encodings=encoded_tabs,
+                        query_vec=table_out.unsqueeze(0),
+                        src_token_mask=tab_masks,
+                    ),
                     tab_masks,
                     self.training or step is not None,
                 )
@@ -254,11 +321,13 @@ class QGM_Transformer_Decoder(nn.Module):
         selected_prob = probs[:, selected_idx]
         return gold_index, selected_idx, gold_prob, selected_prob
 
-    def predict(self, view, out, src, src_mask, pred_with_gold):
+    def predict(self, view, readout, mask, pred_with_gold):
         # Calculate similarity
-        probs = utils.calculate_attention_weights(
-            src, out, source_mask=src_mask, affine_layer=self.att_affine_layer
-        )
+        # probs = utils.calculate_attention_weights(
+        #     src, out, source_mask=src_mask, affine_layer=self.att_affine_layer
+        # )
+        readout.data.masked_fill_(mask.bool(), -float("inf"))
+        probs = torch.log_softmax(readout, dim=-1)
 
         if pred_with_gold:
             pred_indices = view.get_gold()
