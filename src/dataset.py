@@ -8,7 +8,7 @@
 
 import copy
 
-import semql.rule.semQL as define_rule
+import preprocess.rule.semQL as define_rule
 from src.models import nn_utils
 
 

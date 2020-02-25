@@ -1,4 +1,4 @@
-model_name: semql
+model_name: preprocess
 beam_size: 5
 att_vec_size: 300
 decode_max_time_step: 40

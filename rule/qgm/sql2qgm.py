@@ -134,7 +134,7 @@ def create_select_box(sql, info, schema):
             tab_id = table_id
         column_names = [item[1] for item in schema["column_names"]]
         col_set_id = get_col_set_idx(column_names, col_id)
-        heads += [(agg, column_names, col_set_id, tab_id)]
+        heads += [(agg, col_set_id, tab_id)]
 
     # Create body - join predicates
     for conds_unit in info["from"]["conds"]:

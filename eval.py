@@ -80,7 +80,7 @@ def evaluate(cfg):
     train_out_path = os.path.join(log_path, "train.result")
     dev_out_path = os.path.join(log_path, "dev.result")
 
-    use_col_set = "semql" in cfg.model_name
+    use_col_set = "preprocess" in cfg.model_name
 
     # Save outputs from train
     assert len(train_pred) == len(train_gold) and len(train_gold) == len(train_list)

@@ -6,8 +6,8 @@ from torch.autograd import Variable
 
 from src.dataset import Batch
 from src.models.basic_model import BasicModel
-from qgm.qgm_decoder import QGM_Decoder
-from semql.semql_decoder import SemQL_Decoder
+from decoder.qgm.qgm_decoder import QGM_Decoder
+#from decoder.semql.semql_decoder import SemQL_Decoder
 from transformers import *
 from qgm_transformer.decoder import QGM_Transformer_Decoder
 from decoder.lstm.decoder import LSTM_Decoder
@@ -75,8 +75,9 @@ class IRNet(BasicModel):
             self.decoder = LSTM_Decoder(cfg)
         elif self.decoder_name == "qgm":
             self.decoder = QGM_Decoder(cfg)
-        elif self.decoder_name == "semql":
-            self.decoder = SemQL_Decoder(cfg)
+        elif self.decoder_name == "preprocess":
+            #self.decoder = SemQL_Decoder(cfg)
+            pass
         else:
             raise RuntimeError("Unsupported decoder name")
 
@@ -341,7 +342,7 @@ class IRNet(BasicModel):
             pred_action, pred_score = self.decoder.decode_until_step(
                 b_indices, None, dec_init_vec, prev_box=None, gold_boxes=batch.qgm
             )
-        elif self.decoder_name == "semql":
+        elif self.decoder_name == "preprocess":
             (
                 gold_action,
                 pred_action,
@@ -473,7 +474,7 @@ class IRNet(BasicModel):
                 b_indices, None, dec_init_vec, prev_box=None, gold_boxes=batch.qgm
             )
             return losses, pred_boxes
-        elif self.decoder_name == "semql":
+        elif self.decoder_name == "preprocess":
             sketch_prob_var, lf_prob_var = self.decoder.decode_forward(
                 examples,
                 batch,
@@ -636,7 +637,7 @@ class IRNet(BasicModel):
                 )
 
                 return pred_boxes
-            elif self.decoder_name == "semql":
+            elif self.decoder_name == "preprocess":
                 completed_beams, _ = self.decoder.decode_parse(
                     batch,
                     src_encodings,

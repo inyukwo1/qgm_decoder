@@ -1,5 +1,5 @@
 import torch
-from qgm.ops import WHERE_OPS, BOX_OPS, AGG_OPS, IUEN, IUE
+from rule.qgm.ops import BOX_OPS, AGG_OPS, IUE
 
 IUE_INDICES = [BOX_OPS.index(key) for key in IUE]
 GROUP_IDX = BOX_OPS.index("groupBy")

@@ -134,10 +134,7 @@ class Grammar(nn.Module):
     # action - symbol Translation
     def str_to_action(self, action_str):
         symbol, id = action_str.split("(")
-        try:
-            id = int(id.split(")")[0])
-        except:
-            stop = 1
+        id = int(id.split(")")[0])
         return (symbol, id)
 
     # Get next action
@@ -169,6 +166,6 @@ class Grammar(nn.Module):
 
 
 if __name__ == "__main__":
-    grammar = Grammar("/home/hkkang/debugging/irnet_qgm_transformer/rule/semql/semql.manifesto")
+    grammar = Grammar("/home/hkkang/debugging/irnet_qgm_transformer/rule/preprocess/preprocess.manifesto")
     stop = None
     pass

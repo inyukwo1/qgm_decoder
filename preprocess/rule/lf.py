@@ -4,8 +4,8 @@ import json
 
 import numpy as np
 
-from semql.rule import semQL as define_rule
-from semql.rule.semQL import Sup, Sel, Order, Root, Filter, A, N, C, T, Root1
+from preprocess.rule import semQL as define_rule
+from preprocess.rule.semQL import Sup, Sel, Order, Root, Filter, A, N, C, T, Root1
 
 
 def _build_single_filter(lf, f):

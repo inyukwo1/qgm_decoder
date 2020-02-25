@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-from qgm.ops import WHERE_OPS, BOX_OPS, AGG_OPS, IUEN
-from qgm.utils import (
+from rule.qgm.ops import WHERE_OPS, BOX_OPS, AGG_OPS, IUEN
+from decoder.qgm.utils import (
     get_iue_box_op,
     split_boxes,
     get_is_box_info,

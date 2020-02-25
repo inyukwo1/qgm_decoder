@@ -12,9 +12,9 @@ from nltk.stem import WordNetLemmatizer
 import logging
 
 from src.dataset import Example
-from semql.rule import lf
-from semql.rule.semQL import *
-from qgm.utils import filter_datas
+from preprocess.rule import lf
+from preprocess.rule.semQL import *
+from decoder.qgm.utils import filter_datas
 
 
 wordnet_lemmatizer = WordNetLemmatizer()
@@ -463,7 +463,7 @@ def epoch_train(
 
             loss = torch.mean(torch.stack(loss_list))
 
-        elif model_name == "semql":
+        elif model_name == "preprocess":
             sketch_prob_var, lf_prob_var = result
             # Save loss
             if not total_loss:
@@ -526,7 +526,7 @@ def epoch_acc(
         elif model_name == "qgm":
             pred += model.parse(examples)
             gold += [example.qgm for example in examples]
-        elif model_name == "semql":
+        elif model_name == "preprocess":
             for example in examples:
                 pred += [model.parse([example])]
                 gold += [example.tgt_actions]
