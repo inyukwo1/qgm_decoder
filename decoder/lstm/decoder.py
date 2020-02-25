@@ -221,7 +221,8 @@ class LSTM_Decoder(nn.Module):
         # Append loss
         for idx, value in enumerate(pred_probs):
             cur_symbol = view.nonterminal_stack[idx][0]
-            prev_actions = view.pred_history[idx]
+            b_idx = view.b_indices[idx]
+            prev_actions = view.pred_history[b_idx]
             view.loss[idx].add(-value, cur_symbol, prev_actions)
 
         return pred_indices
