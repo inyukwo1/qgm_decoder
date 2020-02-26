@@ -9,6 +9,7 @@ from torch.nn.modules.normalization import LayerNorm
 
 from src.multi_head_attention import MultiheadAttention
 
+
 class TransformerDecoderLayer(Module):
     r"""TransformerDecoderLayer is made up of self-attn, multi-head-attn and feedforward network.
     This standard decoder layer is based on the paper "Attention Is All You Need".
@@ -29,7 +30,9 @@ class TransformerDecoderLayer(Module):
         >>> out = decoder_layer(tgt, memory)
     """
 
-    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="relu"):
+    def __init__(
+        self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="relu"
+    ):
         super(TransformerDecoderLayer, self).__init__()
         self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout)
         self.multihead_attn = MultiheadAttention(d_model, nhead, dropout=dropout)
@@ -48,12 +51,19 @@ class TransformerDecoderLayer(Module):
         self.activation = _get_activation_fn(activation)
 
     def __setstate__(self, state):
-        if 'activation' not in state:
-            state['activation'] = F.relu
+        if "activation" not in state:
+            state["activation"] = F.relu
         super(TransformerDecoderLayer, self).__setstate__(state)
 
-    def forward(self, tgt, memory, tgt_mask=None, memory_mask=None,
-                tgt_key_padding_mask=None, memory_key_padding_mask=None):
+    def forward(
+        self,
+        tgt,
+        memory,
+        tgt_mask=None,
+        memory_mask=None,
+        tgt_key_padding_mask=None,
+        memory_key_padding_mask=None,
+    ):
         # type: (Tensor, Tensor, Optional[Tensor], Optional[Tensor], Optional[Tensor], Optional[Tensor]) -> Tensor
         r"""Pass the inputs (and mask) through the decoder layer.
         Args:
@@ -66,12 +76,18 @@ class TransformerDecoderLayer(Module):
         Shape:
             see the docs in Transformer class.
         """
-        tgt2 = self.self_attn(tgt, tgt, tgt, attn_mask=tgt_mask,
-                              key_padding_mask=tgt_key_padding_mask)[0]
+        tgt2 = self.self_attn(
+            tgt, tgt, tgt, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask
+        )[0]
         tgt = tgt + self.dropout1(tgt2)
         tgt = self.norm1(tgt)
-        tgt2 = self.multihead_attn(tgt, memory, memory, attn_mask=memory_mask,
-                                   key_padding_mask=memory_key_padding_mask)[0]
+        tgt2 = self.multihead_attn(
+            tgt,
+            memory,
+            memory,
+            attn_mask=memory_mask,
+            key_padding_mask=memory_key_padding_mask,
+        )[0]
         tgt = tgt + self.dropout2(tgt2)
         tgt = self.norm2(tgt)
         tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt))))
@@ -93,7 +109,7 @@ class TransformerDecoder(Module):
         >>> tgt = torch.rand(20, 32, 512)
         >>> out = transformer_decoder(tgt, memory)
     """
-    __constants__ = ['norm']
+    __constants__ = ["norm"]
 
     def __init__(self, decoder_layer, num_layers, norm=None):
         super(TransformerDecoder, self).__init__()
@@ -101,9 +117,15 @@ class TransformerDecoder(Module):
         self.num_layers = num_layers
         self.norm = norm
 
-    def forward(self, tgt, memory, tgt_mask=None,
-                memory_mask=None, tgt_key_padding_mask=None,
-                memory_key_padding_mask=None):
+    def forward(
+        self,
+        tgt,
+        memory,
+        tgt_mask=None,
+        memory_mask=None,
+        tgt_key_padding_mask=None,
+        memory_key_padding_mask=None,
+    ):
         # type: (Tensor, Tensor, Optional[Tensor], Optional[Tensor], Optional[Tensor], Optional[Tensor]) -> Tensor
         r"""Pass the inputs (and mask) through the decoder layer in turn.
         Args:
@@ -119,10 +141,14 @@ class TransformerDecoder(Module):
         output = tgt
 
         for mod in self.layers:
-            output = mod(output, memory, tgt_mask=tgt_mask,
-                         memory_mask=memory_mask,
-                         tgt_key_padding_mask=tgt_key_padding_mask,
-                         memory_key_padding_mask=memory_key_padding_mask)
+            output = mod(
+                output,
+                memory,
+                tgt_mask=tgt_mask,
+                memory_mask=memory_mask,
+                tgt_key_padding_mask=tgt_key_padding_mask,
+                memory_key_padding_mask=memory_key_padding_mask,
+            )
 
         if self.norm is not None:
             output = self.norm(output)

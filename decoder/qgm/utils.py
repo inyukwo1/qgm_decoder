@@ -351,7 +351,7 @@ def filter_datas(sql_data, query_type):
             if " + " in data["query"]:
                 flag = False
             # Filter OR in local predicate
-            if ' OR ' in data['query']:
+            if " OR " in data["query"]:
                 flag = False
 
         if flag:

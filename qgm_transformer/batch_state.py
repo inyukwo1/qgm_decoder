@@ -1,7 +1,8 @@
 import copy
 import torch
 import qgm_transformer.utils as utils
-#from transformer.QGMLoss import QGMLoss
+
+# from transformer.QGMLoss import QGMLoss
 from qgm_transformer.QGMLoss import SemQLLoss
 
 
@@ -43,11 +44,9 @@ class TransformerBatchState:
         self.loss = [SemQLLoss(self.grammar) for _ in range(self.get_b_size())]
         self.pred_history = [[] for _ in range(self.get_b_size())]
 
-
     def save_lstm_state(self, new_lstm_state):
         for idx, b_idx, in enumerate(self.b_indices):
             self.lstm_state[b_idx] = (new_lstm_state[0][idx], new_lstm_state[1][idx])
-
 
     def create_lstm_cell_state(self, init_state):
         # Split init_state with the batch size
@@ -55,7 +54,6 @@ class TransformerBatchState:
         for idx in range(len(init_state[0])):
             state += [(init_state[0][idx], init_state[1][idx])]
         self.lstm_state = state
-
 
     def get_lstm_state(self):
         hidden = []
@@ -67,7 +65,6 @@ class TransformerBatchState:
         cell = torch.stack(cell, dim=0)
         lstm_state = (hidden, cell)
         return lstm_state
-
 
     def _make_view(self, view_indices, state_type):
         if not view_indices:
@@ -104,7 +101,6 @@ class TransformerBatchState:
                 self.pred_history[b_idx] = view.pred_history[b_idx]
                 self.loss[b_idx] = view.loss[b_idx]
                 self.lstm_state[b_idx] = self.lstm_state[b_idx]
-
 
     def _get_view_indices(self):
         # Parse view indices
@@ -206,7 +202,6 @@ class TransformerBatchState:
         symbol_emb = self.grammar.symbol_emb(symbols)
         return symbol_emb
 
-
     def get_prev_action_emb(self):
         # Get prev symbols
         prev_actions = [
@@ -221,10 +216,10 @@ class TransformerBatchState:
             action_embs = []
             for idx, action in enumerate(prev_actions):
                 if action[0] == "T":
-                    #b_idx = self.b_indices[idx]
+                    # b_idx = self.b_indices[idx]
                     action_embs += [self.encoded_tab[idx][action[1]]]
                 elif action[0] == "C":
-                    #b_idx = self.b_indices[idx]
+                    # b_idx = self.b_indices[idx]
                     action_embs += [self.encoded_col[idx][action[1]]]
                 else:
                     action_id = self.grammar.action_to_action_id[action]
@@ -233,7 +228,6 @@ class TransformerBatchState:
             prev_action_emb = torch.stack(action_embs)
 
         return prev_action_emb
-
 
     def get_tgt(self, affine_layer, linear_layer):
         # Get prev symbols

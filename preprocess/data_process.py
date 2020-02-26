@@ -37,10 +37,10 @@ def process_datas(datas, args, dataset_name):
     :param args:
     :return:
     """
-    with open(os.path.join(args.conceptNet, 'english_RelatedTo.pkl'), 'rb') as f:
+    with open(os.path.join(args.conceptNet, "english_RelatedTo.pkl"), "rb") as f:
         english_RelatedTo = pickle.load(f)
 
-    with open(os.path.join(args.conceptNet, 'english_IsA.pkl'), 'rb') as f:
+    with open(os.path.join(args.conceptNet, "english_IsA.pkl"), "rb") as f:
         english_IsA = pickle.load(f)
 
     db_values = dict()
@@ -50,14 +50,16 @@ def process_datas(datas, args, dataset_name):
     schema_dict = dict()
     for one_schema in schema_tables:
         schema_dict[one_schema["db_id"]] = one_schema
-        schema_dict[one_schema["db_id"]]["only_cnames"] = [c_name.lower() for tid, c_name in one_schema["column_names_original"]]
+        schema_dict[one_schema["db_id"]]["only_cnames"] = [
+            c_name.lower() for tid, c_name in one_schema["column_names_original"]
+        ]
     # copy of the origin question_toks
     for d in datas:
-        if 'origin_question_toks' not in d:
-            d['origin_question_toks'] = d['question_toks']
+        if "origin_question_toks" not in d:
+            d["origin_question_toks"] = d["question_toks"]
 
     for entry in datas:
-        db_id = entry['db_id']
+        db_id = entry["db_id"]
         if db_id not in db_values:
             schema_json = schema_dict[db_id]
             primary_foreigns = set()
@@ -65,7 +67,9 @@ def process_datas(datas, args, dataset_name):
                 primary_foreigns.add(f)
                 primary_foreigns.add(p)
 
-            conn = sqlite3.connect("../data/{}/database/{}/{}.sqlite".format(dataset_name, db_id, db_id))
+            conn = sqlite3.connect(
+                "../data/{}/database/{}/{}.sqlite".format(dataset_name, db_id, db_id)
+            )
             # conn.text_factory = bytes
             cursor = conn.cursor()
 
@@ -83,9 +87,12 @@ def process_datas(datas, args, dataset_name):
             for table in tables:
                 for col in schema[table]:
                     col_idx = schema_json["only_cnames"].index(col)
-                    if col_idx in primary_foreigns and schema_json["column_types"][col_idx] == "number":
+                    if (
+                        col_idx in primary_foreigns
+                        and schema_json["column_types"][col_idx] == "number"
+                    ):
                         continue
-                    cursor.execute("SELECT \"{}\" FROM \"{}\"".format(col, table))
+                    cursor.execute('SELECT "{}" FROM "{}"'.format(col, table))
                     col = entry["names"][col_idx]
                     value_set = set()
                     try:
@@ -102,20 +109,24 @@ def process_datas(datas, args, dataset_name):
                         col_value_set[col] = value_set
             db_values[db_id] = col_value_set
 
-
-        entry['question_toks'] = symbol_filter(entry['question_toks'])
-        origin_question_toks = [x.lower() for x in re.findall(r"[^,.():;\"`?! ]+|[,.():;\"?!]", entry['question'].replace("'", " ' "))]
+        entry["question_toks"] = symbol_filter(entry["question_toks"])
+        origin_question_toks = [
+            x.lower()
+            for x in re.findall(
+                r"[^,.():;\"`?! ]+|[,.():;\"?!]", entry["question"].replace("'", " ' ")
+            )
+        ]
         question_toks = [wordnet_lemmatizer.lemmatize(x) for x in origin_question_toks]
 
-        entry['question_toks'] = origin_question_toks
+        entry["question_toks"] = origin_question_toks
 
         table_names = []
         table_names_pattern = []
 
-        for y in entry['table_names']:
-            x = [wordnet_lemmatizer.lemmatize(x.lower()) for x in y.split(' ')]
+        for y in entry["table_names"]:
+            x = [wordnet_lemmatizer.lemmatize(x.lower()) for x in y.split(" ")]
             table_names.append(" ".join(x))
-            x = [re_lemma(x.lower()) for x in y.split(' ')]
+            x = [re_lemma(x.lower()) for x in y.split(" ")]
             table_names_pattern.append(" ".join(x))
 
         header_toks = []
@@ -124,12 +135,12 @@ def process_datas(datas, args, dataset_name):
         header_toks_pattern = []
         header_toks_list_pattern = []
 
-        for y in entry['col_set']:
-            x = [wordnet_lemmatizer.lemmatize(x.lower()) for x in y.split(' ')]
+        for y in entry["col_set"]:
+            x = [wordnet_lemmatizer.lemmatize(x.lower()) for x in y.split(" ")]
             header_toks.append(" ".join(x))
             header_toks_list.append(x)
 
-            x = [re_lemma(x.lower()) for x in y.split(' ')]
+            x = [re_lemma(x.lower()) for x in y.split(" ")]
             header_toks_pattern.append(" ".join(x))
             header_toks_list_pattern.append(x)
 
@@ -141,9 +152,11 @@ def process_datas(datas, args, dataset_name):
         while idx < num_toks:
 
             # fully header
-            end_idx, header = fully_part_header(question_toks, idx, num_toks, header_toks)
+            end_idx, header = fully_part_header(
+                question_toks, idx, num_toks, header_toks
+            )
             if header:
-                tok_concol.append(question_toks[idx: end_idx])
+                tok_concol.append(question_toks[idx:end_idx])
                 type_concol.append(["col"])
                 idx = end_idx
                 continue
@@ -151,7 +164,7 @@ def process_datas(datas, args, dataset_name):
             # check for table
             end_idx, tname = group_header(question_toks, idx, num_toks, table_names)
             if tname:
-                tok_concol.append(question_toks[idx: end_idx])
+                tok_concol.append(question_toks[idx:end_idx])
                 type_concol.append(["table"])
                 idx = end_idx
                 continue
@@ -159,13 +172,15 @@ def process_datas(datas, args, dataset_name):
             # check for column
             end_idx, header = group_header(question_toks, idx, num_toks, header_toks)
             if header:
-                tok_concol.append(question_toks[idx: end_idx])
+                tok_concol.append(question_toks[idx:end_idx])
                 type_concol.append(["col"])
                 idx = end_idx
                 continue
 
             # check for partial column
-            end_idx, tname, headers = partial_header(question_toks, idx, header_toks_list)
+            end_idx, tname, headers = partial_header(
+                question_toks, idx, header_toks_list
+            )
             if tname:
                 tok_concol.append(tname)
                 type_concol.append(["col"] + headers)
@@ -174,29 +189,31 @@ def process_datas(datas, args, dataset_name):
             # check for aggregation
             end_idx, agg = group_header(question_toks, idx, num_toks, AGG)
             if agg:
-                tok_concol.append(question_toks[idx: end_idx])
+                tok_concol.append(question_toks[idx:end_idx])
                 type_concol.append(["agg"])
                 idx = end_idx
                 continue
 
-            if nltk_result[idx][1] == 'RBR' or nltk_result[idx][1] == 'JJR':
+            if nltk_result[idx][1] == "RBR" or nltk_result[idx][1] == "JJR":
                 tok_concol.append([question_toks[idx]])
-                type_concol.append(['MORE'])
+                type_concol.append(["MORE"])
                 idx += 1
                 continue
 
-            if nltk_result[idx][1] == 'RBS' or nltk_result[idx][1] == 'JJS':
+            if nltk_result[idx][1] == "RBS" or nltk_result[idx][1] == "JJS":
                 tok_concol.append([question_toks[idx]])
-                type_concol.append(['MOST'])
+                type_concol.append(["MOST"])
                 idx += 1
                 continue
 
             # string match for Time Format
             if num2year(question_toks[idx]):
-                question_toks[idx] = 'year'
-                end_idx, header = group_header(question_toks, idx, num_toks, header_toks)
+                question_toks[idx] = "year"
+                end_idx, header = group_header(
+                    question_toks, idx, num_toks, header_toks
+                )
                 if header:
-                    tok_concol.append(question_toks[idx: end_idx])
+                    tok_concol.append(question_toks[idx:end_idx])
                     type_concol.append(["col"])
                     idx = end_idx
                     continue
@@ -207,13 +224,13 @@ def process_datas(datas, args, dataset_name):
                         tmp_query = "_".join(toks[begin_id:r_ind])
                         if tmp_query in graph:
                             mi = graph[tmp_query]
-                            for col in entry['col_set']:
+                            for col in entry["col_set"]:
                                 if col in mi:
                                     return col
 
             end_idx, symbol = group_symbol(question_toks, idx, num_toks)
             if symbol:
-                tmp_toks = [x for x in question_toks[idx: end_idx]]
+                tmp_toks = [x for x in question_toks[idx:end_idx]]
                 assert len(tmp_toks) > 0, print(symbol, question_toks)
                 pro_result = get_concept_result(tmp_toks, english_IsA)
                 if pro_result is None:
@@ -228,9 +245,13 @@ def process_datas(datas, args, dataset_name):
                 continue
 
             end_idx, values = group_values(origin_question_toks, idx, num_toks)
-            if values and (len(values) > 1 or question_toks[idx - 1] not in ['?', '.']):
-                tmp_toks = [wordnet_lemmatizer.lemmatize(x) for x in question_toks[idx: end_idx]]
-                assert len(tmp_toks) > 0, print(question_toks[idx: end_idx], values, question_toks, idx, end_idx)
+            if values and (len(values) > 1 or question_toks[idx - 1] not in ["?", "."]):
+                tmp_toks = [
+                    wordnet_lemmatizer.lemmatize(x) for x in question_toks[idx:end_idx]
+                ]
+                assert len(tmp_toks) > 0, print(
+                    question_toks[idx:end_idx], values, question_toks, idx, end_idx
+                )
                 pro_result = get_concept_result(tmp_toks, english_IsA)
                 if pro_result is None:
                     pro_result = get_concept_result(tmp_toks, english_RelatedTo)
@@ -243,22 +264,28 @@ def process_datas(datas, args, dataset_name):
                 idx = end_idx
                 continue
 
-            end_idx, values, cols = group_db(origin_question_toks, idx, num_toks, db_values[db_id])
-            if end_idx == idx + 1 and (nltk_result[idx][1] == 'VBZ'
-                                       or nltk_result[idx][1] == 'IN'
-                                       or nltk_result[idx][1] == 'CC'
-                                       or nltk_result[idx][1] == 'DT'
-                                       or origin_question_toks[idx] == "'"
-                                       or (nltk_result[idx][1] == 'VBP' and origin_question_toks[idx] == 'are')
-                                       or (nltk_result[idx][1] == 'VBP' and origin_question_toks[idx] == 'do')
-                                       or (nltk_result[idx][1] == 'VBP' and origin_question_toks[idx] == 'doe')
-                                       or (nltk_result[idx][1] == 'VBP' and origin_question_toks[idx] == 'does')):
+            end_idx, values, cols = group_db(
+                origin_question_toks, idx, num_toks, db_values[db_id]
+            )
+            if end_idx == idx + 1 and (
+                nltk_result[idx][1] == "VBZ"
+                or nltk_result[idx][1] == "IN"
+                or nltk_result[idx][1] == "CC"
+                or nltk_result[idx][1] == "DT"
+                or origin_question_toks[idx] == "'"
+                or (nltk_result[idx][1] == "VBP" and origin_question_toks[idx] == "are")
+                or (nltk_result[idx][1] == "VBP" and origin_question_toks[idx] == "do")
+                or (nltk_result[idx][1] == "VBP" and origin_question_toks[idx] == "doe")
+                or (
+                    nltk_result[idx][1] == "VBP" and origin_question_toks[idx] == "does"
+                )
+            ):
                 tok_concol.append([origin_question_toks[idx]])
-                type_concol.append(['NONE'])
+                type_concol.append(["NONE"])
                 idx += 1
                 continue
             if values:
-                tok_concol.append(question_toks[idx: end_idx])
+                tok_concol.append(question_toks[idx:end_idx])
 
                 type_concol.append(["db"] + cols)
                 idx = end_idx
@@ -266,21 +293,21 @@ def process_datas(datas, args, dataset_name):
 
             result = group_digital(question_toks, idx)
             if result is True:
-                tok_concol.append(question_toks[idx: idx + 1])
+                tok_concol.append(question_toks[idx : idx + 1])
                 type_concol.append(["value"])
                 idx += 1
                 continue
-            if question_toks[idx] == ['ha']:
-                question_toks[idx] = ['have']
+            if question_toks[idx] == ["ha"]:
+                question_toks[idx] = ["have"]
 
             tok_concol.append([origin_question_toks[idx]])
-            type_concol.append(['NONE'])
+            type_concol.append(["NONE"])
             idx += 1
             continue
 
-        entry['question_arg'] = tok_concol
-        entry['question_arg_type'] = type_concol
-        entry['nltk_pos'] = nltk_result
+        entry["question_arg"] = tok_concol
+        entry["question_arg_type"] = type_concol
+        entry["nltk_pos"] = nltk_result
 
     return datas
 

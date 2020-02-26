@@ -19,7 +19,6 @@ def create_qgm_action(qgm_boxes):
     for idx, quantifier in enumerate(qgm_box["body"]["quantifiers"]):
         actions += "T({}) ".format(quantifier)
 
-
     # H
     """
     h_len = len(qgm_box["head"])
@@ -47,7 +46,7 @@ def create_qgm_action(qgm_boxes):
 
 
 if __name__ == "__main__":
-    #dataset_names = ["spider", "wikisql", "wikitablequestions"]
+    # dataset_names = ["spider", "wikisql", "wikitablequestions"]
     dataset_names = ["spider"]
     data_types = ["dev", "train", "test"]
 

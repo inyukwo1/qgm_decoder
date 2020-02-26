@@ -12,7 +12,6 @@ def get_col_set_idx(column_names, col_id):
     return col_name_set.index(col_name)
 
 
-
 def create_group_by_box(sql, info, schema):
     # Append group by box
     heads = []

@@ -5,15 +5,14 @@ import rule.utils as utils
 
 SKETCH_SYMBOLS = ["A", "C", "T"]
 
+
 class QGM(Grammar):
     def __init__(self, emb_dim=300):
         super(QGM, self).__init__("./rule/qgm/qgm.manifesto", emb_dim)
         self.loss = QGM_Loss(self.symbol_to_sid)
 
-
     def create_loss_object(self):
         return QGM_Loss(self.symbol_to_sid)
-
 
     def create_data(self, qgm_boxes):
         # Simple query only
@@ -45,9 +44,10 @@ class QGM(Grammar):
         actions = actions.strip(" ")
         return actions
 
-
     def cal_acc(self, pred_actions, gold_actions):
-        assert len(pred_actions) == len(gold_actions), "Num diff: {}, {}".format(len(pred_actions), len(gold_actions))
+        assert len(pred_actions) == len(gold_actions), "Num diff: {}, {}".format(
+            len(pred_actions), len(gold_actions)
+        )
         keys = [
             "total",
             "detail",
@@ -97,7 +97,7 @@ class QGM(Grammar):
 
             # More specific accs
             p_head_num = utils.count_symbol(p_actions, "H")
-            g_head_num= utils.count_symbol(g_actions, "H")
+            g_head_num = utils.count_symbol(g_actions, "H")
             head_num_is_correct = p_head_num == g_head_num
 
             # Head others
@@ -155,12 +155,8 @@ class QGM(Grammar):
                 predicate_agg_is_correct = pred_predicate_agg == gold_predicate_agg
 
                 # Predicate Col: Check C After O A
-                pred_predicate_col = utils.filter_action(
-                    p_actions, "C", ["O"]
-                )
-                gold_predicate_col = utils.filter_action(
-                    g_actions, "C", ["O"]
-                )
+                pred_predicate_col = utils.filter_action(p_actions, "C", ["O"])
+                gold_predicate_col = utils.filter_action(g_actions, "C", ["O"])
                 predicate_col_is_correct = pred_predicate_col == gold_predicate_col
 
             acc["local_predicate_num"] += predicate_num_is_correct

@@ -10,6 +10,7 @@ from preprocess.rule.semql import semQL as define_rule
 from encoder.irnet import nn_utils
 from decoder.semql.beam import Beams, ActionInfo
 from encoder.irnet.pointer_net import PointerNet
+
 log = logging.getLogger(__name__)
 
 SKETCH_LIST = ["Root1", "Root", "Sel", "N", "Filter", "Sup", "Order"]
@@ -89,7 +90,9 @@ class SemQL_Decoder(nn.Module):
 
         self.q_att = nn.Linear(hidden_size, self.embed_size)
 
-        self.column_rnn_input = nn.Linear(self.embed_size, action_embed_size, bias=False)
+        self.column_rnn_input = nn.Linear(
+            self.embed_size, action_embed_size, bias=False
+        )
         self.table_rnn_input = nn.Linear(self.embed_size, action_embed_size, bias=False)
 
         self.column_pointer_net = PointerNet(
@@ -106,7 +109,9 @@ class SemQL_Decoder(nn.Module):
         nn.init.xavier_normal_(self.production_embed.weight.data)
         nn.init.xavier_normal_(self.type_embed.weight.data)
         nn.init.xavier_normal_(self.N_embed.weight.data)
-        log.info("Use Column Pointer: {}".format(True if self.use_column_pointer else False))
+        log.info(
+            "Use Column Pointer: {}".format(True if self.use_column_pointer else False)
+        )
 
     def _init_decoder_state(self, enc_last_cell):
         h_0 = self.decoder_cell_init(enc_last_cell)
@@ -114,7 +119,7 @@ class SemQL_Decoder(nn.Module):
 
         return h_0, Variable(self.new_tensor(h_0.size()).zero_())
 
-    def forward(self, batch, step=None): # Step for captum
+    def forward(self, batch, step=None):  # Step for captum
         b_size = batch.b_size
         sketches = batch.semql_sketch
         src_encodings = batch.sen_encoding
@@ -388,13 +393,9 @@ class SemQL_Decoder(nn.Module):
                 gold_action_t = tgt_actions[0][t]
                 if isinstance(gold_action_t, define_rule.C):
                     gold_action_id = gold_action_t.id_c
-                    gold_action = "C({})".format(
-                        " ".join(tab_cols[0][gold_action_id])
-                    )
+                    gold_action = "C({})".format(" ".join(tab_cols[0][gold_action_id]))
                     pred_action_id = torch.argmax(column_attention_weights[-1]).item()
-                    pred_action = "C({})".format(
-                        " ".join(tab_cols[0][pred_action_id])
-                    )
+                    pred_action = "C({})".format(" ".join(tab_cols[0][pred_action_id]))
                     gold_probs = column_attention_weights[:, gold_action_id]
                     pred_probs = column_attention_weights[:, pred_action_id]
                     return gold_action, pred_action, gold_probs, pred_probs
@@ -460,15 +461,18 @@ class SemQL_Decoder(nn.Module):
         )
         assert step is None
 
-        total_loss = [-sketch_prob_var[idx] + -lf_prob_var[idx] for idx in range(len(sketch_prob_var))]
+        total_loss = [
+            -sketch_prob_var[idx] + -lf_prob_var[idx]
+            for idx in range(len(sketch_prob_var))
+        ]
 
-        return {"total": total_loss, "sketch": -sketch_prob_var, "detail": -lf_prob_var}, tgt_actions
+        return (
+            {"total": total_loss, "sketch": -sketch_prob_var, "detail": -lf_prob_var},
+            tgt_actions,
+        )
 
-    def parse(
-        self,
-        batch
-    ):
-        beam_size=5
+    def parse(self, batch):
+        beam_size = 5
         src_encodings = batch.sen_encoding
         table_embedding = batch.col_emb
         schema_embedding = batch.tab_emb
@@ -929,7 +933,6 @@ class SemQL_Decoder(nn.Module):
 
         return {"total": total_loss, "sketch": -sketch_prob_var, "detail": -lf_prob_var}, completed_beams
         """
-
 
         return [completed_beams, sketch_actions]
 

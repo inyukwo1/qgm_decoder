@@ -22,7 +22,7 @@ def create_qgm_action(qgm_boxes):
         actions += "C({}) ".format(head[1])
     """
     h_len = len(qgm_box["head"])
-    actions += "H({}) ".format(h_len-1)
+    actions += "H({}) ".format(h_len - 1)
     for idx, head in enumerate(qgm_box["head"]):
         actions += "A({}) ".format(head[0])
         actions += "C({}) ".format(head[1])
@@ -40,7 +40,7 @@ def create_qgm_action(qgm_boxes):
 
 
 if __name__ == "__main__":
-    #dataset_names = ["spider", "wikisql", "wikitablequestions"]
+    # dataset_names = ["spider", "wikisql", "wikitablequestions"]
     dataset_names = ["spider"]
     data_types = ["dev", "train", "test"]
 
