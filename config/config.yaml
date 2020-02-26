@@ -1,7 +1,8 @@
 defaults:
   - hydra/job_logging: custom
   - hydra/output: custom
-  - model: transformer
+  - encoder: ra_transformer
+  - decoder: transformer
   - dataset: spider
   - train: default
 

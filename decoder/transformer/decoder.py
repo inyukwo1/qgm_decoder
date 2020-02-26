@@ -4,7 +4,7 @@ import torch.nn as nn
 import decoder.utils as utils
 from rule.semql.semql import SemQL
 from decoder.transformer.batch_state import Transformer_Batch_State
-from src.transformer_decoder import (
+from src.transformer.transformer_decoder import (
     TransformerDecoderLayer,
     TransformerDecoder,
 )

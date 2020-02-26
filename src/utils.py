@@ -15,6 +15,7 @@ from src.dataset import Example
 from preprocess.rule import lf
 from preprocess.rule.semQL import *
 from decoder.qgm.utils import filter_datas
+import src.relation as relation
 
 
 wordnet_lemmatizer = WordNetLemmatizer()
@@ -377,6 +378,7 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed, is_col_set=True):
             qgm=process_dict["qgm"],
             #qgm_action=process_dict["rule_label"],
             qgm_action=rule_label,
+            relation=sql["relation"]
         )
 
         example.sql_json = copy.deepcopy(sql)
@@ -589,6 +591,9 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type):
 
     # Tables as dictionary
     table_data = {table["db_id"]: table for table in table_data}
+
+    train_data = [relation.create_relation(data, table_data) for data in train_data]
+    val_data = [relation.create_relation(data, table_data) for data in val_data]
 
     # Show dataset length
     log.info("Total training set: {}".format(len(train_data)))

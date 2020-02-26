@@ -11,6 +11,9 @@ from decoder.qgm.qgm_decoder import QGM_Decoder
 from transformers import *
 from decoder.lstm.decoder import LSTM_Decoder
 from decoder.transformer.decoder import Transformer_Decoder
+from encoder.transformer.encoder import Transformer_Encoder
+from encoder.ra_transformer.encoder import RA_Transformer_Encoder
+import src.relation as relation
 
 # Transformers has a unified API
 # for 8 transformer architectures and 30 pretrained weights.
@@ -36,13 +39,12 @@ class IRNet(BasicModel):
         self.cfg = cfg
         self.is_bert = cfg.is_bert
         self.is_cuda = cfg.cuda != -1
-        self.decoder_name = cfg.model_name
+        self.encoder_name = cfg.encoder_name
+        self.decoder_name = cfg.decoder_name
 
         if self.is_cuda:
-            self.new_long_tensor = torch.cuda.LongTensor
             self.new_tensor = torch.cuda.FloatTensor
         else:
-            self.new_long_tensor = torch.LongTensor
             self.new_tensor = torch.FloatTensor
 
         if self.is_bert:
@@ -57,8 +59,6 @@ class IRNet(BasicModel):
         self.encoder_lstm = nn.LSTM(
             self.embed_size, hidden_size // 2, bidirectional=True, batch_first=True,
         )
-        # self.table_linear = nn.Linear(self.embed_size, hidden_size)
-        # self.schema_linear = nn.Linear(self.embed_size, hidden_size)
 
         self.decoder_cell_init = nn.Linear(hidden_size, hidden_size)
 
@@ -67,155 +67,35 @@ class IRNet(BasicModel):
         self.dropout = nn.Dropout(cfg.dropout)
         self.captum_iden = nn.Dropout(0.000001)
 
-        # QGM Decoder
+        # Decoder
         if self.decoder_name == "transformer":
             self.decoder = Transformer_Decoder(cfg)
         elif self.decoder_name == "lstm":
             self.decoder = LSTM_Decoder(cfg)
         elif self.decoder_name == "qgm":
             self.decoder = QGM_Decoder(cfg)
-        elif self.decoder_name == "preprocess":
+        elif self.decoder_name == "semql":
             #self.decoder = SemQL_Decoder(cfg)
             pass
         else:
             raise RuntimeError("Unsupported decoder name")
 
         self.without_bert_params = list(self.parameters(recurse=True))
-        if self.is_bert:
-            model_class, tokenizer_class, pretrained_weight, dim = MODELS[cfg.bert]
-            self.bert_encoder = model_class.from_pretrained(pretrained_weight)
-            self.tokenizer = tokenizer_class.from_pretrained(pretrained_weight)
-            # self.tokenizer.add_special_tokens({"additional_special_tokens": ["[table]", "[column]", "[value]"]})
-            self.transformer_dim = dim
-            self.col_lstm = torch.nn.LSTM(
-                dim, dim // 2, batch_first=True, bidirectional=True
-            )
-            self.tab_lstm = torch.nn.LSTM(
-                dim, dim // 2, batch_first=True, bidirectional=True
-            )
 
-    def bert_encode(self, batch: Batch):
-        B = len(batch)
-        sentences = batch.src_sents
-        col_sets = batch.table_sents
-        table_sets = batch.table_names_iter
+        # Encoder
+        if self.encoder_name == "bert":
+            self.encoder = None
+        elif self.encoder_name == "lstm":
+            self.encoder = None
+        elif self.encoder_name == "transformer":
+            self.encoder = Transformer_Encoder(cfg)
+        elif self.encoder_name == "ra_transformer":
+            self.encoder = RA_Transformer_Encoder(cfg)
+        else:
+            raise RuntimeError("Unsupported encoder name")
 
-        questions = []
-        question_lens = []
-        word_start_end_batch = []
-        col_start_end_batch = []
-        tab_start_end_batch = []
-        col_types = []
-        for b in range(B):
-            word_start_ends = []
-            question = "[CLS]"
-            # question = "<cls>"
-            for word in sentences[b]:
-                start = len(self.tokenizer.tokenize(question))
-                for one_word in word:
-                    question += " " + one_word
-                end = len(self.tokenizer.tokenize(question))
-                word_start_ends.append((start, end))
-            col_start_ends = []
-            for cols in col_sets[b]:
-                start = len(self.tokenizer.tokenize(question))
-                question += " [SEP]"
-                # question += " <sep>"
-                for one_word in cols:
-                    question += " " + one_word
-                end = len(self.tokenizer.tokenize(question))
-                col_start_ends.append((start, end))
-            tab_start_ends = []
-            for tabs in table_sets[b]:
-                start = len(self.tokenizer.tokenize(question))
-                question += " [SEP]"
-                # question += "<sep>"
-                for one_word in tabs:
-                    question += " " + one_word
-                end = len(self.tokenizer.tokenize(question))
-                tab_start_ends.append((start, end))
-            if end >= self.tokenizer.max_len:
-                print("xxxxxxxxxx")
-                continue
-            col_types.append(batch.col_hot_type[b])
-            question_lens.append(end)
-            questions.append(question)
-            word_start_end_batch.append(word_start_ends)
-            col_start_end_batch.append(col_start_ends)
-            tab_start_end_batch.append(tab_start_ends)
-        if not questions:
-            return None, None, None
-        for idx, question_len in enumerate(question_lens):
-            questions[idx] = questions[idx] + (" " + self.tokenizer.pad_token) * (
-                max(question_lens) - question_len
-            )
-        encoded_questions = [
-            self.tokenizer.encode(question, add_special_tokens=False)
-            for question in questions
-        ]
-        encoded_questions = torch.tensor(encoded_questions)
-        if torch.cuda.is_available():
-            encoded_questions = encoded_questions.cuda()
-        embedding = self.bert_encoder(encoded_questions)[0]
-        src_encodings = []
-        table_embedding = []
-        schema_embedding = []
-        for b in range(len(questions)):
-            one_q_encodings = []
-            for st, ed in word_start_end_batch[b]:
-                sum_tensor = torch.zeros_like(embedding[b][st])
-                for i in range(st, ed):
-                    sum_tensor = sum_tensor + embedding[b][i]
-                sum_tensor = sum_tensor / (ed - st)
-                one_q_encodings.append(sum_tensor)
-            src_encodings.append(one_q_encodings)
-            one_col_encodings = []
-            for st, ed in col_start_end_batch[b]:
-                inputs = embedding[b, st:ed].unsqueeze(0)
-                lstm_out = self.col_lstm(inputs)[0].view(
-                    ed - st, 2, self.transformer_dim // 2
-                )
-                col_encoding = torch.cat((lstm_out[-1, 0], lstm_out[0, 1]))
-                one_col_encodings.append(col_encoding)
-            table_embedding.append(one_col_encodings)
-            one_tab_encodings = []
-            for st, ed in tab_start_end_batch[b]:
-                inputs = embedding[b, st:ed].unsqueeze(0)
-                lstm_out = self.tab_lstm(inputs)[0].view(
-                    ed - st, 2, self.transformer_dim // 2
-                )
-                tab_encoding = torch.cat((lstm_out[-1, 0], lstm_out[0, 1]))
-                one_tab_encodings.append(tab_encoding)
-            schema_embedding.append(one_tab_encodings)
-        max_src_len = max([len(one_q_encodings) for one_q_encodings in src_encodings])
-        max_col_len = max(
-            [len(one_col_encodings) for one_col_encodings in table_embedding]
-        )
-        max_tab_len = max(
-            [len(one_tab_encodings) for one_tab_encodings in schema_embedding]
-        )
-        for b in range(len(questions)):
-            src_encodings[b] += [torch.zeros_like(src_encodings[b][0])] * (
-                max_src_len - len(src_encodings[b])
-            )
-            src_encodings[b] = torch.stack(src_encodings[b])
-            table_embedding[b] += [torch.zeros_like(table_embedding[b][0])] * (
-                max_col_len - len(table_embedding[b])
-            )
-            table_embedding[b] = torch.stack(table_embedding[b])
-            schema_embedding[b] += [torch.zeros_like(schema_embedding[b][0])] * (
-                max_tab_len - len(schema_embedding[b])
-            )
-            schema_embedding[b] = torch.stack(schema_embedding[b])
-        src_encodings = torch.stack(src_encodings)
-        table_embedding = torch.stack(table_embedding)
-        schema_embedding = torch.stack(schema_embedding)
-
-        col_type = self.input_type(col_types)
-        col_type_var = self.col_type(col_type)
-        table_embedding = table_embedding + col_type_var
-
-        return src_encodings, table_embedding, schema_embedding, embedding[:, 0, :]
+        if self.encoder_name != "bert":
+            self.without_bert_params = list(self.parameters(recurse=True))
 
     def lstm_encode(self, batch, src_embedding=None):
         src_encodings, (last_state, last_cell) = self.encode(
@@ -242,9 +122,6 @@ class IRNet(BasicModel):
             table_unk_mask=batch.schema_token_mask,
         )
 
-        # table_embedding = self.table_linear(table_embedding)
-        # schema_embedding = self.schema_linear(schema_embedding)
-
         tab_ctx = (src_encodings.unsqueeze(1) * embedding_differ.unsqueeze(3)).sum(2)
         schema_ctx = (src_encodings.unsqueeze(1) * schema_differ.unsqueeze(3)).sum(2)
 
@@ -265,125 +142,64 @@ class IRNet(BasicModel):
         schema_embedding = schema_embedding + tab_type_var
         return src_encodings, table_embedding, schema_embedding, last_cell
 
-    def forward_until_step(self, src_embeddings, examples, step):
-        batch = Batch(examples, is_cuda=self.is_cuda)
-
-        if self.is_bert:
-            (
-                src_encodings,
-                table_embedding,
-                schema_embedding,
-                last_cell,
-            ) = self.bert_encode(batch)
-        else:
-            (
-                src_encodings,
-                table_embedding,
-                schema_embedding,
-                last_cell,
-            ) = self.lstm_encode(batch, src_embeddings)
-            if src_encodings is None:
-                return None, None
-        src_encodings = self.captum_iden(src_encodings)
-
-        dec_init_vec = self.init_decoder_state(last_cell)
-
-        if self.decoder_name == "transformer":
-            src_mask = batch.src_token_mask
-            col_mask = batch.table_token_mask
-            tab_mask = batch.schema_token_mask
-            col_tab_dic = batch.col_table_dict
-            tab_col_dic = []
-            for b_idx in range(len(col_tab_dic)):
-                b_tmp = []
-                tab_len = len(col_tab_dic[b_idx][0])
-                for t_idx in range(tab_len):
-                    tab_tmp = [
-                        idx
-                        for idx in range(len(col_tab_dic[b_idx]))
-                        if t_idx in col_tab_dic[b_idx][idx]
-                    ]
-                    b_tmp += [tab_tmp]
-                tab_col_dic += [b_tmp]
-
-            gold_action, pred_action, gold_score, pred_score = self.decoder(
-                src_encodings,
-                table_embedding,
-                schema_embedding,
-                src_mask,
-                col_mask,
-                tab_mask,
-                tab_col_dic,
-                batch.qgm_action,
-                step,
-                batch.table_sents,
-                batch.table_names_iter,
-            )
-
-        elif self.decoder_name == "qgm":
-            src_mask = batch.src_token_mask
-            col_mask = batch.table_token_mask
-            tab_mask = batch.schema_token_mask
-            col_tab_dic = batch.col_table_dict
-            b_indices = torch.arange(len(batch)).cuda()
-
-            self.decoder.set_variables(
-                self.is_bert,
-                src_encodings,
-                table_embedding,
-                schema_embedding,
-                src_mask,
-                col_mask,
-                tab_mask,
-                col_tab_dic,
-                step,
-            )
-            pred_action, pred_score = self.decoder.decode_until_step(
-                b_indices, None, dec_init_vec, prev_box=None, gold_boxes=batch.qgm
-            )
-        elif self.decoder_name == "preprocess":
-            (
-                gold_action,
-                pred_action,
-                gold_score,
-                pred_score,
-            ) = self.decoder.decode_forward(
-                examples,
-                batch,
-                src_encodings,
-                table_embedding,
-                schema_embedding,
-                dec_init_vec,
-                step,
-            )
-        else:
-            raise RuntimeError("Unsupported Decoder name")
-
-        return gold_action, pred_action, gold_score, pred_score
 
     def forward(self, examples):
         # now should implement the examples
         batch = Batch(examples, is_cuda=self.is_cuda)
+        if self.encoder_name == "ra_transformer":
+            src = self.gen_x_batch(batch.src_sents)
+            col = self.gen_x_batch(batch.table_sents)
+            tab = self.gen_x_batch(batch.table_names)
 
-        if self.is_bert:
+            src_len = batch.src_sents_len
+            col_len = [len(item) for item in batch.table_sents]
+            tab_len = [len(item) for item in batch.table_names]
+
+            src_mask = batch.src_token_mask
+            col_mask = batch.table_token_mask
+            tab_mask = batch.schema_token_mask
+
+            relation_matrix = relation.create_batch(batch.relation)
+
+            src_encodings, table_embedding, schema_embedding = \
+                self.encoder(src, col, tab, src_len, col_len, tab_len, src_mask, col_mask, tab_mask, relation_matrix)
+
+        elif self.encoder_name == "transformer":
+            (
+                src_encodings,
+                table_embedding,
+                schema_embedding,
+                _,
+            ) = self.lstm_encode(batch)
+            src_mask = batch.src_token_mask
+            col_mask = batch.table_token_mask
+            tab_mask = batch.schema_token_mask
+            (
+                src_encodings,
+                table_embeddings,
+                schema_embeddings
+            ) = self.encoder(src_encodings, table_embedding, schema_embedding, src_mask, col_mask, tab_mask)
+        elif self.encoder_name == "bert":
             (
                 src_encodings,
                 table_embedding,
                 schema_embedding,
                 last_cell,
-            ) = self.bert_encode(batch)
+            ) = self.encoder(batch)
             if src_encodings is None:
                 return None, None
-        else:
+            dec_init_vec = self.init_decoder_state(last_cell)
+        elif self.encoder_name == "lstm":
             (
                 src_encodings,
                 table_embedding,
                 schema_embedding,
                 last_cell,
             ) = self.lstm_encode(batch)
+            dec_init_vec = self.init_decoder_state(last_cell)
+        else:
+            raise RuntimeError("Unsupported encoder name")
         src_encodings = self.captum_iden(src_encodings)
-
-        dec_init_vec = self.init_decoder_state(last_cell)
 
         if self.decoder_name == "lstm":
             src_mask = batch.src_token_mask
@@ -493,16 +309,50 @@ class IRNet(BasicModel):
     def parse(self, examples):
         with torch.no_grad():
             batch = Batch(examples, is_cuda=self.is_cuda)
-            if self.is_bert:
+            if self.encoder_name == "ra_transformer":
+                src = batch.src_sents
+                col = self.gen_x_batch(batch.table_sents)
+                tab = self.gen_x_batch(batch.table_names)
+
+                src_len = batch.src_sents_len
+                col_len = [len(item) for item in batch.table_sents]
+                tab_len = [len(item) for item in batch.table_names]
+
+                src_mask = batch.src_token_mask
+                col_mask = batch.table_token_mask
+                tab_mask = batch.schema_token_mask
+
+                relation_matrix = relation.create_batch(batch.relation)
+
+                src_encodings, table_embedding, schema_embedding = \
+                    self.encoder(src, col, tab, src_len, col_len, tab_len, src_mask, col_mask, tab_mask,
+                                 relation_matrix)
+            elif self.encoder_name == "transformer":
+                (
+                    src_encodings,
+                    table_embedding,
+                    schema_embedding,
+                    _,
+                ) = self.lstm_encode(batch)
+                src_mask = batch.src_token_mask
+                col_mask = batch.table_token_mask
+                tab_mask = batch.schema_token_mask
+                (
+                    src_encodings,
+                    table_embeddings,
+                    schema_embeddings
+                ) = self.encoder(src_encodings, table_embedding, schema_embedding, src_mask, col_mask, tab_mask)
+            elif self.encoder_name == "bert":
                 (
                     src_encodings,
                     table_embedding,
                     schema_embedding,
                     last_cell,
-                ) = self.bert_encode(batch)
+                ) = self.encoder(batch)
                 if src_encodings is None:
                     return None, None
-            else:
+                dec_init_vec = self.init_decoder_state(last_cell)
+            elif self.encoder_name == "lstm":
                 src_encodings, (last_state, last_cell) = self.encode(
                     batch.src_sents, batch.src_sents_len, None
                 )
@@ -524,9 +374,6 @@ class IRNet(BasicModel):
                     table_embedding=schema_embedding,
                     table_unk_mask=batch.schema_token_mask,
                 )
-
-                # table_embedding = self.table_linear(table_embedding)
-                # schema_embedding = self.schema_linear(schema_embedding)
 
                 tab_ctx = (
                     src_encodings.unsqueeze(1) * embedding_differ.unsqueeze(3)
@@ -551,7 +398,10 @@ class IRNet(BasicModel):
 
                 schema_embedding = schema_embedding + tab_type_var
 
-            dec_init_vec = self.init_decoder_state(last_cell)
+                dec_init_vec = self.init_decoder_state(last_cell)
+            else:
+                raise RuntimeError("Unsupported encoder name")
+
             if self.decoder_name == "lstm":
                 src_mask = batch.src_token_mask
                 col_mask = batch.table_token_mask
@@ -665,3 +515,101 @@ class IRNet(BasicModel):
         h_0 = torch.tanh(h_0)
 
         return h_0, Variable(self.new_tensor(h_0.size()).zero_())
+
+
+
+    def forward_until_step(self, src_embeddings, examples, step):
+        batch = Batch(examples, is_cuda=self.is_cuda)
+
+        if self.is_bert:
+            (
+                src_encodings,
+                table_embedding,
+                schema_embedding,
+                last_cell,
+            ) = self.bert_encode(batch)
+        else:
+            (
+                src_encodings,
+                table_embedding,
+                schema_embedding,
+                last_cell,
+            ) = self.lstm_encode(batch, src_embeddings)
+            if src_encodings is None:
+                return None, None
+        src_encodings = self.captum_iden(src_encodings)
+
+        dec_init_vec = self.init_decoder_state(last_cell)
+
+        if self.decoder_name == "transformer":
+            src_mask = batch.src_token_mask
+            col_mask = batch.table_token_mask
+            tab_mask = batch.schema_token_mask
+            col_tab_dic = batch.col_table_dict
+            tab_col_dic = []
+            for b_idx in range(len(col_tab_dic)):
+                b_tmp = []
+                tab_len = len(col_tab_dic[b_idx][0])
+                for t_idx in range(tab_len):
+                    tab_tmp = [
+                        idx
+                        for idx in range(len(col_tab_dic[b_idx]))
+                        if t_idx in col_tab_dic[b_idx][idx]
+                    ]
+                    b_tmp += [tab_tmp]
+                tab_col_dic += [b_tmp]
+
+            gold_action, pred_action, gold_score, pred_score = self.decoder(
+                src_encodings,
+                table_embedding,
+                schema_embedding,
+                src_mask,
+                col_mask,
+                tab_mask,
+                tab_col_dic,
+                batch.qgm_action,
+                step,
+                batch.table_sents,
+                batch.table_names_iter,
+            )
+
+        elif self.decoder_name == "qgm":
+            src_mask = batch.src_token_mask
+            col_mask = batch.table_token_mask
+            tab_mask = batch.schema_token_mask
+            col_tab_dic = batch.col_table_dict
+            b_indices = torch.arange(len(batch)).cuda()
+
+            self.decoder.set_variables(
+                self.is_bert,
+                src_encodings,
+                table_embedding,
+                schema_embedding,
+                src_mask,
+                col_mask,
+                tab_mask,
+                col_tab_dic,
+                step,
+            )
+            pred_action, pred_score = self.decoder.decode_until_step(
+                b_indices, None, dec_init_vec, prev_box=None, gold_boxes=batch.qgm
+            )
+        elif self.decoder_name == "preprocess":
+            (
+                gold_action,
+                pred_action,
+                gold_score,
+                pred_score,
+            ) = self.decoder.decode_forward(
+                examples,
+                batch,
+                src_encodings,
+                table_embedding,
+                schema_embedding,
+                dec_init_vec,
+                step,
+            )
+        else:
+            raise RuntimeError("Unsupported Decoder name")
+
+        return gold_action, pred_action, gold_score, pred_score

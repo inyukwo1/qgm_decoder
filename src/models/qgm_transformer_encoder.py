@@ -1,7 +1,7 @@
 import math
 import torch
 import torch.nn as nn
-from src.transformer_encoder import TransformerEncoder, TransformerEncoderLayer
+from src.transformer.transformer_encoder import TransformerEncoder, TransformerEncoderLayer
 
 
 class QGM_Transformer_Encoder(nn.Module):

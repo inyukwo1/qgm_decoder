@@ -7,7 +7,7 @@ from torch.nn.modules.dropout import Dropout
 from torch.nn.modules.container import ModuleList
 from torch.nn.modules.normalization import LayerNorm
 
-from src.multi_head_attention import MultiheadAttention
+from src.transformer.multi_head_attention import MultiheadAttention
 
 class TransformerDecoderLayer(Module):
     r"""TransformerDecoderLayer is made up of self-attn, multi-head-attn and feedforward network.
