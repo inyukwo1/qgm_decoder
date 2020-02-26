@@ -19,31 +19,33 @@ import argparse
 LOGGING = False
 
 ###  Alterations:
-###  
+###
 ###  1. add_semicolon(query)
 ###  Adds a semicolon at the end of the SQL statement if it is missing.
-###  
+###
 ###  2. standardise_blank_spaces(query):
 ###  Ensures there is one blank space between each special character and word.
-###  
+###
 ###  3. capitalise(query, variables):
 ###  Converts all non-quoted sections of the query to uppercase.
-###  
+###
 ###  4. standardise_aliases(query):
 ###  Standardises the format of table aliases to be "table_name + count".
 ###  If a table does not have an alias, it adds an alias for the table.
-###  
+###
 ###  5. order_query(query):
 ###  Identifies the select, from and where clauses and orders the clause
 ###  components alphabetically using Python's sort() function.
-###  
+###
 ###  Limitations
 ###  - We do not handle quoted table names (a way to allow all sorts of crazy
 ###    names). We do not handle table names that are using keywords from mySQL
 ###  - We assume AND and OR are not mixed without brackets to indicate
 ###    precedence (it is legal SQL to do so, though a bad idea anyway).
 
-SQL_RESERVED_WORDS = {w for w in """ACCOUNT ACTION ADD AFTER AGAINST AGGREGATE
+SQL_RESERVED_WORDS = {
+    w
+    for w in """ACCOUNT ACTION ADD AFTER AGAINST AGGREGATE
 ALGORITHM ALL ALTER ALWAYS ANALYSE ANALYZE AND ANY AS ASC ASCII ASENSITIVE AT
 AUTOEXTEND_SIZE AUTO_INCREMENT AVG AVG_ROW_LENGTH BACKUP BEFORE BEGIN BETWEEN
 BIGINT BINARY BINLOG BIT BLOB BLOCK BOOL BOOLEAN BOTH BTREE BY BYTE CACHE CALL
@@ -117,13 +119,16 @@ UNION UNIQUE UNKNOWN UNLOCK UNSIGNED UNTIL UPDATE UPGRADE USAGE USE USER
 USER_RESOURCES USE_FRM USING UTC_DATE UTC_TIME UTC_TIMESTAMP VALIDATION VALUE
 VALUES VARBINARY VARCHAR VARCHARACTER VARIABLES VARYING VIEW VIRTUAL WAIT
 WARNINGS WEEK WEIGHT_STRING WHEN WHERE WHILE WITH WITHOUT WORK WRAPPER WRITE
-X509 XA XID XML XOR YEAR YEAR_MONTH ZEROFILL""".split()}
+X509 XA XID XML XOR YEAR YEAR_MONTH ZEROFILL""".split()
+}
+
 
 def add_semicolon(query):
     query = query.strip()
-    if len(query) > 0 and query[-1] != ';':
-        return query + ';'
+    if len(query) > 0 and query[-1] != ";":
+        return query + ";"
     return query
+
 
 def update_quotes(char, in_single, in_double):
     if char == '"' and not in_single:
@@ -131,6 +136,7 @@ def update_quotes(char, in_single, in_double):
     elif char == "'" and not in_double:
         in_single = not in_single
     return in_single, in_double
+
 
 def standardise_blank_spaces(query):
     # split on special characters except _.:-
@@ -159,7 +165,7 @@ def standardise_blank_spaces(query):
             tmp_query.append(" ")
         else:
             tmp_query.append(char)
-    new_query = ''.join(tmp_query)
+    new_query = "".join(tmp_query)
 
     # Remove blank spaces just inside quotes:
     tmp_query = []
@@ -170,10 +176,10 @@ def standardise_blank_spaces(query):
         skip = False
         for quote, symbol in [(in_squote, "'"), (in_dquote, '"')]:
             if quote:
-                if char in " \n"  and prev == symbol:
+                if char in " \n" and prev == symbol:
                     skip = True
                     break
-                if char in " \n"  and prev == "%" and prev2 == symbol:
+                if char in " \n" and prev == "%" and prev2 == symbol:
                     skip = True
                     break
                 elif char == symbol and prev in " \n":
@@ -187,7 +193,7 @@ def standardise_blank_spaces(query):
         tmp_query.append(char)
         prev2 = prev
         prev = char
-    new_query = ''.join(tmp_query)
+    new_query = "".join(tmp_query)
 
     # Replace single quotes with double quotes where possible
     tmp_query = []
@@ -210,17 +216,17 @@ def standardise_blank_spaces(query):
             if not saw_double:
                 to_add[0] = '"'
                 to_add[-1] = '"'
-            tmp_query.append(''.join(to_add))
+            tmp_query.append("".join(to_add))
         else:
             tmp_query.append(char)
 
         in_squote, in_dquote = update_quotes(char, in_squote, in_dquote)
 
         pos += 1
-    new_query = ''.join(tmp_query)
+    new_query = "".join(tmp_query)
 
     # remove repeated blank spaces
-    new_query = ' '.join(new_query.split())
+    new_query = " ".join(new_query.split())
 
     # Remove spaces that would break SQL functions
     new_query = "COUNT(".join(new_query.split("count ("))
@@ -238,6 +244,7 @@ def standardise_blank_spaces(query):
 
     return new_query
 
+
 # [BHSO]
 def tokenize_query(query):
     tokens = []
@@ -249,12 +256,12 @@ def tokenize_query(query):
         in_quote = not in_quote
         token.append(candidate)
         if not in_quote:
-            word = ' '.join(token)
+            word = " ".join(token)
             if len(word) and word[0] == word[-1] == '"':
                 word = word.upper()
             tokens.append(word)
             token = []
-    assert(not in_quote)
+    assert not in_quote
     return tokens
 
 
@@ -263,7 +270,15 @@ def capitalise(query, variables):
     in_squote, in_dquote = False, False
     tokens = tokenize_query(query)
     for token in tokens:
-        if token in variables or token in ["credit0", "level0", "level1", "number0", "number1", "year0", "business_rating0"]:
+        if token in variables or token in [
+            "credit0",
+            "level0",
+            "level1",
+            "number0",
+            "number1",
+            "year0",
+            "business_rating0",
+        ]:
             ntokens.append(token)
         else:
             modified = []
@@ -276,13 +291,14 @@ def capitalise(query, variables):
 
                 # Handle whether we are in quotes
                 in_squote, in_dquote = update_quotes(char, in_squote, in_dquote)
-            ntokens.append(''.join(modified))
+            ntokens.append("".join(modified))
 
-    return ' '.join(ntokens)
+    return " ".join(ntokens)
+
 
 def subquery_range(current, pos, tokens, in_quote=False):
-    #if tokens[pos] == '(' and (not in_quote):
-    if tokens[pos].endswith('(') and (not in_quote):
+    # if tokens[pos] == '(' and (not in_quote):
+    if tokens[pos].endswith("(") and (not in_quote):
         start = pos
         end = pos + 1
         depth = 1
@@ -291,9 +307,9 @@ def subquery_range(current, pos, tokens, in_quote=False):
             for char in tokens[end]:
                 in_squote, in_dquote = update_quotes(char, in_squote, in_dquote)
             if not (in_squote or in_dquote):
-                if '(' in tokens[end]:
+                if "(" in tokens[end]:
                     depth += 1
-                elif ')' in tokens[end]:
+                elif ")" in tokens[end]:
                     depth -= 1
             end += 1
         return (start, end)
@@ -306,15 +322,15 @@ def subquery_range(current, pos, tokens, in_quote=False):
             for char in tokens[start]:
                 in_squote, in_dquote = update_quotes(char, in_squote, in_dquote)
             if not (in_squote or in_dquote):
-                if '(' in tokens[start]:
+                if "(" in tokens[start]:
                     depth -= 1
-                elif ')' in tokens[start]:
+                elif ")" in tokens[start]:
                     depth += 1
             start -= 1
         if start != 0:
             start += 1
 
-        while end < len(tokens) and tokens[end] != ')':
+        while end < len(tokens) and tokens[end] != ")":
             end += 1
         if end != len(tokens):
             end += 1
@@ -330,13 +346,16 @@ def sum_dict(dict_list):
             total[key] = val
     return total
 
+
 ALIAS_PATTERN = re.compile("[A-Za-z0-9_]*")
+
+
 def standardise_aliases(query, schema):
-    count = {} # dictionary storing how many times each table has been used
-    aliases = {} # dictionary mapping old aliases to standardised aliases
+    count = {}  # dictionary storing how many times each table has been used
+    aliases = {}  # dictionary mapping old aliases to standardised aliases
     aliases_in_name = {0: [{}]}
     field_aliases = {}
-    #tokens = query.split()
+    # tokens = query.split()
     tokens = tokenize_query(query)
 
     # insert AS and replace old alias name with new alias name
@@ -350,14 +369,15 @@ def standardise_aliases(query, schema):
         in_quote = not in_quote
         prev_pos = current_subquery[0]
         current_subquery = subquery_range(current_subquery, i, tokens, in_quote)
-        #print(prev_pos, current_subquery[0])
-        #if prev_pos != current_subquery[0]:
+        # print(prev_pos, current_subquery[0])
+        # if prev_pos != current_subquery[0]:
         if prev_pos < current_subquery[0]:
-            #print(aliases_in_name[prev_pos])
+            # print(aliases_in_name[prev_pos])
             aliases_in_name[current_subquery[0]] = aliases_in_name[prev_pos][:]
             aliases_in_name[current_subquery[0]].append({})
         if word == "FROM":
-            if LOGGING: print("Seen from", current_subquery[0], i)
+            if LOGGING:
+                print("Seen from", current_subquery[0], i)
             seen_from[current_subquery[0]] = i
         elif current_subquery[0] not in seen_from:
             seen_from[current_subquery[0]] = None
@@ -369,39 +389,45 @@ def standardise_aliases(query, schema):
 
         if word in schema[0] and not seen_where[current_subquery[0]]:
             count[word] = count.get(word, -1) + 1
-            if len(tokens) < i+2 or tokens[i+1] != 'AS':
-                tokens.insert(i+1, 'AS')
-            alias = word + "alias"+ str(count[word])
+            if len(tokens) < i + 2 or tokens[i + 1] != "AS":
+                tokens.insert(i + 1, "AS")
+            alias = word + "alias" + str(count[word])
 
             # Check if there is an alias there now
             has_alias = False
-            if len(tokens) > i+2:
-                if tokens[i+2] not in SQL_RESERVED_WORDS:
-                    if re.fullmatch(ALIAS_PATTERN, tokens[i+2]) is not None:
+            if len(tokens) > i + 2:
+                if tokens[i + 2] not in SQL_RESERVED_WORDS:
+                    if re.fullmatch(ALIAS_PATTERN, tokens[i + 2]) is not None:
                         has_alias = True
 
             # Update this occurrence and our mapping
             if has_alias:
-                aliases[current_subquery[0], tokens[i+2]] = alias
-                aliases_in_name[current_subquery[0]][-1][tokens[i+2]] = alias
-                tokens[i+2] = alias
+                aliases[current_subquery[0], tokens[i + 2]] = alias
+                aliases_in_name[current_subquery[0]][-1][tokens[i + 2]] = alias
+                tokens[i + 2] = alias
             else:
                 aliases[current_subquery[0], word] = alias
                 aliases_in_name[current_subquery[0]][-1][word] = alias
-                tokens.insert(i+2, alias)
-        elif i > 2 and tokens[i - 1] == 'AS':
-            if tokens[i-2] not in schema[0]:
-                if LOGGING: print("Considering", tokens[i-2:i+1], current_subquery, seen_from[current_subquery[0]])
+                tokens.insert(i + 2, alias)
+        elif i > 2 and tokens[i - 1] == "AS":
+            if tokens[i - 2] not in schema[0]:
+                if LOGGING:
+                    print(
+                        "Considering",
+                        tokens[i - 2 : i + 1],
+                        current_subquery,
+                        seen_from[current_subquery[0]],
+                    )
                 word = "DERIVED_TABLE"
                 if seen_from[current_subquery[0]] is None:
                     word = "DERIVED_FIELD"
                 count[word] = count.get(word, -1) + 1
-                alias = word + "alias"+ str(count[word])
+                alias = word + "alias" + str(count[word])
                 if seen_from[current_subquery[0]] is None:
-###                    print("New field alias", current_subquery[0], tokens[i], alias)
+                    ###                    print("New field alias", current_subquery[0], tokens[i], alias)
                     field_aliases[tokens[i]] = alias
                 else:
-###                    print("New alias", current_subquery[0], tokens[i], alias)
+                    ###                    print("New alias", current_subquery[0], tokens[i], alias)
                     aliases[current_subquery[0], tokens[i]] = alias
                     aliases_in_name[current_subquery[0]][-1][tokens[i]] = alias
                 tokens[i] = alias
@@ -414,34 +440,34 @@ def standardise_aliases(query, schema):
         for field_alias in field_aliases:
             print(field_alias, field_aliases[field_alias])
     in_quote = False
-    #for eni, t in enumerate(tokens):
+    # for eni, t in enumerate(tokens):
     #   print(eni, t)
-    #print(field_aliases)
-    #print(aliases)
-    #print(aliases_in_name)
+    # print(field_aliases)
+    # print(aliases)
+    # print(aliases_in_name)
     for i, word in enumerate(tokens):
         for part in word.split('"'):
             in_quote = not in_quote
         in_quote = not in_quote
         current_subquery = subquery_range(current_subquery, i, tokens, in_quote)
         if (current_subquery[0], word) in aliases:
-            if len(tokens) > i + 1 and tokens[i+1] != "AS":
+            if len(tokens) > i + 1 and tokens[i + 1] != "AS":
                 tokens[i] = aliases[current_subquery[0], word]
         else:
             local_alias = sum_dict(aliases_in_name[current_subquery[0]])
-            #local_alias = aliases_in_name[current_subquery[0]]
-            #print(local_alias)
-            if len(tokens) > i + 1 and tokens[i+1] != "AS":
+            # local_alias = aliases_in_name[current_subquery[0]]
+            # print(local_alias)
+            if len(tokens) > i + 1 and tokens[i + 1] != "AS":
                 alias = local_alias.get(word)
                 if alias is not None:
                     tokens[i] = alias
         if word in SQL_RESERVED_WORDS and word not in schema[1]:
             continue
-        parts = word.split('.')
+        parts = word.split(".")
         # [BHSO] START
         if len(parts) > 1:
             is_constant = False
-            if len(parts[0]) and parts[0][0] in '1234567890':
+            if len(parts[0]) and parts[0][0] in "1234567890":
                 is_constant = True
             for part in parts:
                 in_quote = False
@@ -454,24 +480,39 @@ def standardise_aliases(query, schema):
                 parts = [word]
         # [BHSO] END
         if len(parts) == 2:
-            if LOGGING: print(current_subquery, parts[0], word)
-            #if (current_subquery[0], parts[0]) in aliases:
+            if LOGGING:
+                print(current_subquery, parts[0], word)
+            # if (current_subquery[0], parts[0]) in aliases:
             if current_subquery[0] in aliases_in_name:
                 local_aliases = sum_dict(aliases_in_name[current_subquery[0]])
-                #table = aliases[current_subquery[0], parts[0]]
+                # table = aliases[current_subquery[0], parts[0]]
                 table = local_aliases[parts[0]]
-                #print(parts[0], current_subquery[0], table, tokens[i])
+                # print(parts[0], current_subquery[0], table, tokens[i])
                 field = parts[1]
-                if field in field_aliases and 'DERIVED' in table:
+                if field in field_aliases and "DERIVED" in table:
                     field = field_aliases[parts[1]]
-                tokens[i] = table +"."+ field
+                tokens[i] = table + "." + field
             else:
                 for alias in aliases:
                     other = subquery_range((0, -1), alias[0], tokens)
-                    if LOGGING: print("   ", alias, alias[1], parts[0], other[0], current_subquery[0], other[1], i)
-                    if alias[1] == parts[0] and other[0] < current_subquery[0] and (other[1] == -1 or other[1] > i):
-                        tokens[i] = aliases[alias] +'.'+ parts[1]
-            '''
+                    if LOGGING:
+                        print(
+                            "   ",
+                            alias,
+                            alias[1],
+                            parts[0],
+                            other[0],
+                            current_subquery[0],
+                            other[1],
+                            i,
+                        )
+                    if (
+                        alias[1] == parts[0]
+                        and other[0] < current_subquery[0]
+                        and (other[1] == -1 or other[1] > i)
+                    ):
+                        tokens[i] = aliases[alias] + "." + parts[1]
+            """
             # [BHSO] START
             if parts[1] in field_aliases:
                 if tokens[i+1].upper() == 'AS' and not parts[1].upper().startswith('_C'):
@@ -479,7 +520,7 @@ def standardise_aliases(query, schema):
                 else:
                     tokens[i] = "." + field_aliases[parts[1]]
             # [BHSO] END
-            #'''
+            #"""
         elif len(parts) == 1:
             # if no alias is specified, find the table name in the schema. We
             # assume that no field name is used ambiguously.
@@ -489,29 +530,32 @@ def standardise_aliases(query, schema):
             done = False
             if sf is None or i < sf or (sw is not None and i > sw):
                 for table in schema[0]:
-###                    print(table, schema[0][table])
+                    ###                    print(table, schema[0][table])
                     if word in schema[0][table]:
-###                        print("Found", i, word, table, current_subquery)
+                        ###                        print("Found", i, word, table, current_subquery)
                         for pair in aliases:
                             alias = aliases[pair]
                             start = alias.split("alias")[0]
-                            #if pair[0] == current_subquery[0] and start == table:
+                            # if pair[0] == current_subquery[0] and start == table:
                             if start == table:
-                                tokens[i] = alias +'.' + word
+                                tokens[i] = alias + "." + word
                                 done = True
                                 break
                         if done:
                             break
             if (not done) and word in field_aliases:
                 tokens[i] = field_aliases[word]
-        #if word.upper().startswith('._C'):
+        # if word.upper().startswith('._C'):
         #    print(word, tokens[i], done)
         #    print(field_aliases)
 
-    return ' '.join(tokens)
+    return " ".join(tokens)
+
 
 def tokens_for_chunk(tokens, chunk):
-    return tokens[chunk[0]:chunk[1]+1]
+    return tokens[chunk[0] : chunk[1] + 1]
+
+
 def get_matching_chunk(tokens, chunks, pos, target, default=None):
     saw_between = False
     loop = 0
@@ -522,13 +566,16 @@ def get_matching_chunk(tokens, chunks, pos, target, default=None):
         if chunk[0] == chunk[1] and tokens[chunk[0]] == target:
             if target != "AND" or (not saw_between):
                 return pos
-        if saw_between and tokens[chunk[0]].upper() == 'AND':
+        if saw_between and tokens[chunk[0]].upper() == "AND":
             saw_between = False
         pos += 1
         loop += 1
-        if loop > 1000: print(tokens, chunks, target)
-    #print(pos, chunks)
+        if loop > 1000:
+            print(tokens, chunks, target)
+    # print(pos, chunks)
     return default
+
+
 def sort_chunk_list(start, end, chunks, tokens, separator=","):
     to_rearrange = []
     pos = start
@@ -538,36 +585,38 @@ def sort_chunk_list(start, end, chunks, tokens, separator=","):
             npos = end - 1
         left = chunks[pos][0]
         right = chunks[npos][1]
-        to_rearrange.append((' '.join(tokens[left:right+1]), pos, npos))
+        to_rearrange.append((" ".join(tokens[left : right + 1]), pos, npos))
         pos = npos + 1
 
-    if LOGGING: print(to_rearrange) #[HJKIM] printing
+    if LOGGING:
+        print(to_rearrange)  # [HJKIM] printing
     if len(to_rearrange) > 0:
         to_rearrange.sort()
         min_pos = min([chunks[v[1]][0] for v in to_rearrange])
         max_pos = max([chunks[v[2]][1] for v in to_rearrange])
-        ctokens = tokens[min_pos:max_pos+1]
+        ctokens = tokens[min_pos : max_pos + 1]
         cpos = min_pos
         for info in to_rearrange:
             saw_between = False
-            for i in range(info[1], info[2]+1):
-                for j in range(chunks[i][0], chunks[i][1]+1):
+            for i in range(info[1], info[2] + 1):
+                for j in range(chunks[i][0], chunks[i][1] + 1):
                     token = ctokens[j - min_pos]
                     advance = False
                     if (chunks[i][1] - chunks[i][0]) > 1:
                         advance = True
-                    if token != separator or (saw_between and separator == 'AND'):
+                    if token != separator or (saw_between and separator == "AND"):
                         advance = True
                     if advance:
-                        tokens[cpos] = ctokens[j-min_pos]
+                        tokens[cpos] = ctokens[j - min_pos]
                         cpos += 1
-                    if token == 'BETWEEN':
+                    if token == "BETWEEN":
                         saw_between = True
-                    if saw_between and token == 'AND':
+                    if saw_between and token == "AND":
                         saw_between = False
             if cpos <= max_pos:
                 tokens[cpos] = separator
             cpos += 1
+
 
 def order_sequence(tokens, start, end, variables):
     # Note - using https://ronsavage.github.io/SQL/sql-92.bnf.html to assist in
@@ -595,8 +644,9 @@ def order_sequence(tokens, start, end, variables):
     cur_chunk = 0
     while cur_chunk < len(chunks):
         next_select = get_matching_chunk(tokens, chunks, cur_chunk, "SELECT")
-        if next_select is None: break
-        
+        if next_select is None:
+            break
+
         next_distinct = get_matching_chunk(tokens, chunks, next_select, "DISTINCT")
         next_all = get_matching_chunk(tokens, chunks, next_select, "ALL")
         if next_distinct == next_select + 1 or next_all == next_select + 1:
@@ -607,9 +657,17 @@ def order_sequence(tokens, start, end, variables):
         sort_chunk_list(next_select + 1, next_from, chunks, tokens)
 
         cur_chunk = next_from
-    
+
     # Handle = and !=
-    swapped_symbol={"=":"=", "!=":"!=", "<>":"<>", ">":"<", "<": ">", ">=":"<=", "<=":">="}
+    swapped_symbol = {
+        "=": "=",
+        "!=": "!=",
+        "<>": "<>",
+        ">": "<",
+        "<": ">",
+        ">=": "<=",
+        "<=": ">=",
+    }
     # [HJKIM]: add inequality
     for symbol in swapped_symbol.keys():
         cur_chunk = 0
@@ -622,30 +680,42 @@ def order_sequence(tokens, start, end, variables):
                 right = tokens_for_chunk(tokens, chunks[next_equals + 1])
             else:
                 break
-            left_text = ' '.join(left)
-            right_text = ' '.join(right)
+            left_text = " ".join(left)
+            right_text = " ".join(right)
 
-           # [HJKIM] enhance ordering 
-           # '''
-            swap = \
-                left_text > right_text or \
-                left_text in variables or \
-                left_text[0] in string.digits or \
-                left_text[0] in ['"', "'", "("] or \
-                '.' not in left_text
-           #     ' ' in left_text
-            if right_text in variables or right_text[0] in string.digits or right_text[0] in ['"', "'", "("] or right_text[0:3] in ["ANY", "ALL"] or left_text[:8] == 'DECFLOAT' or right_text[:8] == 'DECFLOAT' or right_text == "NULL": #or ' ' in right_text or '.' not in right_text:
+            # [HJKIM] enhance ordering
+            # '''
+            swap = (
+                left_text > right_text
+                or left_text in variables
+                or left_text[0] in string.digits
+                or left_text[0] in ['"', "'", "("]
+                or "." not in left_text
+            )
+            #     ' ' in left_text
+            if (
+                right_text in variables
+                or right_text[0] in string.digits
+                or right_text[0] in ['"', "'", "("]
+                or right_text[0:3] in ["ANY", "ALL"]
+                or left_text[:8] == "DECFLOAT"
+                or right_text[:8] == "DECFLOAT"
+                or right_text == "NULL"
+            ):  # or ' ' in right_text or '.' not in right_text:
                 swap = False
-            if LOGGING: print('{}, {}: {}'.format(left_text, right_text, swap)) # [HJKIM] printing
-           # '''
-           # swap = left_text > right_text
+            if LOGGING:
+                print(
+                    "{}, {}: {}".format(left_text, right_text, swap)
+                )  # [HJKIM] printing
+            # '''
+            # swap = left_text > right_text
 
             if swap:
                 cpos = chunks[next_equals - 1][0]
                 for token in right:
                     tokens[cpos] = token
                     cpos += 1
-                tokens[cpos] = swapped_symbol[symbol] # [HJKIM] add inequality
+                tokens[cpos] = swapped_symbol[symbol]  # [HJKIM] add inequality
                 cpos += 1
                 for token in left:
                     tokens[cpos] = token
@@ -656,7 +726,8 @@ def order_sequence(tokens, start, end, variables):
     cur_chunk = 0
     while cur_chunk < len(chunks):
         next_from = get_matching_chunk(tokens, chunks, cur_chunk, "FROM")
-        if next_from is None: break
+        if next_from is None:
+            break
 
         next_item = min(
             get_matching_chunk(tokens, chunks, next_from, "WHERE", len(chunks)),
@@ -665,7 +736,7 @@ def order_sequence(tokens, start, end, variables):
             get_matching_chunk(tokens, chunks, next_from, "HAVING", len(chunks)),
             get_matching_chunk(tokens, chunks, next_from, "LIMIT", len(chunks)),
             get_matching_chunk(tokens, chunks, next_from, "ORDER", len(chunks)),
-            get_matching_chunk(tokens, chunks, next_from, ";", len(chunks))
+            get_matching_chunk(tokens, chunks, next_from, ";", len(chunks)),
         )
         sort_chunk_list(next_from + 1, next_item, chunks, tokens)
         cur_chunk = next_item
@@ -685,7 +756,7 @@ def order_sequence(tokens, start, end, variables):
             get_matching_chunk(tokens, chunks, next_where, "HAVING", len(chunks)),
             get_matching_chunk(tokens, chunks, next_where, "LIMIT", len(chunks)),
             get_matching_chunk(tokens, chunks, next_where, "ORDER", len(chunks)),
-            get_matching_chunk(tokens, chunks, next_where, ";", len(chunks))
+            get_matching_chunk(tokens, chunks, next_where, ";", len(chunks)),
         )
         has_and = False
         has_or = False
@@ -705,32 +776,37 @@ def order_sequence(tokens, start, end, variables):
         if not (has_and and has_or):
             min_pos = min([chunks[v][0] for v in range(next_where + 1, next_item)])
             max_pos = max([chunks[v][1] for v in range(next_where + 1, next_item)])
-            ctokens = tokens[min_pos:max_pos+1]
+            ctokens = tokens[min_pos : max_pos + 1]
             sort_chunk_list(next_where + 1, next_item, chunks, tokens, "AND")
             sort_chunk_list(next_where + 1, next_item, chunks, tokens, "OR")
         cur_chunk = next_item
 
+
 def order_query(query, variables):
-    #query_split = query.split()
+    # query_split = query.split()
     tokens = tokenize_query(query)
-    if LOGGING: print(query) # [HJKIM] printing
-    order_sequence(tokens, 0, len(tokens)-1, variables)
-    if LOGGING: print("{}".format(' '.join(tokens))) # [HJKIM] printing
-    return ' '.join(tokens)
+    if LOGGING:
+        print(query)  # [HJKIM] printing
+    order_sequence(tokens, 0, len(tokens) - 1, variables)
+    if LOGGING:
+        print("{}".format(" ".join(tokens)))  # [HJKIM] printing
+    return " ".join(tokens)
+
 
 def make_canonical(query, schema, variables, skip=set()):
-    if 'add_semicolon' not in skip:
+    if "add_semicolon" not in skip:
         query = add_semicolon(query)
-    if 'standardise_blank_spaces' not in skip:
+    if "standardise_blank_spaces" not in skip:
         query = standardise_blank_spaces(query)
-    if 'capitalise' not in skip:
+    if "capitalise" not in skip:
         query = capitalise(query, variables)
-    query = query.replace(' .', '.')
-    if 'standardise_aliases' not in skip:
+    query = query.replace(" .", ".")
+    if "standardise_aliases" not in skip:
         query = standardise_aliases(query, schema)
-    if 'order_query' not in skip:
+    if "order_query" not in skip:
         query = order_query(query, variables)
     return query
+
 
 def read_schema(schema_filename):
     schema = {}
@@ -746,29 +822,32 @@ def read_schema(schema_filename):
                 all_words.add(column)
     return schema, all_words
 
-def standarise_file(filename, schema_filename, log, overwrite, skip, nonjson, write_path=None):
+
+def standarise_file(
+    filename, schema_filename, log, overwrite, skip, nonjson, write_path=None
+):
     schema = read_schema(schema_filename)
 
     # Canonicalise
     final_data = None
-    with open(filename, 'r') as input_file:
+    with open(filename, "r") as input_file:
         if nonjson:
             data = []
             for line in input_file:
                 query = line.strip()
                 if log:
                     print(query)
-                if query != '':
+                if query != "":
                     try:
                         query = make_canonical(query, schema, set(), skip)
                     except Exception as e:
                         print(e)
-                        query = ''
-                    #datum[3] = make_canonical(datum[3], schema, set(), skip)
+                        query = ""
+                    # datum[3] = make_canonical(datum[3], schema, set(), skip)
                 if log:
                     print(query)
                     print()
-                #data.append('\t'.join(datum))
+                # data.append('\t'.join(datum))
                 data.append(query)
             final_data = data
         else:
@@ -780,40 +859,40 @@ def standarise_file(filename, schema_filename, log, overwrite, skip, nonjson, wr
             for data in all_data:
                 nqueries = []
                 variables = set()
-                if len(data['variables']) > 0:
-                    for variable in data['variables']:
-                        variables.add(variable['name'])
-                for query in data['sql']:
+                if len(data["variables"]) > 0:
+                    for variable in data["variables"]:
+                        variables.add(variable["name"])
+                for query in data["sql"]:
                     if log:
                         print(query)
                     nqueries.append(make_canonical(query, schema, variables, skip))
                     if log:
                         print(nqueries[-1])
                         print()
-                data['sql'] = nqueries
+                data["sql"] = nqueries
 
-                if 'sql-with-vars' in data:
+                if "sql-with-vars" in data:
                     variables = set()
-                    if 'variables' in data:
-                        for item in data['variables']:
-                            variables.add(item['name'])
-                    query = data['sql-with-vars']
+                    if "variables" in data:
+                        for item in data["variables"]:
+                            variables.add(item["name"])
+                    query = data["sql-with-vars"]
                     if log:
                         print(query)
                     query = make_canonical(query, schema, variables, skip)
                     if log:
                         print(query)
                         print()
-                    data['sql-with-vars'] = query
+                    data["sql-with-vars"] = query
             final_data = all_data
 
     # Print to file
     new_path = filename
     if not overwrite:
-        new_path += '.canonical.tsv'
+        new_path += ".canonical.tsv"
     if write_path:
         new_path = write_path
-    with open(new_path, 'w') as write_file:
+    with open(new_path, "w") as write_file:
         if nonjson:
             for line in final_data:
                 print(line, file=write_file)
@@ -823,80 +902,132 @@ def standarise_file(filename, schema_filename, log, overwrite, skip, nonjson, wr
                 line = line.rstrip()
                 print(line, file=write_file)
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Modifies SQL to have a consistent tokenization. Expects a list of filenames as stdin.')
-    parser.add_argument('--testadv', help='Run advising test cases and exit.', action='store_true')
-    parser.add_argument('--testatis', help='Run ATIS test cases and exit.', action='store_true')
-    parser.add_argument('--testscholar', help='Run scholar test cases and exit.', action='store_true')
-    parser.add_argument('--testgeo', help='Run geo test cases and exit.', action='store_true')
-    parser.add_argument('--testyelp', help='Run yelp test cases and exit.', action='store_true')
-    parser.add_argument('--log', help='Print SQL before and after.', action='store_true')
-    parser.add_argument('--fields', help='The tables and fields for these queries.', required=True)
-    parser.add_argument('--skip', help='Functions that should not be applied (choices are [add_semicolon, standardise_blank_spaces, capitalise, standardise_aliases, order_query]).')
-    parser.add_argument('--overwrite', help='Replace the file rather than creating a new one.', action='store_true')
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Modifies SQL to have a consistent tokenization. Expects a list of filenames as stdin."
+    )
+    parser.add_argument(
+        "--testadv", help="Run advising test cases and exit.", action="store_true"
+    )
+    parser.add_argument(
+        "--testatis", help="Run ATIS test cases and exit.", action="store_true"
+    )
+    parser.add_argument(
+        "--testscholar", help="Run scholar test cases and exit.", action="store_true"
+    )
+    parser.add_argument(
+        "--testgeo", help="Run geo test cases and exit.", action="store_true"
+    )
+    parser.add_argument(
+        "--testyelp", help="Run yelp test cases and exit.", action="store_true"
+    )
+    parser.add_argument(
+        "--log", help="Print SQL before and after.", action="store_true"
+    )
+    parser.add_argument(
+        "--fields", help="The tables and fields for these queries.", required=True
+    )
+    parser.add_argument(
+        "--skip",
+        help="Functions that should not be applied (choices are [add_semicolon, standardise_blank_spaces, capitalise, standardise_aliases, order_query]).",
+    )
+    parser.add_argument(
+        "--overwrite",
+        help="Replace the file rather than creating a new one.",
+        action="store_true",
+    )
     # [BHSO]
-    parser.add_argument('--write', help='Path to write canonicalise file.', default=None)
-    parser.add_argument('--nonjson', help='The files contain "Sentence ||| SQL" rather than json.', action='store_true')
+    parser.add_argument(
+        "--write", help="Path to write canonicalise file.", default=None
+    )
+    parser.add_argument(
+        "--nonjson",
+        help='The files contain "Sentence ||| SQL" rather than json.',
+        action="store_true",
+    )
     args = parser.parse_args()
 
     skip = set()
     if args.skip is not None:
         skip = {v for v in args.skip.split(",")}
 
-    if not (args.testadv or args.testgeo or args.testatis or args.testscholar or args.testyelp):
+    if not (
+        args.testadv
+        or args.testgeo
+        or args.testatis
+        or args.testscholar
+        or args.testyelp
+    ):
         for line in sys.stdin:
             if args.log:
                 print("Doing", line.strip())
-            standarise_file(line.strip(), args.fields, args.log, args.overwrite, skip, args.nonjson, args.write)
+            standarise_file(
+                line.strip(),
+                args.fields,
+                args.log,
+                args.overwrite,
+                skip,
+                args.nonjson,
+                args.write,
+            )
     else:
         sample_queries = [
-            ("select * from student where student.s_id < 5",
-            "SELECT * FROM STUDENT AS STUDENTalias0 WHERE STUDENTalias0.S_ID < 5 ;"),
-
-            ("""select last_name
+            (
+                "select * from student where student.s_id < 5",
+                "SELECT * FROM STUDENT AS STUDENTalias0 WHERE STUDENTalias0.S_ID < 5 ;",
+            ),
+            (
+                """select last_name
             from student
             where student.s_id < 5
             and student.first_name = "Bob" """,
-            """SELECT LAST_NAME FROM STUDENT AS STUDENTalias0 WHERE STUDENTalias0.FIRST_NAME = "Bob" AND STUDENTalias0.S_ID < 5 ;"""),
-
-            ("""select last_name
+                """SELECT LAST_NAME FROM STUDENT AS STUDENTalias0 WHERE STUDENTalias0.FIRST_NAME = "Bob" AND STUDENTalias0.S_ID < 5 ;""",
+            ),
+            (
+                """select last_name
             from student
             where student.s_id < 5
             and student.first_name = 'Bob'""",
-            """SELECT LAST_NAME FROM STUDENT AS STUDENTalias0 WHERE STUDENTalias0.FIRST_NAME = "Bob" AND STUDENTalias0.S_ID < 5 ;"""),
-
-            ("""select i.name
+                """SELECT LAST_NAME FROM STUDENT AS STUDENTalias0 WHERE STUDENTalias0.FIRST_NAME = "Bob" AND STUDENTalias0.S_ID < 5 ;""",
+            ),
+            (
+                """select i.name
             from instructor i, offering_instructor oi, course_offering co, course c
             where i.instructor_id = oi.instructor_id
             and co.offering_id = oi.offering_id
             and c.course_id = co.course_id
             and c.department = 'EECS'
             and c.number = 280""",
-            """SELECT INSTRUCTORalias0.NAME FROM COURSE AS COURSEalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias0 , INSTRUCTOR AS INSTRUCTORalias0 , OFFERING_INSTRUCTOR AS OFFERING_INSTRUCTORalias0 WHERE COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND COURSEalias0.DEPARTMENT = "EECS" AND COURSEalias0.NUMBER = 280 AND OFFERING_INSTRUCTORalias0.INSTRUCTOR_ID = INSTRUCTORalias0.INSTRUCTOR_ID AND OFFERING_INSTRUCTORalias0.OFFERING_ID = COURSE_OFFERINGalias0.OFFERING_ID ;"""),
-
-            ("""select i.name
+                """SELECT INSTRUCTORalias0.NAME FROM COURSE AS COURSEalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias0 , INSTRUCTOR AS INSTRUCTORalias0 , OFFERING_INSTRUCTOR AS OFFERING_INSTRUCTORalias0 WHERE COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND COURSEalias0.DEPARTMENT = "EECS" AND COURSEalias0.NUMBER = 280 AND OFFERING_INSTRUCTORalias0.INSTRUCTOR_ID = INSTRUCTORalias0.INSTRUCTOR_ID AND OFFERING_INSTRUCTORalias0.OFFERING_ID = COURSE_OFFERINGalias0.OFFERING_ID ;""",
+            ),
+            (
+                """select i.name
             from instructor i, offering_instructor oi, course_offering co, course c
             where c.number = 280
             and oi.offering_id = co.offering_id
             and i.instructor_id = oi.instructor_id
             and c.department = 'EECS'
             and co.course_id = c.course_id""",
-            """SELECT INSTRUCTORalias0.NAME FROM COURSE AS COURSEalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias0 , INSTRUCTOR AS INSTRUCTORalias0 , OFFERING_INSTRUCTOR AS OFFERING_INSTRUCTORalias0 WHERE COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND COURSEalias0.DEPARTMENT = "EECS" AND COURSEalias0.NUMBER = 280 AND OFFERING_INSTRUCTORalias0.INSTRUCTOR_ID = INSTRUCTORalias0.INSTRUCTOR_ID AND OFFERING_INSTRUCTORalias0.OFFERING_ID = COURSE_OFFERINGalias0.OFFERING_ID ;"""),
-
-            ("""select *
+                """SELECT INSTRUCTORalias0.NAME FROM COURSE AS COURSEalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias0 , INSTRUCTOR AS INSTRUCTORalias0 , OFFERING_INSTRUCTOR AS OFFERING_INSTRUCTORalias0 WHERE COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND COURSEalias0.DEPARTMENT = "EECS" AND COURSEalias0.NUMBER = 280 AND OFFERING_INSTRUCTORalias0.INSTRUCTOR_ID = INSTRUCTORalias0.INSTRUCTOR_ID AND OFFERING_INSTRUCTORalias0.OFFERING_ID = COURSE_OFFERINGalias0.OFFERING_ID ;""",
+            ),
+            (
+                """select *
             from student s
             where (s.admit_term > 2000 AND s.lastname = "Smith")
             OR (s.firstname = "Bob" AND s.admit_term = 2000);""",
-            """SELECT * FROM STUDENT AS STUDENTalias0 WHERE ( STUDENTalias0.ADMIT_TERM = 2000 AND STUDENTalias0.FIRSTNAME = "Bob" ) OR ( STUDENTalias0.ADMIT_TERM > 2000 AND STUDENTalias0.LASTNAME = "Smith" ) ;"""),
-
-            ("""select *
+                """SELECT * FROM STUDENT AS STUDENTalias0 WHERE ( STUDENTalias0.ADMIT_TERM = 2000 AND STUDENTalias0.FIRSTNAME = "Bob" ) OR ( STUDENTalias0.ADMIT_TERM > 2000 AND STUDENTalias0.LASTNAME = "Smith" ) ;""",
+            ),
+            (
+                """select *
             from student s
             where (s.firstname = "Bob" AND s.admit_term = 2000)
             OR s.lastname = "Smith"
             OR s.admit_term > 2000;""",
-            """SELECT * FROM STUDENT AS STUDENTalias0 WHERE ( STUDENTalias0.ADMIT_TERM = 2000 AND STUDENTalias0.FIRSTNAME = "Bob" ) OR STUDENTalias0.ADMIT_TERM > 2000 OR STUDENTalias0.LASTNAME = "Smith" ;"""),
-
-            ("""SELECT I.NAME, I.INSTRUCTOR_ID, COUNT(I.NAME) AS TIMES_TAUGHT
+                """SELECT * FROM STUDENT AS STUDENTalias0 WHERE ( STUDENTalias0.ADMIT_TERM = 2000 AND STUDENTalias0.FIRSTNAME = "Bob" ) OR STUDENTalias0.ADMIT_TERM > 2000 OR STUDENTalias0.LASTNAME = "Smith" ;""",
+            ),
+            (
+                """SELECT I.NAME, I.INSTRUCTOR_ID, COUNT(I.NAME) AS TIMES_TAUGHT
             FROM INSTRUCTOR I, OFFERING_INSTRUCTOR OI, COURSE_OFFERING CO, COURSE C
             WHERE C.DEPARTMENT = ' EECS '
             AND C.NUMBER = 280
@@ -907,26 +1038,30 @@ if __name__ == '__main__':
             ORDER BY TIMES_TAUGHT
             DESC
             LIMIT 5""",
-            """SELECT COUNT( INSTRUCTORalias0.NAME ) AS DERIVED_FIELDalias0 , INSTRUCTORalias0.INSTRUCTOR_ID , INSTRUCTORalias0.NAME FROM COURSE AS COURSEalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias0 , INSTRUCTOR AS INSTRUCTORalias0 , OFFERING_INSTRUCTOR AS OFFERING_INSTRUCTORalias0 WHERE COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND COURSEalias0.DEPARTMENT = "EECS" AND COURSEalias0.NUMBER = 280 AND OFFERING_INSTRUCTORalias0.INSTRUCTOR_ID = INSTRUCTORalias0.INSTRUCTOR_ID AND OFFERING_INSTRUCTORalias0.OFFERING_ID = COURSE_OFFERINGalias0.OFFERING_ID GROUP BY INSTRUCTORalias0.NAME ORDER BY DERIVED_FIELDalias0 DESC LIMIT 5 ;"""),
-
-            ("""select DEPARTMENT, NUMBER, NAME
+                """SELECT COUNT( INSTRUCTORalias0.NAME ) AS DERIVED_FIELDalias0 , INSTRUCTORalias0.INSTRUCTOR_ID , INSTRUCTORalias0.NAME FROM COURSE AS COURSEalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias0 , INSTRUCTOR AS INSTRUCTORalias0 , OFFERING_INSTRUCTOR AS OFFERING_INSTRUCTORalias0 WHERE COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND COURSEalias0.DEPARTMENT = "EECS" AND COURSEalias0.NUMBER = 280 AND OFFERING_INSTRUCTORalias0.INSTRUCTOR_ID = INSTRUCTORalias0.INSTRUCTOR_ID AND OFFERING_INSTRUCTORalias0.OFFERING_ID = COURSE_OFFERINGalias0.OFFERING_ID GROUP BY INSTRUCTORalias0.NAME ORDER BY DERIVED_FIELDalias0 DESC LIMIT 5 ;""",
+            ),
+            (
+                """select DEPARTMENT, NUMBER, NAME
             from COURSE
             where lower(DESCRIPTION) like \"% artificial intelligence %\"
             and credits=4;""",
-            """SELECT COURSEalias0.DEPARTMENT , COURSEalias0.NAME , COURSEalias0.NUMBER FROM COURSE AS COURSEalias0 WHERE COURSEalias0.CREDITS = 4 AND LOWER( COURSEalias0.DESCRIPTION ) LIKE \"%artificial intelligence%\" ;"""),
-
-            ("""SELECT C.NAME , C.ADVISORY_REQUIREMENT , C.ENFORCED_REQUIREMENT 
+                """SELECT COURSEalias0.DEPARTMENT , COURSEalias0.NAME , COURSEalias0.NUMBER FROM COURSE AS COURSEalias0 WHERE COURSEalias0.CREDITS = 4 AND LOWER( COURSEalias0.DESCRIPTION ) LIKE \"%artificial intelligence%\" ;""",
+            ),
+            (
+                """SELECT C.NAME , C.ADVISORY_REQUIREMENT , C.ENFORCED_REQUIREMENT 
             FROM COURSE AS C
             WHERE C.NUMBER = 595
             AND C.DEPARTMENT = ' EECS ' ;""",
-            """SELECT COURSEalias0.ADVISORY_REQUIREMENT , COURSEalias0.ENFORCED_REQUIREMENT , COURSEalias0.NAME FROM COURSE AS COURSEalias0 WHERE COURSEalias0.DEPARTMENT = "EECS" AND COURSEalias0.NUMBER = 595 ;"""),
-
-            ("""select *
+                """SELECT COURSEalias0.ADVISORY_REQUIREMENT , COURSEalias0.ENFORCED_REQUIREMENT , COURSEalias0.NAME FROM COURSE AS COURSEalias0 WHERE COURSEalias0.DEPARTMENT = "EECS" AND COURSEalias0.NUMBER = 595 ;""",
+            ),
+            (
+                """select *
             from PROGRAM_COURSE
             where workload >= (SELECT MIN(workload) FROM PROGRAM_COURSE)""",
-            """SELECT * FROM PROGRAM_COURSE AS PROGRAM_COURSEalias0 WHERE PROGRAM_COURSEalias0.WORKLOAD >= ( SELECT MIN( PROGRAM_COURSEalias1.WORKLOAD ) FROM PROGRAM_COURSE AS PROGRAM_COURSEalias1 ) ;"""),
-
-            ("""SELECT C2.NUMBER
+                """SELECT * FROM PROGRAM_COURSE AS PROGRAM_COURSEalias0 WHERE PROGRAM_COURSEalias0.WORKLOAD >= ( SELECT MIN( PROGRAM_COURSEalias1.WORKLOAD ) FROM PROGRAM_COURSE AS PROGRAM_COURSEalias1 ) ;""",
+            ),
+            (
+                """SELECT C2.NUMBER
             FROM COURSE AS C2
             INNER JOIN PROGRAM_COURSE AS PC2 ON C2.COURSE_ID=PC2.COURSE_ID
             WHERE PC2.WORKLOAD=
@@ -936,48 +1071,58 @@ if __name__ == '__main__':
                 WHERE C.DEPARTMENT='EECS'
                 AND (C.NUMBER=484 OR C.NUMBER=485))
                 AND (C2.NUMBER=484 OR C2.NUMBER=485)""",
-            """SELECT COURSEalias0.NUMBER FROM COURSE AS COURSEalias0 INNER JOIN PROGRAM_COURSE AS PROGRAM_COURSEalias0 ON PROGRAM_COURSEalias0.COURSE_ID = COURSEalias0.COURSE_ID WHERE ( COURSEalias0.NUMBER = 484 OR COURSEalias0.NUMBER = 485 ) AND PROGRAM_COURSEalias0.WORKLOAD = ( SELECT MIN( PROGRAM_COURSEalias1.WORKLOAD ) FROM PROGRAM_COURSE AS PROGRAM_COURSEalias1 INNER JOIN COURSE AS COURSEalias1 ON PROGRAM_COURSEalias1.COURSE_ID = COURSEalias1.COURSE_ID WHERE ( COURSEalias1.NUMBER = 484 OR COURSEalias1.NUMBER = 485 ) AND COURSEalias1.DEPARTMENT = "EECS" ) ;"""),
-
-            ("""select distinct C.NUMBER, C.NAME
+                """SELECT COURSEalias0.NUMBER FROM COURSE AS COURSEalias0 INNER JOIN PROGRAM_COURSE AS PROGRAM_COURSEalias0 ON PROGRAM_COURSEalias0.COURSE_ID = COURSEalias0.COURSE_ID WHERE ( COURSEalias0.NUMBER = 484 OR COURSEalias0.NUMBER = 485 ) AND PROGRAM_COURSEalias0.WORKLOAD = ( SELECT MIN( PROGRAM_COURSEalias1.WORKLOAD ) FROM PROGRAM_COURSE AS PROGRAM_COURSEalias1 INNER JOIN COURSE AS COURSEalias1 ON PROGRAM_COURSEalias1.COURSE_ID = COURSEalias1.COURSE_ID WHERE ( COURSEalias1.NUMBER = 484 OR COURSEalias1.NUMBER = 485 ) AND COURSEalias1.DEPARTMENT = "EECS" ) ;""",
+            ),
+            (
+                """select distinct C.NUMBER, C.NAME
             from COURSE C""",
-            """SELECT DISTINCT COURSEalias0.NAME , COURSEalias0.NUMBER FROM COURSE AS COURSEalias0 ;"""),
-
-            ("""select *
+                """SELECT DISTINCT COURSEalias0.NAME , COURSEalias0.NUMBER FROM COURSE AS COURSEalias0 ;""",
+            ),
+            (
+                """select *
             from student
             where student.s_id < 5;""",
-            "SELECT * FROM STUDENT AS STUDENTalias0 WHERE STUDENTalias0.S_ID < 5 ;"),
-
-            ("""select *
+                "SELECT * FROM STUDENT AS STUDENTalias0 WHERE STUDENTalias0.S_ID < 5 ;",
+            ),
+            (
+                """select *
             from student
             where student.s_id < 5
             and student.first_name = 'Bob';""",
-            """SELECT * FROM STUDENT AS STUDENTalias0 WHERE STUDENTalias0.FIRST_NAME = "Bob" AND STUDENTalias0.S_ID < 5 ;"""),
-
-            ("""select i.name
+                """SELECT * FROM STUDENT AS STUDENTalias0 WHERE STUDENTalias0.FIRST_NAME = "Bob" AND STUDENTalias0.S_ID < 5 ;""",
+            ),
+            (
+                """select i.name
             from instructor i, offering_instructor oi, course_offering co, course c
             where i.instructor_id = oi.instructor_id
             and oi.offering_id = co.offering_id
             and co.course_id = c.course_id
             and c.department = 'EECS'
             and c.number = 280;""",
-            """SELECT INSTRUCTORalias0.NAME FROM COURSE AS COURSEalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias0 , INSTRUCTOR AS INSTRUCTORalias0 , OFFERING_INSTRUCTOR AS OFFERING_INSTRUCTORalias0 WHERE COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND COURSEalias0.DEPARTMENT = "EECS" AND COURSEalias0.NUMBER = 280 AND OFFERING_INSTRUCTORalias0.INSTRUCTOR_ID = INSTRUCTORalias0.INSTRUCTOR_ID AND OFFERING_INSTRUCTORalias0.OFFERING_ID = COURSE_OFFERINGalias0.OFFERING_ID ;"""),
-
-            ("""select cr.department, cr.number from COURSE cl, COURSE_PREREQUISITE cp, COURSE cr where cl.course_id=cp.pre_course_id and cp.course_id=cr.course_id and cl.department = ' department0 ' and cl.number = number0;""",
-            """SELECT COURSEalias1.DEPARTMENT , COURSEalias1.NUMBER FROM COURSE AS COURSEalias0 , COURSE AS COURSEalias1 , COURSE_PREREQUISITE AS COURSE_PREREQUISITEalias0 WHERE COURSEalias0.COURSE_ID = COURSE_PREREQUISITEalias0.PRE_COURSE_ID AND COURSEalias0.DEPARTMENT = "department0" AND COURSEalias0.NUMBER = number0 AND COURSEalias1.COURSE_ID = COURSE_PREREQUISITEalias0.COURSE_ID ;"""),
-
-            ("""SELECT DISTINCT C.DEPARTMENT , C.NUMBER , C.NAME FROM COURSE AS C , PROGRAM_COURSE AS PC , COURSE_OFFERING AS CO , SEMESTER AS S WHERE C.COURSE_ID = CO.COURSE_ID AND C.COURSE_ID = PC.COURSE_ID AND PC.CATEGORY = ' ULCS ' AND CO.MONDAY = ' N ' AND CO.FRIDAY = ' N ' AND CO.SEMESTER = S.SEMESTER_ID AND S.SEMESTER = ' FA ' AND S.YEAR = 2016 ;""",
-             """SELECT DISTINCT COURSEalias0.DEPARTMENT , COURSEalias0.NAME , COURSEalias0.NUMBER FROM COURSE AS COURSEalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias0 , PROGRAM_COURSE AS PROGRAM_COURSEalias0 , SEMESTER AS SEMESTERalias0 WHERE COURSE_OFFERINGalias0.FRIDAY = "N" AND COURSE_OFFERINGalias0.MONDAY = "N" AND COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND PROGRAM_COURSEalias0.CATEGORY = "ULCS" AND PROGRAM_COURSEalias0.COURSE_ID = COURSEalias0.COURSE_ID AND SEMESTERalias0.SEMESTER = "FA" AND SEMESTERalias0.SEMESTER_ID = COURSE_OFFERINGalias0.SEMESTER AND SEMESTERalias0.YEAR = 2016 ;"""),
-
-            ("""SELECT DISTINCT C.NUMBER , C.NAME FROM COURSE C , PROGRAM_COURSE PC , ( SELECT MAX ( WORKLOAD ) AS MAXWORK FROM PROGRAM_COURSE ) AS W WHERE C.COURSE_ID = PC.COURSE_ID AND PC.WORKLOAD = W.MAXWORK ;""",
-             """SELECT DISTINCT COURSEalias0.NAME , COURSEalias0.NUMBER FROM ( SELECT MAX( PROGRAM_COURSEalias1.WORKLOAD ) AS DERIVED_FIELDalias0 FROM PROGRAM_COURSE AS PROGRAM_COURSEalias1 ) AS DERIVED_TABLEalias0 , COURSE AS COURSEalias0 , PROGRAM_COURSE AS PROGRAM_COURSEalias0 WHERE PROGRAM_COURSEalias0.COURSE_ID = COURSEalias0.COURSE_ID AND PROGRAM_COURSEalias0.WORKLOAD = DERIVED_TABLEalias0.DERIVED_FIELDalias0 ;"""),
-
-            ("""select count(*) from COURSE c, COURSE_OFFERING co, SEMESTER s where c.course_id=co.course_id and s.year=2016 and s.semester='SU' and c.department=' department0 ' and c.number=number0;""",
-            """SELECT COUNT( * ) FROM COURSE AS COURSEalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias0 , SEMESTER AS SEMESTERalias0 WHERE COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND COURSEalias0.DEPARTMENT = "department0" AND COURSEalias0.NUMBER = number0 AND SEMESTERalias0.SEMESTER = "SU" AND SEMESTERalias0.YEAR = 2016 ;"""),
-
-            ("""SELECT COUNT ( * ) FROM COURSE_OFFERING CO , COURSE C WHERE C.COURSE_ID = CO.COURSE_ID AND C.DEPARTMENT = ' department0 ' AND C.NUMBER = number0 AND SEMESTER = 2070 AND START_TIME > ' 10:00:00 ' ;""",
-             """SELECT COUNT( * ) FROM COURSE AS COURSEalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias0 WHERE COURSE_OFFERINGalias0.SEMESTER = 2070 AND COURSE_OFFERINGalias0.START_TIME > "10:00:00" AND COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND COURSEalias0.DEPARTMENT = "department0" AND COURSEalias0.NUMBER = number0 ;"""),
-
-            ("""SELECT COUNT ( DISTINCT CO.SEMESTER )
+                """SELECT INSTRUCTORalias0.NAME FROM COURSE AS COURSEalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias0 , INSTRUCTOR AS INSTRUCTORalias0 , OFFERING_INSTRUCTOR AS OFFERING_INSTRUCTORalias0 WHERE COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND COURSEalias0.DEPARTMENT = "EECS" AND COURSEalias0.NUMBER = 280 AND OFFERING_INSTRUCTORalias0.INSTRUCTOR_ID = INSTRUCTORalias0.INSTRUCTOR_ID AND OFFERING_INSTRUCTORalias0.OFFERING_ID = COURSE_OFFERINGalias0.OFFERING_ID ;""",
+            ),
+            (
+                """select cr.department, cr.number from COURSE cl, COURSE_PREREQUISITE cp, COURSE cr where cl.course_id=cp.pre_course_id and cp.course_id=cr.course_id and cl.department = ' department0 ' and cl.number = number0;""",
+                """SELECT COURSEalias1.DEPARTMENT , COURSEalias1.NUMBER FROM COURSE AS COURSEalias0 , COURSE AS COURSEalias1 , COURSE_PREREQUISITE AS COURSE_PREREQUISITEalias0 WHERE COURSEalias0.COURSE_ID = COURSE_PREREQUISITEalias0.PRE_COURSE_ID AND COURSEalias0.DEPARTMENT = "department0" AND COURSEalias0.NUMBER = number0 AND COURSEalias1.COURSE_ID = COURSE_PREREQUISITEalias0.COURSE_ID ;""",
+            ),
+            (
+                """SELECT DISTINCT C.DEPARTMENT , C.NUMBER , C.NAME FROM COURSE AS C , PROGRAM_COURSE AS PC , COURSE_OFFERING AS CO , SEMESTER AS S WHERE C.COURSE_ID = CO.COURSE_ID AND C.COURSE_ID = PC.COURSE_ID AND PC.CATEGORY = ' ULCS ' AND CO.MONDAY = ' N ' AND CO.FRIDAY = ' N ' AND CO.SEMESTER = S.SEMESTER_ID AND S.SEMESTER = ' FA ' AND S.YEAR = 2016 ;""",
+                """SELECT DISTINCT COURSEalias0.DEPARTMENT , COURSEalias0.NAME , COURSEalias0.NUMBER FROM COURSE AS COURSEalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias0 , PROGRAM_COURSE AS PROGRAM_COURSEalias0 , SEMESTER AS SEMESTERalias0 WHERE COURSE_OFFERINGalias0.FRIDAY = "N" AND COURSE_OFFERINGalias0.MONDAY = "N" AND COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND PROGRAM_COURSEalias0.CATEGORY = "ULCS" AND PROGRAM_COURSEalias0.COURSE_ID = COURSEalias0.COURSE_ID AND SEMESTERalias0.SEMESTER = "FA" AND SEMESTERalias0.SEMESTER_ID = COURSE_OFFERINGalias0.SEMESTER AND SEMESTERalias0.YEAR = 2016 ;""",
+            ),
+            (
+                """SELECT DISTINCT C.NUMBER , C.NAME FROM COURSE C , PROGRAM_COURSE PC , ( SELECT MAX ( WORKLOAD ) AS MAXWORK FROM PROGRAM_COURSE ) AS W WHERE C.COURSE_ID = PC.COURSE_ID AND PC.WORKLOAD = W.MAXWORK ;""",
+                """SELECT DISTINCT COURSEalias0.NAME , COURSEalias0.NUMBER FROM ( SELECT MAX( PROGRAM_COURSEalias1.WORKLOAD ) AS DERIVED_FIELDalias0 FROM PROGRAM_COURSE AS PROGRAM_COURSEalias1 ) AS DERIVED_TABLEalias0 , COURSE AS COURSEalias0 , PROGRAM_COURSE AS PROGRAM_COURSEalias0 WHERE PROGRAM_COURSEalias0.COURSE_ID = COURSEalias0.COURSE_ID AND PROGRAM_COURSEalias0.WORKLOAD = DERIVED_TABLEalias0.DERIVED_FIELDalias0 ;""",
+            ),
+            (
+                """select count(*) from COURSE c, COURSE_OFFERING co, SEMESTER s where c.course_id=co.course_id and s.year=2016 and s.semester='SU' and c.department=' department0 ' and c.number=number0;""",
+                """SELECT COUNT( * ) FROM COURSE AS COURSEalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias0 , SEMESTER AS SEMESTERalias0 WHERE COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND COURSEalias0.DEPARTMENT = "department0" AND COURSEalias0.NUMBER = number0 AND SEMESTERalias0.SEMESTER = "SU" AND SEMESTERalias0.YEAR = 2016 ;""",
+            ),
+            (
+                """SELECT COUNT ( * ) FROM COURSE_OFFERING CO , COURSE C WHERE C.COURSE_ID = CO.COURSE_ID AND C.DEPARTMENT = ' department0 ' AND C.NUMBER = number0 AND SEMESTER = 2070 AND START_TIME > ' 10:00:00 ' ;""",
+                """SELECT COUNT( * ) FROM COURSE AS COURSEalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias0 WHERE COURSE_OFFERINGalias0.SEMESTER = 2070 AND COURSE_OFFERINGalias0.START_TIME > "10:00:00" AND COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND COURSEalias0.DEPARTMENT = "department0" AND COURSEalias0.NUMBER = number0 ;""",
+            ),
+            (
+                """SELECT COUNT ( DISTINCT CO.SEMESTER )
             FROM
             COURSE_OFFERING AS CO ,
             COURSE_OFFERING AS CO1 ,
@@ -1004,9 +1149,10 @@ if __name__ == '__main__':
             CO.COURSE_ID = C.COURSE_ID AND
             CO1.COURSE_ID = C0.COURSE_ID AND
             CO.SEMESTER = CO1.SEMESTER ;""",
-            """SELECT COUNT( DISTINCT COURSE_OFFERINGalias0.SEMESTER ) FROM ( SELECT COUNT( * ) AS DERIVED_FIELDalias0 FROM COURSE AS COURSEalias2 , COURSE AS COURSEalias3 , COURSE_PREREQUISITE AS COURSE_PREREQUISITEalias0 WHERE ( ( COURSEalias2.COURSE_ID = COURSE_PREREQUISITEalias0.COURSE_ID AND COURSEalias3.COURSE_ID = COURSE_PREREQUISITEalias0.PRE_COURSE_ID ) OR ( COURSEalias2.COURSE_ID = COURSE_PREREQUISITEalias0.PRE_COURSE_ID AND COURSEalias3.COURSE_ID = COURSE_PREREQUISITEalias0.COURSE_ID ) ) AND COURSEalias2.DEPARTMENT = "department0" AND COURSEalias2.NUMBER = number0 AND COURSEalias3.DEPARTMENT = "department0" AND COURSEalias3.NUMBER = number1 ) AS DERIVED_TABLEalias0 , COURSE AS COURSEalias0 , COURSE AS COURSEalias1 , COURSE_OFFERING AS COURSE_OFFERINGalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias1 WHERE COURSE_OFFERINGalias1.SEMESTER = COURSE_OFFERINGalias0.SEMESTER AND COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND COURSEalias0.DEPARTMENT = "department0" AND COURSEalias0.NUMBER = number0 AND COURSEalias1.COURSE_ID = COURSE_OFFERINGalias1.COURSE_ID AND COURSEalias1.DEPARTMENT = "department0" AND COURSEalias1.NUMBER = number1 AND DERIVED_TABLEalias0.DERIVED_FIELDalias0 = 0 ;"""),
-
-            ("""SELECT C.DEPARTMENT, C.NUMBER, C.NAME
+                """SELECT COUNT( DISTINCT COURSE_OFFERINGalias0.SEMESTER ) FROM ( SELECT COUNT( * ) AS DERIVED_FIELDalias0 FROM COURSE AS COURSEalias2 , COURSE AS COURSEalias3 , COURSE_PREREQUISITE AS COURSE_PREREQUISITEalias0 WHERE ( ( COURSEalias2.COURSE_ID = COURSE_PREREQUISITEalias0.COURSE_ID AND COURSEalias3.COURSE_ID = COURSE_PREREQUISITEalias0.PRE_COURSE_ID ) OR ( COURSEalias2.COURSE_ID = COURSE_PREREQUISITEalias0.PRE_COURSE_ID AND COURSEalias3.COURSE_ID = COURSE_PREREQUISITEalias0.COURSE_ID ) ) AND COURSEalias2.DEPARTMENT = "department0" AND COURSEalias2.NUMBER = number0 AND COURSEalias3.DEPARTMENT = "department0" AND COURSEalias3.NUMBER = number1 ) AS DERIVED_TABLEalias0 , COURSE AS COURSEalias0 , COURSE AS COURSEalias1 , COURSE_OFFERING AS COURSE_OFFERINGalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias1 WHERE COURSE_OFFERINGalias1.SEMESTER = COURSE_OFFERINGalias0.SEMESTER AND COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND COURSEalias0.DEPARTMENT = "department0" AND COURSEalias0.NUMBER = number0 AND COURSEalias1.COURSE_ID = COURSE_OFFERINGalias1.COURSE_ID AND COURSEalias1.DEPARTMENT = "department0" AND COURSEalias1.NUMBER = number1 AND DERIVED_TABLEalias0.DERIVED_FIELDalias0 = 0 ;""",
+            ),
+            (
+                """SELECT C.DEPARTMENT, C.NUMBER, C.NAME
             FROM
             COURSE C
             INNER JOIN COURSE_PREREQUISITE CP ON C.COURSE_ID = CP.PRE_COURSE_ID
@@ -1014,9 +1160,10 @@ if __name__ == '__main__':
             WHERE
             C1.DEPARTMENT LIKE 'EECS' AND
             C1.NUMBER = 545;""",
-            """SELECT COURSEalias0.DEPARTMENT , COURSEalias0.NAME , COURSEalias0.NUMBER FROM COURSE AS COURSEalias0 INNER JOIN COURSE_PREREQUISITE AS COURSE_PREREQUISITEalias0 ON COURSEalias0.COURSE_ID = COURSE_PREREQUISITEalias0.PRE_COURSE_ID INNER JOIN COURSE AS COURSEalias1 ON COURSEalias1.COURSE_ID = COURSE_PREREQUISITEalias0.COURSE_ID WHERE COURSEalias1.DEPARTMENT LIKE "EECS" AND COURSEalias1.NUMBER = 545 ;"""),
-
-            ("""SELECT TEMP.AREA
+                """SELECT COURSEalias0.DEPARTMENT , COURSEalias0.NAME , COURSEalias0.NUMBER FROM COURSE AS COURSEalias0 INNER JOIN COURSE_PREREQUISITE AS COURSE_PREREQUISITEalias0 ON COURSEalias0.COURSE_ID = COURSE_PREREQUISITEalias0.PRE_COURSE_ID INNER JOIN COURSE AS COURSEalias1 ON COURSEalias1.COURSE_ID = COURSE_PREREQUISITEalias0.COURSE_ID WHERE COURSEalias1.DEPARTMENT LIKE "EECS" AND COURSEalias1.NUMBER = 545 ;""",
+            ),
+            (
+                """SELECT TEMP.AREA
             FROM
             (
                 SELECT A.AREA, COUNT(*) AS COUNT
@@ -1041,9 +1188,10 @@ if __name__ == '__main__':
                 DESC
                 LIMIT 1
             );""",
-            """SELECT DERIVED_TABLEalias0.AREA FROM ( SELECT AREAalias0.AREA , COUNT( * ) AS DERIVED_FIELDalias0 FROM AREA AS AREAalias0 INNER JOIN STUDENT_RECORD AS STUDENT_RECORDalias0 ON STUDENT_RECORDalias0.COURSE_ID = AREAalias0.COURSE_ID WHERE STUDENT_RECORDalias0.GRADE LIKE "A" AND STUDENT_RECORDalias0.STUDENT_ID = 1 GROUP BY AREAalias0.AREA ) AS DERIVED_TABLEalias0 WHERE DERIVED_TABLEalias0.DERIVED_FIELDalias0 = ( SELECT COUNT( * ) AS DERIVED_FIELDalias1 FROM AREA AS AREAalias1 , STUDENT_RECORD AS STUDENT_RECORDalias1 WHERE STUDENT_RECORDalias1.COURSE_ID = AREAalias1.COURSE_ID AND STUDENT_RECORDalias1.GRADE LIKE "A" AND STUDENT_RECORDalias1.STUDENT_ID = 1 GROUP BY AREAalias1.AREA ORDER BY DERIVED_FIELDalias1 DESC LIMIT 1 ) ;"""),
-
-            ("""select
+                """SELECT DERIVED_TABLEalias0.AREA FROM ( SELECT AREAalias0.AREA , COUNT( * ) AS DERIVED_FIELDalias0 FROM AREA AS AREAalias0 INNER JOIN STUDENT_RECORD AS STUDENT_RECORDalias0 ON STUDENT_RECORDalias0.COURSE_ID = AREAalias0.COURSE_ID WHERE STUDENT_RECORDalias0.GRADE LIKE "A" AND STUDENT_RECORDalias0.STUDENT_ID = 1 GROUP BY AREAalias0.AREA ) AS DERIVED_TABLEalias0 WHERE DERIVED_TABLEalias0.DERIVED_FIELDalias0 = ( SELECT COUNT( * ) AS DERIVED_FIELDalias1 FROM AREA AS AREAalias1 , STUDENT_RECORD AS STUDENT_RECORDalias1 WHERE STUDENT_RECORDalias1.COURSE_ID = AREAalias1.COURSE_ID AND STUDENT_RECORDalias1.GRADE LIKE "A" AND STUDENT_RECORDalias1.STUDENT_ID = 1 GROUP BY AREAalias1.AREA ORDER BY DERIVED_FIELDalias1 DESC LIMIT 1 ) ;""",
+            ),
+            (
+                """select
                 count(*) as number
                 from
                 COURSE_OFFERING co, COURSE c
@@ -1054,69 +1202,103 @@ if __name__ == '__main__':
                 c.number=number0 and
                 start_time>='10:00:00' and
                 end_time<='15:00:00';""",
-            """SELECT COUNT( * ) AS DERIVED_FIELDalias0 FROM COURSE AS COURSEalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias0 WHERE COURSE_OFFERINGalias0.END_TIME <= "15:00:00" AND COURSE_OFFERINGalias0.SEMESTER = 2070 AND COURSE_OFFERINGalias0.START_TIME >= "10:00:00" AND COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND COURSEalias0.DEPARTMENT = "department0" AND COURSEalias0.NUMBER = number0 ;"""),
-
-            ("""SELECT *,
+                """SELECT COUNT( * ) AS DERIVED_FIELDalias0 FROM COURSE AS COURSEalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias0 WHERE COURSE_OFFERINGalias0.END_TIME <= "15:00:00" AND COURSE_OFFERINGalias0.SEMESTER = 2070 AND COURSE_OFFERINGalias0.START_TIME >= "10:00:00" AND COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND COURSEalias0.DEPARTMENT = "department0" AND COURSEalias0.NUMBER = number0 ;""",
+            ),
+            (
+                """SELECT *,
                COUNT (cp.pre_course_id) AS num_courses
                FROM course_prerequisite cp
                GROUP BY cp.pre_course_id
                ORDER BY num_courses DESC ;""",
-            """SELECT * , COUNT( COURSE_PREREQUISITEalias0.PRE_COURSE_ID ) AS DERIVED_FIELDalias0 FROM COURSE_PREREQUISITE AS COURSE_PREREQUISITEalias0 GROUP BY COURSE_PREREQUISITEalias0.PRE_COURSE_ID ORDER BY DERIVED_FIELDalias0 DESC ;"""),
-
-            ("""SELECT COURSEalias0.NUMBER FROM COURSE AS COURSEalias0 INNER JOIN PROGRAM_COURSE AS PROGRAM_COURSEalias0 ON PROGRAM_COURSEalias0.COURSE_ID = COURSEalias0.COURSE_ID WHERE ( COURSEalias0.NUMBER = number0 OR COURSEalias0.NUMBER = number1 ) AND PROGRAM_COURSEalias0.WORKLOAD = ( SELECT MIN( PROGRAM_COURSEalias1.WORKLOAD ) FROM PROGRAM_COURSE AS PROGRAM_COURSEalias1 INNER JOIN COURSE AS COURSEalias1 ON PROGRAM_COURSEalias1.COURSE_ID = COURSEalias1.COURSE_ID WHERE ( COURSEalias1.NUMBER = number0 OR COURSEalias1.NUMBER = number1 ) AND COURSEalias1.DEPARTMENT = \"department0\" ) ;""",
-             """SELECT COURSEalias0.NUMBER FROM COURSE AS COURSEalias0 INNER JOIN PROGRAM_COURSE AS PROGRAM_COURSEalias0 ON PROGRAM_COURSEalias0.COURSE_ID = COURSEalias0.COURSE_ID WHERE ( COURSEalias0.NUMBER = number0 OR COURSEalias0.NUMBER = number1 ) AND PROGRAM_COURSEalias0.WORKLOAD = ( SELECT MIN( PROGRAM_COURSEalias1.WORKLOAD ) FROM PROGRAM_COURSE AS PROGRAM_COURSEalias1 INNER JOIN COURSE AS COURSEalias1 ON PROGRAM_COURSEalias1.COURSE_ID = COURSEalias1.COURSE_ID WHERE ( COURSEalias1.NUMBER = number0 OR COURSEalias1.NUMBER = number1 ) AND COURSEalias1.DEPARTMENT = \"department0\" ) ;"""),
-
-###            ("""SELECT COUNT( DISTINCT COURSE_OFFERINGalias0.SEMESTER ) FROM ( SELECT COUNT( * ) AS DERIVED_FIELDalias0 FROM COURSE AS COURSEalias2 , COURSE AS COURSEalias3 , COURSE_PREREQUISITE AS COURSE_PREREQUISITEalias0 WHERE ( ( COURSEalias2.COURSE_ID = COURSE_PREREQUISITEalias0.COURSE_ID AND COURSEalias3.COURSE_ID = COURSE_PREREQUISITEalias0.PRE_COURSE_ID ) OR ( COURSEalias2.COURSE_ID = COURSE_PREREQUISITEalias0.PRE_COURSE_ID AND COURSEalias3.COURSE_ID = COURSE_PREREQUISITEalias0.COURSE_ID ) ) AND COURSEalias2.DEPARTMENT = \"department0\" AND COURSEalias2.NUMBER = number0 AND COURSEalias3.DEPARTMENT = \"department0\" AND COURSEalias3.NUMBER = number1 ) AS DERIVED_TABLEalias0 , COURSE AS COURSEalias0 , COURSE AS COURSEalias1 , COURSE_OFFERING AS COURSE_OFFERINGalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias1 WHERE COURSE_OFFERINGalias1.SEMESTER = COURSE_OFFERINGalias0.SEMESTER AND COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND COURSEalias0.DEPARTMENT = \"department0\" AND COURSEalias0.NUMBER = number0 AND COURSEalias1.COURSE_ID = COURSE_OFFERINGalias1.COURSE_ID AND COURSEalias1.DEPARTMENT = \"department0\" AND COURSEalias1.NUMBER = number1 AND DERIVED_TABLEalias0.DERIVED_FIELDalias0 = 0 ;""",
-###
+                """SELECT * , COUNT( COURSE_PREREQUISITEalias0.PRE_COURSE_ID ) AS DERIVED_FIELDalias0 FROM COURSE_PREREQUISITE AS COURSE_PREREQUISITEalias0 GROUP BY COURSE_PREREQUISITEalias0.PRE_COURSE_ID ORDER BY DERIVED_FIELDalias0 DESC ;""",
+            ),
+            (
+                """SELECT COURSEalias0.NUMBER FROM COURSE AS COURSEalias0 INNER JOIN PROGRAM_COURSE AS PROGRAM_COURSEalias0 ON PROGRAM_COURSEalias0.COURSE_ID = COURSEalias0.COURSE_ID WHERE ( COURSEalias0.NUMBER = number0 OR COURSEalias0.NUMBER = number1 ) AND PROGRAM_COURSEalias0.WORKLOAD = ( SELECT MIN( PROGRAM_COURSEalias1.WORKLOAD ) FROM PROGRAM_COURSE AS PROGRAM_COURSEalias1 INNER JOIN COURSE AS COURSEalias1 ON PROGRAM_COURSEalias1.COURSE_ID = COURSEalias1.COURSE_ID WHERE ( COURSEalias1.NUMBER = number0 OR COURSEalias1.NUMBER = number1 ) AND COURSEalias1.DEPARTMENT = \"department0\" ) ;""",
+                """SELECT COURSEalias0.NUMBER FROM COURSE AS COURSEalias0 INNER JOIN PROGRAM_COURSE AS PROGRAM_COURSEalias0 ON PROGRAM_COURSEalias0.COURSE_ID = COURSEalias0.COURSE_ID WHERE ( COURSEalias0.NUMBER = number0 OR COURSEalias0.NUMBER = number1 ) AND PROGRAM_COURSEalias0.WORKLOAD = ( SELECT MIN( PROGRAM_COURSEalias1.WORKLOAD ) FROM PROGRAM_COURSE AS PROGRAM_COURSEalias1 INNER JOIN COURSE AS COURSEalias1 ON PROGRAM_COURSEalias1.COURSE_ID = COURSEalias1.COURSE_ID WHERE ( COURSEalias1.NUMBER = number0 OR COURSEalias1.NUMBER = number1 ) AND COURSEalias1.DEPARTMENT = \"department0\" ) ;""",
+            ),
+            ###            ("""SELECT COUNT( DISTINCT COURSE_OFFERINGalias0.SEMESTER ) FROM ( SELECT COUNT( * ) AS DERIVED_FIELDalias0 FROM COURSE AS COURSEalias2 , COURSE AS COURSEalias3 , COURSE_PREREQUISITE AS COURSE_PREREQUISITEalias0 WHERE ( ( COURSEalias2.COURSE_ID = COURSE_PREREQUISITEalias0.COURSE_ID AND COURSEalias3.COURSE_ID = COURSE_PREREQUISITEalias0.PRE_COURSE_ID ) OR ( COURSEalias2.COURSE_ID = COURSE_PREREQUISITEalias0.PRE_COURSE_ID AND COURSEalias3.COURSE_ID = COURSE_PREREQUISITEalias0.COURSE_ID ) ) AND COURSEalias2.DEPARTMENT = \"department0\" AND COURSEalias2.NUMBER = number0 AND COURSEalias3.DEPARTMENT = \"department0\" AND COURSEalias3.NUMBER = number1 ) AS DERIVED_TABLEalias0 , COURSE AS COURSEalias0 , COURSE AS COURSEalias1 , COURSE_OFFERING AS COURSE_OFFERINGalias0 , COURSE_OFFERING AS COURSE_OFFERINGalias1 WHERE COURSE_OFFERINGalias1.SEMESTER = COURSE_OFFERINGalias0.SEMESTER AND COURSEalias0.COURSE_ID = COURSE_OFFERINGalias0.COURSE_ID AND COURSEalias0.DEPARTMENT = \"department0\" AND COURSEalias0.NUMBER = number0 AND COURSEalias1.COURSE_ID = COURSE_OFFERINGalias1.COURSE_ID AND COURSEalias1.DEPARTMENT = \"department0\" AND COURSEalias1.NUMBER = number1 AND DERIVED_TABLEalias0.DERIVED_FIELDalias0 = 0 ;""",
+            ###
         ]
 
         if args.testadv:
-            if 'adv' not in args.fields:
-                print("Are you sure you have the right fields file for Advising tests? Using:", args.fields)
+            if "adv" not in args.fields:
+                print(
+                    "Are you sure you have the right fields file for Advising tests? Using:",
+                    args.fields,
+                )
 
         if args.testgeo:
-            if 'geo' not in args.fields:
-                print("Are you sure you have the right fields file for Geo tests? Using:", args.fields)
+            if "geo" not in args.fields:
+                print(
+                    "Are you sure you have the right fields file for Geo tests? Using:",
+                    args.fields,
+                )
             sample_queries = [
-                ("""SELECT STATE.STATE_NAME FROM STATE ;""",
-                """SELECT STATEalias0.STATE_NAME FROM STATE AS STATEalias0 ;"""),
-
-                ("""SELECT RIVER.RIVER_NAME FROM HIGHLOW , RIVER WHERE HIGHLOW.HIGHEST_ELEVATION = ( SELECT MAX( HIGHLOW.HIGHEST_ELEVATION ) FROM HIGHLOW ) AND RIVER.TRAVERSE = HIGHLOW.STATE_NAME ORDER BY RIVER.LENGTH DESC LIMIT 1 ;""",
-                """SELECT RIVERalias0.RIVER_NAME FROM HIGHLOW AS HIGHLOWalias0 , RIVER AS RIVERalias0 WHERE HIGHLOWalias0.HIGHEST_ELEVATION = ( SELECT MAX( HIGHLOWalias1.HIGHEST_ELEVATION ) FROM HIGHLOW AS HIGHLOWalias1 ) AND RIVERalias0.TRAVERSE = HIGHLOWalias0.STATE_NAME ORDER BY RIVERalias0.LENGTH DESC LIMIT 1 ;"""),
+                (
+                    """SELECT STATE.STATE_NAME FROM STATE ;""",
+                    """SELECT STATEalias0.STATE_NAME FROM STATE AS STATEalias0 ;""",
+                ),
+                (
+                    """SELECT RIVER.RIVER_NAME FROM HIGHLOW , RIVER WHERE HIGHLOW.HIGHEST_ELEVATION = ( SELECT MAX( HIGHLOW.HIGHEST_ELEVATION ) FROM HIGHLOW ) AND RIVER.TRAVERSE = HIGHLOW.STATE_NAME ORDER BY RIVER.LENGTH DESC LIMIT 1 ;""",
+                    """SELECT RIVERalias0.RIVER_NAME FROM HIGHLOW AS HIGHLOWalias0 , RIVER AS RIVERalias0 WHERE HIGHLOWalias0.HIGHEST_ELEVATION = ( SELECT MAX( HIGHLOWalias1.HIGHEST_ELEVATION ) FROM HIGHLOW AS HIGHLOWalias1 ) AND RIVERalias0.TRAVERSE = HIGHLOWalias0.STATE_NAME ORDER BY RIVERalias0.LENGTH DESC LIMIT 1 ;""",
+                ),
             ]
 
         if args.testatis:
-            if 'atis' not in args.fields:
-                sample_queries = [("""SELECT generalinfo.restaurant_name, locations.house_no, locations.street_name, locations.city_name, generalinfo.rating FROM generalinfo JOIN locations ON generalinfo.restaurant_id = locations.restaurant_id WHERE generalinfo.food_type = "french" AND locations.city_name = "san francisco" AND generalinfo.rating =(SELECT MAX(g_max.rating) FROM generalinfo g_max);""", """SELECT generalinfo.restaurant_name, locations.house_no, locations.street_name, locations.city_name, generalinfo.rating FROM generalinfo JOIN locations ON generalinfo.restaurant_id = locations.restaurant_id WHERE generalinfo.food_type = "french" AND locations.city_name = "san francisco" AND generalinfo.rating =(SELECT MAX(g_max.rating) FROM generalinfo g_max);"""),]
+            if "atis" not in args.fields:
+                sample_queries = [
+                    (
+                        """SELECT generalinfo.restaurant_name, locations.house_no, locations.street_name, locations.city_name, generalinfo.rating FROM generalinfo JOIN locations ON generalinfo.restaurant_id = locations.restaurant_id WHERE generalinfo.food_type = "french" AND locations.city_name = "san francisco" AND generalinfo.rating =(SELECT MAX(g_max.rating) FROM generalinfo g_max);""",
+                        """SELECT generalinfo.restaurant_name, locations.house_no, locations.street_name, locations.city_name, generalinfo.rating FROM generalinfo JOIN locations ON generalinfo.restaurant_id = locations.restaurant_id WHERE generalinfo.food_type = "french" AND locations.city_name = "san francisco" AND generalinfo.rating =(SELECT MAX(g_max.rating) FROM generalinfo g_max);""",
+                    ),
+                ]
             else:
                 sample_queries = [
-                ("""SELECT DISTINCT flight_1.flight_id
+                    (
+                        """SELECT DISTINCT flight_1.flight_id
                     FROM flight flight_1
                     WHERE flight_1.departure_time BETWEEN 0 AND 800 AND
                     flight_1.from_airport = DTW""",
-                """SELECT DISTINCT FLIGHTalias0.FLIGHT_ID FROM FLIGHT AS FLIGHTalias0 WHERE FLIGHTalias0.DEPARTURE_TIME BETWEEN 0 AND 800 AND FLIGHTalias0.FROM_AIRPORT = DTW ;"""),
-            ]
+                        """SELECT DISTINCT FLIGHTalias0.FLIGHT_ID FROM FLIGHT AS FLIGHTalias0 WHERE FLIGHTalias0.DEPARTURE_TIME BETWEEN 0 AND 800 AND FLIGHTalias0.FROM_AIRPORT = DTW ;""",
+                    ),
+                ]
 
         if args.testscholar:
-            if 'scholar' not in args.fields:
-                print("Are you sure you have the right fields file for Scholar tests? Using:", args.fields)
+            if "scholar" not in args.fields:
+                print(
+                    "Are you sure you have the right fields file for Scholar tests? Using:",
+                    args.fields,
+                )
             sample_queries = [
-                ("""SELECT DISTINCT writes.paperId FROM writes, author,paper WHERE writes.authorId = author.authorID  AND writes.paperId = paper.paperId AND author.authorName = "Luke S Zettlemoyer" AND paper.year >= YEAR(CURDATE()) - 8""",
-                 """SELECT DISTINCT WRITESalias0.PAPERID FROM AUTHOR AS AUTHORalias0 , PAPER AS PAPERalias0 , WRITES AS WRITESalias0 WHERE AUTHORalias0.AUTHORNAME = "Luke S Zettlemoyer" AND PAPERalias0.YEAR >= YEAR(CURDATE()) - 8 AND WRITESalias0.AUTHORID = AUTHORalias0.AUTHORID AND WRITESalias0.PAPERID = PAPERalias0.PAPERID ;"""),
-                ("""SELECT DISTINCT writes.authorId FROM paper,writes,venue WHERE paper.venueId = venue.venueId AND paper.paperId = writes.paperId AND venue.venueName IN ("ICML","Science (New York, N.Y.)") GROUP BY writes.authorId having count(DISTINCT venue.venueId) = 2""",
-                """SELECT DISTINCT WRITESalias0.AUTHORID FROM PAPER AS PAPERalias0 , VENUE AS VENUEalias0 , WRITES AS WRITESalias0 WHERE VENUEalias0.VENUEID = PAPERalias0.VENUEID AND VENUEalias0.VENUENAME IN ( "ICML" , "Science ( New York , N.Y. )" ) AND WRITESalias0.PAPERID = PAPERalias0.PAPERID GROUP BY WRITESalias0.AUTHORID HAVING COUNT( DISTINCT VENUEalias0.VENUEID ) = 2 ;"""),
-                ("""SELECT DISTINCT paper.paperId FROM paper, paperKeyphrase, keyphrase WHERE paper.year = 2016 AND paper.paperId = paperKeyphrase.paperId AND paperKeyphrase.keyphraseId = keyphrase.keyphraseId AND keyphrase.keyphraseName IN ('Multiuser Receiver', 'Decision Feedback') GROUP BY paper.paperId HAVING count(DISTINCT keyphrase.keyphraseName)>1""",
-                """SELECT DISTINCT PAPERalias0.PAPERID FROM KEYPHRASE AS KEYPHRASEalias0 , PAPER AS PAPERalias0 , PAPERKEYPHRASE AS PAPERKEYPHRASEalias0 WHERE KEYPHRASEalias0.KEYPHRASENAME IN ( "Multiuser Receiver" , "Decision Feedback" ) AND PAPERKEYPHRASEalias0.KEYPHRASEID = KEYPHRASEalias0.KEYPHRASEID AND PAPERalias0.PAPERID = PAPERKEYPHRASEalias0.PAPERID AND PAPERalias0.YEAR = 2016 GROUP BY PAPERalias0.PAPERID HAVING COUNT( DISTINCT KEYPHRASEalias0.KEYPHRASENAME ) > 1 ;"""),
+                (
+                    """SELECT DISTINCT writes.paperId FROM writes, author,paper WHERE writes.authorId = author.authorID  AND writes.paperId = paper.paperId AND author.authorName = "Luke S Zettlemoyer" AND paper.year >= YEAR(CURDATE()) - 8""",
+                    """SELECT DISTINCT WRITESalias0.PAPERID FROM AUTHOR AS AUTHORalias0 , PAPER AS PAPERalias0 , WRITES AS WRITESalias0 WHERE AUTHORalias0.AUTHORNAME = "Luke S Zettlemoyer" AND PAPERalias0.YEAR >= YEAR(CURDATE()) - 8 AND WRITESalias0.AUTHORID = AUTHORalias0.AUTHORID AND WRITESalias0.PAPERID = PAPERalias0.PAPERID ;""",
+                ),
+                (
+                    """SELECT DISTINCT writes.authorId FROM paper,writes,venue WHERE paper.venueId = venue.venueId AND paper.paperId = writes.paperId AND venue.venueName IN ("ICML","Science (New York, N.Y.)") GROUP BY writes.authorId having count(DISTINCT venue.venueId) = 2""",
+                    """SELECT DISTINCT WRITESalias0.AUTHORID FROM PAPER AS PAPERalias0 , VENUE AS VENUEalias0 , WRITES AS WRITESalias0 WHERE VENUEalias0.VENUEID = PAPERalias0.VENUEID AND VENUEalias0.VENUENAME IN ( "ICML" , "Science ( New York , N.Y. )" ) AND WRITESalias0.PAPERID = PAPERalias0.PAPERID GROUP BY WRITESalias0.AUTHORID HAVING COUNT( DISTINCT VENUEalias0.VENUEID ) = 2 ;""",
+                ),
+                (
+                    """SELECT DISTINCT paper.paperId FROM paper, paperKeyphrase, keyphrase WHERE paper.year = 2016 AND paper.paperId = paperKeyphrase.paperId AND paperKeyphrase.keyphraseId = keyphrase.keyphraseId AND keyphrase.keyphraseName IN ('Multiuser Receiver', 'Decision Feedback') GROUP BY paper.paperId HAVING count(DISTINCT keyphrase.keyphraseName)>1""",
+                    """SELECT DISTINCT PAPERalias0.PAPERID FROM KEYPHRASE AS KEYPHRASEalias0 , PAPER AS PAPERalias0 , PAPERKEYPHRASE AS PAPERKEYPHRASEalias0 WHERE KEYPHRASEalias0.KEYPHRASENAME IN ( "Multiuser Receiver" , "Decision Feedback" ) AND PAPERKEYPHRASEalias0.KEYPHRASEID = KEYPHRASEalias0.KEYPHRASEID AND PAPERalias0.PAPERID = PAPERKEYPHRASEalias0.PAPERID AND PAPERalias0.YEAR = 2016 GROUP BY PAPERalias0.PAPERID HAVING COUNT( DISTINCT KEYPHRASEalias0.KEYPHRASENAME ) > 1 ;""",
+                ),
             ]
 
         if args.testyelp:
-            if 'yelp' not in args.fields:
-                print("Are you sure you have the right fields file for Yelp tests? Using:", args.fields)
+            if "yelp" not in args.fields:
+                print(
+                    "Are you sure you have the right fields file for Yelp tests? Using:",
+                    args.fields,
+                )
             sample_queries = [
-                ("""select review_count from business as business_0 where business_0.name = \" 1122330 \" """,
-                """SELECT BUSINESSalias0.REVIEW_COUNT FROM BUSINESS AS BUSINESSalias0 WHERE BUSINESSalias0.NAME = "1122330" ;"""),
-                ("""select count(distinct(review_0.text)) from business as business_0, review as review_0 where business_0.name = \" business_name0 \" and business_0.business_id = review_0.business_id ;""",
-                """SELECT COUNT( DISTINCT ( REVIEWalias0.TEXT ) ) FROM BUSINESS AS BUSINESSalias0 , REVIEW AS REVIEWalias0 WHERE BUSINESSalias0.NAME = "business_name0" AND REVIEWalias0.BUSINESS_ID = BUSINESSalias0.BUSINESS_ID ;"""),
+                (
+                    """select review_count from business as business_0 where business_0.name = \" 1122330 \" """,
+                    """SELECT BUSINESSalias0.REVIEW_COUNT FROM BUSINESS AS BUSINESSalias0 WHERE BUSINESSalias0.NAME = "1122330" ;""",
+                ),
+                (
+                    """select count(distinct(review_0.text)) from business as business_0, review as review_0 where business_0.name = \" business_name0 \" and business_0.business_id = review_0.business_id ;""",
+                    """SELECT COUNT( DISTINCT ( REVIEWalias0.TEXT ) ) FROM BUSINESS AS BUSINESSalias0 , REVIEW AS REVIEWalias0 WHERE BUSINESSalias0.NAME = "business_name0" AND REVIEWalias0.BUSINESS_ID = BUSINESSalias0.BUSINESS_ID ;""",
+                ),
             ]
 
         schema = read_schema(args.fields)
@@ -1127,11 +1309,10 @@ if __name__ == '__main__':
             print(canonical)
             if canonical != correct:
                 # Print the query, adjusting to avoid indentation
-                print('\n'.join([part.strip() for part in query.split("\n")]))
+                print("\n".join([part.strip() for part in query.split("\n")]))
                 print(canonical)
                 print(correct)
                 LOGGING = True
                 make_canonical(query, schema, variables)
                 LOGGING = False
                 print()
-

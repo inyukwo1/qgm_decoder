@@ -51,11 +51,11 @@ def _build_single_filter(lf, f):
 def _build_filter(lf, root_filter):
     assert isinstance(root_filter, define_rule.Filter)
     op = root_filter.production.split()[1]
-    if op == 'and' or op == 'or':
+    if op == "and" or op == "or":
         for i in range(2):
             child = lf.pop(0)
             op = child.production.split()[1]
-            if op == 'and' or op == 'or':
+            if op == "and" or op == "or":
                 _f = _build_filter(lf, child)
                 root_filter.add_children(_f)
                 _f.set_parent(root_filter)
@@ -94,7 +94,9 @@ def _build(lf):
                     if not isinstance(table, define_rule.T):
                         lf.insert(0, table)
                         table = None
-                assert isinstance(agg, define_rule.A) and isinstance(column, define_rule.C)
+                assert isinstance(agg, define_rule.A) and isinstance(
+                    column, define_rule.C
+                )
                 c_instance.add_children(agg)
                 agg.set_parent(c_instance)
                 agg.add_children(column)
@@ -103,7 +105,9 @@ def _build(lf):
                     column.add_children(table)
                     table.set_parent(column)
 
-        elif isinstance(c_instance, define_rule.Sup) or isinstance(c_instance, define_rule.Order):
+        elif isinstance(c_instance, define_rule.Sup) or isinstance(
+            c_instance, define_rule.Order
+        ):
             root.add_children(c_instance)
             c_instance.set_parent(root)
 
@@ -177,7 +181,7 @@ def verify(node):
         assert children_num == 1
     elif isinstance(node, Filter):
         op = node.production.split()[1]
-        if op == 'and' or op == 'or':
+        if op == "and" or op == "or":
             assert children_num == 2
         else:
             if len(node.production.split()) == 3:
@@ -213,14 +217,14 @@ def build_adjacency_matrix(lf, symmetry=False):
     return matrix
 
 
-if __name__ == '__main__':
-    with open(r'..\data\train.json', 'r') as f:
+if __name__ == "__main__":
+    with open(r"..\data\train.json", "r") as f:
         data = json.load(f)
     for d in data:
-        rule_label = [eval(x) for x in d['rule_label'].strip().split(' ')]
-        print(d['question'])
+        rule_label = [eval(x) for x in d["rule_label"].strip().split(" ")]
+        print(d["question"])
         print(rule_label)
         build_tree(copy.copy(rule_label))
         adjacency_matrix = build_adjacency_matrix(rule_label, symmetry=True)
         print(adjacency_matrix)
-        print('===\n\n')
+        print("===\n\n")

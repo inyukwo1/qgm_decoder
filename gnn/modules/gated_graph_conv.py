@@ -29,7 +29,9 @@ class GatedGraphConv(MessagePassing):
             an additive bias. (default: :obj:`True`)
     """
 
-    def __init__(self, input_dim, num_timesteps, num_edge_types, aggr='add', bias=True, dropout=0):
+    def __init__(
+        self, input_dim, num_timesteps, num_edge_types, aggr="add", bias=True, dropout=0
+    ):
         super(GatedGraphConv, self).__init__(aggr)
 
         self._input_dim = input_dim
@@ -53,14 +55,18 @@ class GatedGraphConv(MessagePassing):
     def forward(self, x, edge_indices):
         """"""
         if len(edge_indices) != self.num_edge_types:
-            raise ValueError(f'GatedGraphConv constructed with {self.num_edge_types} edge types, '
-                             f'but {len(edge_indices)} were passed')
+            raise ValueError(
+                f"GatedGraphConv constructed with {self.num_edge_types} edge types, "
+                f"but {len(edge_indices)} were passed"
+            )
 
         h = x
 
         if h.size(1) > self._input_dim:
-            raise ValueError('The number of input channels is not allowed to '
-                             'be larger than the number of output channels')
+            raise ValueError(
+                "The number of input channels is not allowed to "
+                "be larger than the number of output channels"
+            )
 
         if h.size(1) < self._input_dim:
             zero = h.new_zeros(h.size(0), self._input_dim - h.size(1))
@@ -72,24 +78,30 @@ class GatedGraphConv(MessagePassing):
                 if len(edge_indices[e]) == 0:
                     continue
                 m = self.dropout(torch.matmul(h, self.weight[t, e]) + self.bias[t, e])
-                new_h.append(self.propagate(edge_indices[e], size=(x.size(0), x.size(0)), x=m))
+                new_h.append(
+                    self.propagate(edge_indices[e], size=(x.size(0), x.size(0)), x=m)
+                )
             m_sum = torch.sum(torch.stack(new_h), dim=0)
             h = self.rnn(m_sum, h)
 
         return h
 
     def __repr__(self):
-        return '{}({}, num_layers={})'.format(
-            self.__class__.__name__, self._input_dim, self.num_timesteps)
+        return "{}({}, num_layers={})".format(
+            self.__class__.__name__, self._input_dim, self.num_timesteps
+        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     gcn = GatedGraphConv(input_dim=10, num_timesteps=3, num_edge_types=3)
-    data = Data(torch.zeros((5, 10)), edge_index=[
-        torch.tensor([[1,2],[2,3]]),
-        torch.tensor([[1,3],[0,1]]),
-        torch.tensor([[1,4],[2,3]]),
-    ])
+    data = Data(
+        torch.zeros((5, 10)),
+        edge_index=[
+            torch.tensor([[1, 2], [2, 3]]),
+            torch.tensor([[1, 3], [0, 1]]),
+            torch.tensor([[1, 4], [2, 3]]),
+        ],
+    )
     output = gcn(data.x, data.edge_index)
 
     print(output)

@@ -6,25 +6,175 @@ from allennlp.data import Tokenizer, Token
 from ordered_set import OrderedSet
 from unidecode import unidecode
 
-from gnn.dataset_readers.dataset_util.spider_utils import TableColumn, read_dataset_schema, read_dataset_values
+from gnn.dataset_readers.dataset_util.spider_utils import (
+    TableColumn,
+    read_dataset_schema,
+    read_dataset_values,
+)
 from allennlp.semparse.contexts.knowledge_graph import KnowledgeGraph
 
 
 # == stop words that will be omitted by ContextGenerator
-STOP_WORDS = {"", "", "all", "being", "-", "over", "through", "yourselves", "its", "before",
-              "hadn", "with", "had", ",", "should", "to", "only", "under", "ours", "has", "ought", "do",
-              "them", "his", "than", "very", "cannot", "they", "not", "during", "yourself", "him",
-              "nor", "did", "didn", "'ve", "this", "she", "each", "where", "because", "doing", "some", "we", "are",
-              "further", "ourselves", "out", "what", "for", "weren", "does", "above", "between", "mustn", "?",
-              "be", "hasn", "who", "were", "here", "shouldn", "let", "hers", "by", "both", "about", "couldn",
-              "of", "could", "against", "isn", "or", "own", "into", "while", "whom", "down", "wasn", "your",
-              "from", "her", "their", "aren", "there", "been", ".", "few", "too", "wouldn", "themselves",
-              ":", "was", "until", "more", "himself", "on", "but", "don", "herself", "haven", "those", "he",
-              "me", "myself", "these", "up", ";", "below", "'re", "can", "theirs", "my", "and", "would", "then",
-              "is", "am", "it", "doesn", "an", "as", "itself", "at", "have", "in", "any", "if", "!",
-              "again", "'ll", "no", "that", "when", "same", "how", "other", "which", "you", "many", "shan",
-              "'t", "'s", "our", "after", "most", "'d", "such", "'m", "why", "a", "off", "i", "yours", "so",
-              "the", "having", "once"}
+STOP_WORDS = {
+    "",
+    "",
+    "all",
+    "being",
+    "-",
+    "over",
+    "through",
+    "yourselves",
+    "its",
+    "before",
+    "hadn",
+    "with",
+    "had",
+    ",",
+    "should",
+    "to",
+    "only",
+    "under",
+    "ours",
+    "has",
+    "ought",
+    "do",
+    "them",
+    "his",
+    "than",
+    "very",
+    "cannot",
+    "they",
+    "not",
+    "during",
+    "yourself",
+    "him",
+    "nor",
+    "did",
+    "didn",
+    "'ve",
+    "this",
+    "she",
+    "each",
+    "where",
+    "because",
+    "doing",
+    "some",
+    "we",
+    "are",
+    "further",
+    "ourselves",
+    "out",
+    "what",
+    "for",
+    "weren",
+    "does",
+    "above",
+    "between",
+    "mustn",
+    "?",
+    "be",
+    "hasn",
+    "who",
+    "were",
+    "here",
+    "shouldn",
+    "let",
+    "hers",
+    "by",
+    "both",
+    "about",
+    "couldn",
+    "of",
+    "could",
+    "against",
+    "isn",
+    "or",
+    "own",
+    "into",
+    "while",
+    "whom",
+    "down",
+    "wasn",
+    "your",
+    "from",
+    "her",
+    "their",
+    "aren",
+    "there",
+    "been",
+    ".",
+    "few",
+    "too",
+    "wouldn",
+    "themselves",
+    ":",
+    "was",
+    "until",
+    "more",
+    "himself",
+    "on",
+    "but",
+    "don",
+    "herself",
+    "haven",
+    "those",
+    "he",
+    "me",
+    "myself",
+    "these",
+    "up",
+    ";",
+    "below",
+    "'re",
+    "can",
+    "theirs",
+    "my",
+    "and",
+    "would",
+    "then",
+    "is",
+    "am",
+    "it",
+    "doesn",
+    "an",
+    "as",
+    "itself",
+    "at",
+    "have",
+    "in",
+    "any",
+    "if",
+    "!",
+    "again",
+    "'ll",
+    "no",
+    "that",
+    "when",
+    "same",
+    "how",
+    "other",
+    "which",
+    "you",
+    "many",
+    "shan",
+    "'t",
+    "'s",
+    "our",
+    "after",
+    "most",
+    "'d",
+    "such",
+    "'m",
+    "why",
+    "a",
+    "off",
+    "i",
+    "yours",
+    "so",
+    "the",
+    "having",
+    "once",
+}
 
 
 class SpiderDBContext:
@@ -32,14 +182,23 @@ class SpiderDBContext:
     db_knowledge_graph = {}
     db_tables_data = {}
 
-    def __init__(self, db_id: str, utterance: str, tokenizer: Tokenizer, tables_file: str, dataset_path: str):
+    def __init__(
+        self,
+        db_id: str,
+        utterance: str,
+        tokenizer: Tokenizer,
+        tables_file: str,
+        dataset_path: str,
+    ):
         self.dataset_path = dataset_path
         self.tables_file = tables_file
         self.db_id = db_id
         self.utterance = utterance
 
         tokenized_utterance = tokenizer.tokenize(utterance.lower())
-        self.tokenized_utterance = [Token(text=t.text, lemma=t.lemma_) for t in tokenized_utterance]
+        self.tokenized_utterance = [
+            Token(text=t.text, lemma=t.lemma_) for t in tokenized_utterance
+        ]
 
         if db_id not in SpiderDBContext.schemas:
             SpiderDBContext.schemas = read_dataset_schema(self.tables_file)
@@ -47,10 +206,14 @@ class SpiderDBContext:
 
         self.knowledge_graph = self.get_db_knowledge_graph(db_id)
 
-        entity_texts = [self.knowledge_graph.entity_text[entity].lower()
-                        for entity in self.knowledge_graph.entities]
+        entity_texts = [
+            self.knowledge_graph.entity_text[entity].lower()
+            for entity in self.knowledge_graph.entities
+        ]
         entity_tokens = tokenizer.batch_tokenize(entity_texts)
-        self.entity_tokens = [[Token(text=t.text, lemma=t.lemma_) for t in et] for et in entity_tokens]
+        self.entity_tokens = [
+            [Token(text=t.text, lemma=t.lemma_) for t in et] for et in entity_tokens
+        ]
 
     @staticmethod
     def entity_key_for_column(table_name: str, column: TableColumn) -> str:
@@ -60,7 +223,9 @@ class SpiderDBContext:
             column_type = "primary"
         else:
             column_type = column.column_type
-        return f"column:{column_type.lower()}:{table_name.lower()}:{column.name.lower()}"
+        return (
+            f"column:{column_type.lower()}:{table_name.lower()}:{column.name.lower()}"
+        )
 
     def get_db_knowledge_graph(self, db_id: str) -> KnowledgeGraph:
         entities: Set[str] = set()
@@ -72,7 +237,9 @@ class SpiderDBContext:
         tables = db_schema.values()
 
         if db_id not in self.db_tables_data:
-            self.db_tables_data[db_id] = read_dataset_values(db_id, self.dataset_path, tables)
+            self.db_tables_data[db_id] = read_dataset_values(
+                db_id, self.dataset_path, tables
+            )
 
         tables_data = self.db_tables_data[db_id]
 
@@ -81,7 +248,7 @@ class SpiderDBContext:
         for table, table_data in tables_data.items():
             for table_row in table_data:
                 for column, cell_value in zip(db_schema[table.name].columns, table_row):
-                    if column.column_type == 'text' and type(cell_value) is str:
+                    if column.column_type == "text" and type(cell_value) is str:
                         cell_value_normalized = self.normalize_string(cell_value)
                         column_key = self.entity_key_for_column(table.name, column)
                         string_column_mapping[cell_value_normalized].add(column_key)
@@ -105,7 +272,9 @@ class SpiderDBContext:
             for column_key in column_keys:
                 neighbors[string_entity].add(column_key)
                 neighbors[column_key].add(string_entity)
-            entity_text[string_entity] = string_entity.replace("string:", "").replace("_", " ")
+            entity_text[string_entity] = string_entity.replace("string:", "").replace(
+                "_", " "
+            )
 
         # loop again after we have gone through all columns to link foreign keys columns
         for table_name in db_schema.keys():
@@ -113,13 +282,19 @@ class SpiderDBContext:
                 if column.foreign_key is None:
                     continue
 
-                other_column_table, other_column_name = column.foreign_key.split(':')
+                other_column_table, other_column_name = column.foreign_key.split(":")
 
                 # must have exactly one by design
-                other_column = [col for col in db_schema[other_column_table].columns if col.name == other_column_name][0]
+                other_column = [
+                    col
+                    for col in db_schema[other_column_table].columns
+                    if col.name == other_column_name
+                ][0]
 
                 entity_key = self.entity_key_for_column(table_name, column)
-                other_entity_key = self.entity_key_for_column(other_column_table, other_column)
+                other_entity_key = self.entity_key_for_column(
+                    other_column_table, other_column
+                )
 
                 neighbors[entity_key].add(other_entity_key)
                 neighbors[other_entity_key].add(entity_key)
@@ -131,8 +306,9 @@ class SpiderDBContext:
 
         return kg
 
-    def _string_in_table(self, candidate: str,
-                         string_column_mapping: Dict[str, set]) -> List[str]:
+    def _string_in_table(
+        self, candidate: str, string_column_mapping: Dict[str, set]
+    ) -> List[str]:
         """
         Checks if the string occurs in the table, and if it does, returns the names of the columns
         under which it occurs. If it does not, returns an empty list.
@@ -149,8 +325,9 @@ class SpiderDBContext:
         candidate_column_names = list(set(candidate_column_names))
         return candidate_column_names
 
-    def get_entities_from_question(self,
-                                   string_column_mapping: Dict[str, set]) -> List[Tuple[str, str]]:
+    def get_entities_from_question(
+        self, string_column_mapping: Dict[str, set]
+    ) -> List[Tuple[str, str]]:
         entity_data = []
         for i, token in enumerate(self.tokenized_utterance):
             token_text = token.text
@@ -159,21 +336,31 @@ class SpiderDBContext:
             normalized_token_text = self.normalize_string(token_text)
             if not normalized_token_text:
                 continue
-            token_columns = self._string_in_table(normalized_token_text, string_column_mapping)
+            token_columns = self._string_in_table(
+                normalized_token_text, string_column_mapping
+            )
             if token_columns:
                 token_type = token_columns[0].split(":")[1]
-                entity_data.append({'value': normalized_token_text,
-                                    'token_start': i,
-                                    'token_end': i+1,
-                                    'token_type': token_type,
-                                    'token_in_columns': token_columns})
+                entity_data.append(
+                    {
+                        "value": normalized_token_text,
+                        "token_start": i,
+                        "token_end": i + 1,
+                        "token_type": token_type,
+                        "token_in_columns": token_columns,
+                    }
+                )
 
         # extracted_numbers = self._get_numbers_from_tokens(self.question_tokens)
         # filter out number entities to avoid repetition
         expanded_entities = []
-        for entity in self._expand_entities(self.tokenized_utterance, entity_data, string_column_mapping):
+        for entity in self._expand_entities(
+            self.tokenized_utterance, entity_data, string_column_mapping
+        ):
             if entity["token_type"] == "text":
-                expanded_entities.append((f"string:{entity['value']}", entity['token_in_columns']))
+                expanded_entities.append(
+                    (f"string:{entity['value']}", entity["token_in_columns"])
+                )
         # return expanded_entities, extracted_numbers  #TODO(shikhar) Handle conjunctions
 
         return expanded_entities
@@ -198,7 +385,7 @@ class SpiderDBContext:
         string = re.sub("‹", "<", string)
         string = re.sub("›", ">", string)
         string = re.sub("[‘’´`]", "'", string)
-        string = re.sub("[“”«»]", "\"", string)
+        string = re.sub("[“”«»]", '"', string)
         string = re.sub("[•†‡²³]", "", string)
         string = re.sub("[‐‑–—−]", "-", string)
         # Oddly, some unicode characters get converted to _ instead of being stripped.  Not really
@@ -218,17 +405,19 @@ class SpiderDBContext:
         string = re.sub("_$", "", string)
         return unidecode(string.lower())
 
-    def _expand_entities(self, question, entity_data, string_column_mapping: Dict[str, set]):
+    def _expand_entities(
+        self, question, entity_data, string_column_mapping: Dict[str, set]
+    ):
         new_entities = []
         for entity in entity_data:
             # to ensure the same strings are not used over and over
-            if new_entities and entity['token_end'] <= new_entities[-1]['token_end']:
+            if new_entities and entity["token_end"] <= new_entities[-1]["token_end"]:
                 continue
-            current_start = entity['token_start']
-            current_end = entity['token_end']
-            current_token = entity['value']
-            current_token_type = entity['token_type']
-            current_token_columns = entity['token_in_columns']
+            current_start = entity["token_start"]
+            current_end = entity["token_end"]
+            current_token = entity["value"]
+            current_token_type = entity["token_type"]
+            current_token_columns = entity["token_in_columns"]
 
             while current_end < len(question):
                 next_token = question[current_end].text
@@ -236,9 +425,13 @@ class SpiderDBContext:
                 if next_token_normalized == "":
                     current_end += 1
                     continue
-                candidate = "%s_%s" %(current_token, next_token_normalized)
-                candidate_columns = self._string_in_table(candidate, string_column_mapping)
-                candidate_columns = list(set(candidate_columns).intersection(current_token_columns))
+                candidate = "%s_%s" % (current_token, next_token_normalized)
+                candidate_columns = self._string_in_table(
+                    candidate, string_column_mapping
+                )
+                candidate_columns = list(
+                    set(candidate_columns).intersection(current_token_columns)
+                )
                 if not candidate_columns:
                     break
                 candidate_type = candidate_columns[0].split(":")[1]
@@ -248,9 +441,13 @@ class SpiderDBContext:
                 current_token = candidate
                 current_token_columns = candidate_columns
 
-            new_entities.append({'token_start': current_start,
-                                 'token_end': current_end,
-                                 'value': current_token,
-                                 'token_type': current_token_type,
-                                 'token_in_columns': current_token_columns})
+            new_entities.append(
+                {
+                    "token_start": current_start,
+                    "token_end": current_end,
+                    "value": current_token,
+                    "token_type": current_token_type,
+                    "token_in_columns": current_token_columns,
+                }
+            )
         return new_entities

@@ -6,3 +6,4 @@ data/
 renv/
 venv/
 saved_model/
+glove/

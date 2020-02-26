@@ -296,7 +296,9 @@ def process_datas(datas, args):
                 primary_foreigns.add(f)
                 primary_foreigns.add(p)
 
-            conn = sqlite3.connect("../data/database/{}/{}.sqlite".format(db_id, db_id))
+            conn = sqlite3.connect(
+                args.database_path + "/{}/{}.sqlite".format(db_id, db_id)
+            )
             # conn.text_factory = bytes
             cursor = conn.cursor()
 
@@ -349,8 +351,9 @@ if __name__ == "__main__":
         "--table_path", type=str, help="table dataset", required=True
     )
     arg_parser.add_argument("--output", type=str, help="output data")
+    arg_parser.add_argument("--database_path", type=str)
     args = arg_parser.parse_args()
-    args.conceptNet = "./conceptNet"
+    args.conceptNet = "./ours/preprocess/conceptNet"
 
     # loading dataSets
     datas, table = load_dataSets(args)

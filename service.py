@@ -1,22 +1,3 @@
-import torch
-import json
-from ours.src import args as arg, utils
-from ours.src.models.model import IRNet
-from ours.src.rule import semQL
-from ours.preprocess.data_process import process_data_one_entry
-from ours.src.utils import (
-    process,
-    schema_linking,
-    get_col_table_dict,
-    get_table_colNames,
-)
-from ours.src.dataset import Example
-from ours.sem2SQL import transform
-from ours.src.rule.sem_utils import (
-    alter_column0_one_entry,
-    alter_inter_one_entry,
-    alter_not_in_one_entry,
-)
 from validation.check_correctness import compare_two_queries, diff_two_queries
 
 import os
@@ -195,76 +176,118 @@ class Service(Resource):
             args = parser.parse_args()
 
             if args["mode"] == "Explore":
-                if args["model"] == "ours":
-                    model = ours_end2end["spider"]
-                elif args["model"] == "irnet":
-                    model = irnet_end2end["spider"]
-                elif args["model"] == "gnn":
-                    model = gnn_end2end["spider"]
-                elif args["model"] == "irnet-improved":
-                    model = irnet_end2end["spider"]
-                else:
-                    return
-                result_query, actions, question = model.run_model(
-                    args["db_id"], args["question"]
-                )
+                return self.handleExploreMode(args)
 
-                if args["model"] == "irnet-improved":
-                    result_query = 'SELECT T1.release_year FROM movie AS T1 WHERE T1.title = "Dead Poets Society"'
-
-                if args["model"] == "irnet":
-                    result_query = ours_end2end["spider"].value_predictor(
-                        args["db_id"], result_query, args["question"], " 1"
-                    )
-                elif args["model"] == "gnn":
-                    result_query = ours_end2end["spider"].value_predictor(
-                        args["db_id"], result_query, args["question"], " ' value '"
-                    )
-
-                plot_filename = plot_execution(
-                    os.path.join(
-                        "./data/{}/database".format("spider"),
-                        args["db_id"],
-                        args["db_id"] + ".sqlite",
-                    ),
-                    result_query,
-                )
-                # plot_filename = ""
-
-                if plot_filename == "":
-                    return {
-                        "result": result_query,
-                        "actions": actions,
-                        "question": question,
-                    }
-                else:
-                    scp.put(
-                        os.path.join(PLOTDIR, plot_filename),
-                        os.path.join("/home/ihna/web/build/", plot_filename),
-                    )
-                    print("Done")
-                    return {
-                        "result": result_query,
-                        "actions": actions,
-                        "question": question,
-                        "plot_filename": plot_filename,
-                    }
             elif args["mode"] == "Analyze":
-                systems = ["ours", "irnet", "gnn"]
-                result_query = {}
-                result_query["ours"], _, _ = ours_end2end["spider"].run_model(
-                    args["db_id"], args["question"]
-                )
-                result_query["irnet"], _, _ = irnet_end2end["spider"].run_model(
-                    args["db_id"], args["question"]
-                )
-                result_query["gnn"], _, _ = gnn_end2end["spider"].run_model(
-                    args["db_id"], args["question"]
-                )
-                gen_sql = args["gen_sql"]
-                gold_sql = args["gold_sql"]
-                # diff
-                diff, new_gen_sql, new_gold_sql, _ = diff_two_queries(
+                return self.handleAlalyzeMode(args)
+
+        except Exception as e:
+            print("done not well")
+            print(str(e))
+            return {"result": str(e)}
+
+    def handleExploreMode(self, args):
+        if args["model"] == "ours":
+            model = ours_end2end["spider"]
+        elif args["model"] == "irnet":
+            model = irnet_end2end["spider"]
+        elif args["model"] == "gnn":
+            model = gnn_end2end["spider"]
+        elif args["model"] == "irnet-improved":
+            model = irnet_end2end["spider"]
+        else:
+            return
+        result_query, actions, question = model.run_model(
+            args["db_id"], args["question"]
+        )
+
+        if args["model"] == "irnet-improved":
+            result_query = 'SELECT T1.release_year FROM movie AS T1 WHERE T1.title = "Dead Poets Society"'
+
+        if args["model"] == "irnet":
+            result_query = ours_end2end["spider"].value_predictor(
+                args["db_id"], result_query, args["question"], " 1"
+            )
+        elif args["model"] == "gnn":
+            result_query = ours_end2end["spider"].value_predictor(
+                args["db_id"], result_query, args["question"], " ' value '"
+            )
+
+        plot_filename = plot_execution(
+            os.path.join(
+                "./data/{}/database".format("spider"),
+                args["db_id"],
+                args["db_id"] + ".sqlite",
+            ),
+            result_query,
+        )
+        # plot_filename = ""
+
+        if plot_filename == "":
+            return {
+                "result": result_query,
+                "actions": actions,
+                "question": question,
+            }
+        else:
+            scp.put(
+                os.path.join(PLOTDIR, plot_filename),
+                os.path.join("/home/ihna/web/build/", plot_filename),
+            )
+            print("Done")
+            return {
+                "result": result_query,
+                "actions": actions,
+                "question": question,
+                "plot_filename": plot_filename,
+            }
+
+    def handleAlalyzeMode(self, args):
+        systems = ["ours", "irnet", "gnn"]
+        result_query = {}
+        result_query["ours"], _, _ = ours_end2end["spider"].run_model(
+            args["db_id"], args["question"]
+        )
+        result_query["irnet"], _, _ = irnet_end2end["spider"].run_model(
+            args["db_id"], args["question"]
+        )
+        result_query["gnn"], _, _ = gnn_end2end["spider"].run_model(
+            args["db_id"], args["question"]
+        )
+        gen_sql = args["gen_sql"]
+        gold_sql = args["gold_sql"]
+        # diff
+        diff, new_gen_sql, new_gold_sql, _ = diff_two_queries(
+            "sqlite:///"
+            + os.path.join(
+                "./data/{}/database".format("spider"),
+                args["db_id"],
+                args["db_id"] + ".sqlite",
+            ),
+            args["db_id"],
+            gen_sql,
+            gold_sql,
+            args["diffmode"],
+        )
+        # check correctness
+        equi = {}
+        for system in systems:
+            equi[system] = compare_two_queries(
+                "sqlite:///"
+                + os.path.join(
+                    "./data/{}/database".format("spider"),
+                    args["db_id"],
+                    args["db_id"] + ".sqlite",
+                ),
+                args["db_id"],
+                result_query[system],
+                gold_sql,
+            )
+        equi_class = [key for key, value in equi.items() if value[0] == True]
+        if equi_class == []:
+            similarity_score = -1
+            for system in systems:
+                _, _, _, similarity_score_tmp = diff_two_queries(
                     "sqlite:///"
                     + os.path.join(
                         "./data/{}/database".format("spider"),
@@ -272,58 +295,23 @@ class Service(Resource):
                         args["db_id"] + ".sqlite",
                     ),
                     args["db_id"],
-                    gen_sql,
+                    result_query[system],
                     gold_sql,
-                    args["diffmode"],
+                    "canonical",
                 )
-                # check correctness
-                equi = {}
-                for system in systems:
-                    equi[system] = compare_two_queries(
-                        "sqlite:///"
-                        + os.path.join(
-                            "./data/{}/database".format("spider"),
-                            args["db_id"],
-                            args["db_id"] + ".sqlite",
-                        ),
-                        args["db_id"],
-                        result_query[system],
-                        gold_sql,
-                    )
-                equi_class = [key for key, value in equi.items() if value[0] == True]
-                if equi_class == []:
-                    similarity_score = -1
-                    for system in systems:
-                        _, _, _, similarity_score_tmp = diff_two_queries(
-                            "sqlite:///"
-                            + os.path.join(
-                                "./data/{}/database".format("spider"),
-                                args["db_id"],
-                                args["db_id"] + ".sqlite",
-                            ),
-                            args["db_id"],
-                            result_query[system],
-                            gold_sql,
-                            "canonical",
-                        )
-                        if similarity_score < similarity_score_tmp:
-                            equi_class = [system]
-                            similarity_score = similarity_score_tmp
-                else:
-                    similarity_score = 100
-                print("Done")
-                return {
-                    "result": equi_class,
-                    "diff": diff,
-                    "canonicalized_gen_sql": new_gen_sql,
-                    "canonicalized_gold_sql": new_gold_sql,
-                    "similarity": similarity_score,
-                }
-
-        except Exception as e:
-            print("done not well")
-            print(str(e))
-            return {"result": str(e)}
+                if similarity_score < similarity_score_tmp:
+                    equi_class = [system]
+                    similarity_score = similarity_score_tmp
+        else:
+            similarity_score = 100
+        print("Done")
+        return {
+            "result": equi_class,
+            "diff": diff,
+            "canonicalized_gen_sql": new_gen_sql,
+            "canonicalized_gold_sql": new_gold_sql,
+            "similarity": similarity_score,
+        }
 
 
 if __name__ == "__main__":

@@ -10,8 +10,8 @@ from collections import deque, namedtuple
 
 
 # we'll use infinity as a default distance to nodes.
-inf = float('inf')
-Edge = namedtuple('Edge', 'start, end, cost')
+inf = float("inf")
+Edge = namedtuple("Edge", "start, end, cost")
 
 
 def make_edge(start, end, cost=1):
@@ -23,7 +23,7 @@ class Graph:
         # let's check that the data is right
         wrong_edges = [i for i in edges if len(i) not in [2, 3]]
         if wrong_edges:
-            raise ValueError('Wrong edges data: {}'.format(wrong_edges))
+            raise ValueError("Wrong edges data: {}".format(wrong_edges))
 
         self.edges = [make_edge(*edge) for edge in edges]
 
@@ -32,9 +32,7 @@ class Graph:
         return set(
             # this piece of magic turns ([1,2], [3,4]) into [1, 2, 3, 4]
             # the set above makes it's elements unique.
-            sum(
-                ([edge.start, edge.end] for edge in self.edges), []
-            )
+            sum(([edge.start, edge.end] for edge in self.edges), [])
         )
 
     def get_node_pairs(self, n1, n2, both_ends=True):
@@ -55,7 +53,7 @@ class Graph:
         node_pairs = self.get_node_pairs(n1, n2, both_ends)
         for edge in self.edges:
             if [edge.start, edge.end] in node_pairs:
-                return ValueError('Edge {} {} already exists'.format(n1, n2))
+                return ValueError("Edge {} {} already exists".format(n1, n2))
 
         self.edges.append(Edge(start=n1, end=n2, cost=cost))
         if both_ends:
@@ -70,24 +68,21 @@ class Graph:
         return neighbours
 
     def dijkstra(self, source, dest):
-        assert source in self.vertices, 'Such source node doesn\'t exist'
-        assert dest in self.vertices, 'Such source node doesn\'t exis'
+        assert source in self.vertices, "Such source node doesn't exist"
+        assert dest in self.vertices, "Such source node doesn't exis"
 
         # 1. Mark all nodes unvisited and store them.
         # 2. Set the distance to zero for our initial node
         # and to infinity for other nodes.
         distances = {vertex: inf for vertex in self.vertices}
-        previous_vertices = {
-            vertex: None for vertex in self.vertices
-        }
+        previous_vertices = {vertex: None for vertex in self.vertices}
         distances[source] = 0
         vertices = self.vertices.copy()
 
         while vertices:
             # 3. Select the unvisited node with the smallest distance,
             # it's current node now.
-            current_vertex = min(
-                vertices, key=lambda vertex: distances[vertex])
+            current_vertex = min(vertices, key=lambda vertex: distances[vertex])
 
             # 6. Stop, if the smallest distance
             # among the unvisited nodes is infinity.
@@ -118,10 +113,19 @@ class Graph:
         return path
 
 
-if __name__ == '__main__':
-    graph = Graph([
-        ("a", "b", 7), ("a", "c", 9), ("a", "f", 14), ("b", "c", 10),
-        ("b", "d", 15), ("c", "d", 11), ("c", "f", 2), ("d", "e", 6),
-        ("e", "f", 9)])
+if __name__ == "__main__":
+    graph = Graph(
+        [
+            ("a", "b", 7),
+            ("a", "c", 9),
+            ("a", "f", 14),
+            ("b", "c", 10),
+            ("b", "d", 15),
+            ("c", "d", 11),
+            ("c", "f", 2),
+            ("d", "e", 6),
+            ("e", "f", 9),
+        ]
+    )
 
     print(graph.dijkstra("a", "e"))

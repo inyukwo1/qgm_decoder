@@ -13,8 +13,8 @@ def serializedATN():
         buf.write("\4\16\t\16\4\17\t\17\4\20\t\20\4\21\t\21\4\22\t\22\4\23")
         buf.write("\t\23\4\24\t\24\4\25\t\25\4\26\t\26\4\27\t\27\4\30\t\30")
         buf.write("\4\31\t\31\4\32\t\32\4\33\t\33\4\34\t\34\4\35\t\35\4\36")
-        buf.write("\t\36\4\37\t\37\4 \t \4!\t!\4\"\t\"\4#\t#\4$\t$\4%\t%")
-        buf.write("\4&\t&\4\'\t\'\4(\t(\4)\t)\4*\t*\4+\t+\4,\t,\4-\t-\4.")
+        buf.write('\t\36\4\37\t\37\4 \t \4!\t!\4"\t"\4#\t#\4$\t$\4%\t%')
+        buf.write("\4&\t&\4'\t'\4(\t(\4)\t)\4*\t*\4+\t+\4,\t,\4-\t-\4.")
         buf.write("\t.\4/\t/\4\60\t\60\4\61\t\61\4\62\t\62\4\63\t\63\4\64")
         buf.write("\t\64\4\65\t\65\4\66\t\66\4\67\t\67\48\t8\49\t9\4:\t:")
         buf.write("\4;\t;\4<\t<\4=\t=\4>\t>\4?\t?\4@\t@\4A\tA\4B\tB\4C\t")
@@ -49,10 +49,10 @@ def serializedATN():
         buf.write("\3\31\3\31\3\32\3\32\3\32\3\32\3\32\3\32\3\33\3\33\3\33")
         buf.write("\3\33\3\33\3\33\3\33\3\34\3\34\3\34\3\34\3\35\3\35\3\35")
         buf.write("\3\35\3\35\3\35\3\36\3\36\3\36\3\36\3\37\3\37\3\37\3\37")
-        buf.write("\3\37\3\37\3 \3 \3 \3 \3 \3 \3 \3 \3!\3!\3!\3!\3\"\3\"")
-        buf.write("\3\"\3#\3#\3#\3#\3$\3$\3$\3$\3$\3$\3$\3%\3%\3%\3%\3%\3")
-        buf.write("%\3%\3%\3%\3%\3%\3%\3%\3%\3&\3&\3&\3&\3&\3&\3&\3\'\3\'")
-        buf.write("\3\'\3\'\3\'\3\'\3(\3(\3(\3(\3(\3(\3(\3(\3)\3)\3)\3*\3")
+        buf.write('\3\37\3\37\3 \3 \3 \3 \3 \3 \3 \3 \3!\3!\3!\3!\3"\3"')
+        buf.write('\3"\3#\3#\3#\3#\3$\3$\3$\3$\3$\3$\3$\3%\3%\3%\3%\3%\3')
+        buf.write("%\3%\3%\3%\3%\3%\3%\3%\3%\3&\3&\3&\3&\3&\3&\3&\3'\3'")
+        buf.write("\3'\3'\3'\3'\3(\3(\3(\3(\3(\3(\3(\3(\3)\3)\3)\3*\3")
         buf.write("*\3*\3*\3*\3*\3*\3*\3+\3+\3+\3+\3+\3,\3,\3,\3,\3,\3-\3")
         buf.write("-\3-\3-\3-\3-\3.\3.\3.\3.\3.\3.\3.\3.\3/\3/\3/\3/\3/\3")
         buf.write("/\3/\3\60\3\60\3\60\3\60\3\60\3\60\3\60\3\61\3\61\3\61")
@@ -144,8 +144,8 @@ def serializedATN():
         buf.write("\3\u00b5\3\u00b6\3\u00b6\3\u00b7\3\u00b7\3\u00b8\3\u00b8")
         buf.write("\3\u00b9\3\u00b9\3\u0568\2\u00ba\3\3\5\4\7\5\t\6\13\7")
         buf.write("\r\b\17\t\21\n\23\13\25\f\27\r\31\16\33\17\35\20\37\21")
-        buf.write("!\22#\23%\24\'\25)\26+\27-\30/\31\61\32\63\33\65\34\67")
-        buf.write("\359\36;\37= ?!A\"C#E$G%I&K\'M(O)Q*S+U,W-Y.[/]\60_\61")
+        buf.write("!\22#\23%\24'\25)\26+\27-\30/\31\61\32\63\33\65\34\67")
+        buf.write("\359\36;\37= ?!A\"C#E$G%I&K'M(O)Q*S+U,W-Y.[/]\60_\61")
         buf.write("a\62c\63e\64g\65i\66k\67m8o9q:s;u<w=y>{?}@\177A\u0081")
         buf.write("B\u0083C\u0085D\u0087E\u0089F\u008bG\u008dH\u008fI\u0091")
         buf.write("J\u0093K\u0095L\u0097M\u0099N\u009bO\u009dP\u009fQ\u00a1")
@@ -165,9 +165,9 @@ def serializedATN():
         buf.write("\2\u0141\2\u0143\2\u0145\2\u0147\2\u0149\2\u014b\2\u014d")
         buf.write("\2\u014f\2\u0151\2\u0153\2\u0155\2\u0157\2\u0159\2\u015b")
         buf.write("\2\u015d\2\u015f\2\u0161\2\u0163\2\u0165\2\u0167\2\u0169")
-        buf.write("\2\u016b\2\u016d\2\u016f\2\u0171\2\3\2\'\3\2$$\3\2bb\3")
+        buf.write("\2\u016b\2\u016d\2\u016f\2\u0171\2\3\2'\3\2$$\3\2bb\3")
         buf.write("\2__\5\2C\\aac|\6\2\62;C\\aac|\4\2--//\5\2&&<<BB\3\2)")
-        buf.write(")\4\2\f\f\17\17\5\2\13\r\17\17\"\"\3\2\62;\4\2CCcc\4\2")
+        buf.write(')\4\2\f\f\17\17\5\2\13\r\17\17""\3\2\62;\4\2CCcc\4\2')
         buf.write("DDdd\4\2EEee\4\2FFff\4\2GGgg\4\2HHhh\4\2IIii\4\2JJjj\4")
         buf.write("\2KKkk\4\2LLll\4\2MMmm\4\2NNnn\4\2OOoo\4\2PPpp\4\2QQq")
         buf.write("q\4\2RRrr\4\2SSss\4\2TTtt\4\2UUuu\4\2VVvv\4\2WWww\4\2")
@@ -176,7 +176,7 @@ def serializedATN():
         buf.write("\2\r\3\2\2\2\2\17\3\2\2\2\2\21\3\2\2\2\2\23\3\2\2\2\2")
         buf.write("\25\3\2\2\2\2\27\3\2\2\2\2\31\3\2\2\2\2\33\3\2\2\2\2\35")
         buf.write("\3\2\2\2\2\37\3\2\2\2\2!\3\2\2\2\2#\3\2\2\2\2%\3\2\2\2")
-        buf.write("\2\'\3\2\2\2\2)\3\2\2\2\2+\3\2\2\2\2-\3\2\2\2\2/\3\2\2")
+        buf.write("\2'\3\2\2\2\2)\3\2\2\2\2+\3\2\2\2\2-\3\2\2\2\2/\3\2\2")
         buf.write("\2\2\61\3\2\2\2\2\63\3\2\2\2\2\65\3\2\2\2\2\67\3\2\2\2")
         buf.write("\29\3\2\2\2\2;\3\2\2\2\2=\3\2\2\2\2?\3\2\2\2\2A\3\2\2")
         buf.write("\2\2C\3\2\2\2\2E\3\2\2\2\2G\3\2\2\2\2I\3\2\2\2\2K\3\2")
@@ -217,7 +217,7 @@ def serializedATN():
         buf.write("\u017d\3\2\2\2\17\u017f\3\2\2\2\21\u0181\3\2\2\2\23\u0183")
         buf.write("\3\2\2\2\25\u0185\3\2\2\2\27\u0187\3\2\2\2\31\u018a\3")
         buf.write("\2\2\2\33\u018c\3\2\2\2\35\u018e\3\2\2\2\37\u0191\3\2")
-        buf.write("\2\2!\u0194\3\2\2\2#\u0196\3\2\2\2%\u0198\3\2\2\2\'\u019a")
+        buf.write("\2\2!\u0194\3\2\2\2#\u0196\3\2\2\2%\u0198\3\2\2\2'\u019a")
         buf.write("\3\2\2\2)\u019d\3\2\2\2+\u019f\3\2\2\2-\u01a2\3\2\2\2")
         buf.write("/\u01a5\3\2\2\2\61\u01a8\3\2\2\2\63\u01ab\3\2\2\2\65\u01b1")
         buf.write("\3\2\2\2\67\u01b8\3\2\2\29\u01bc\3\2\2\2;\u01c2\3\2\2")
@@ -283,9 +283,9 @@ def serializedATN():
         buf.write("/\2\2\u0184\24\3\2\2\2\u0185\u0186\7\u0080\2\2\u0186\26")
         buf.write("\3\2\2\2\u0187\u0188\7~\2\2\u0188\u0189\7~\2\2\u0189\30")
         buf.write("\3\2\2\2\u018a\u018b\7\61\2\2\u018b\32\3\2\2\2\u018c\u018d")
-        buf.write("\7\'\2\2\u018d\34\3\2\2\2\u018e\u018f\7>\2\2\u018f\u0190")
+        buf.write("\7'\2\2\u018d\34\3\2\2\2\u018e\u018f\7>\2\2\u018f\u0190")
         buf.write("\7>\2\2\u0190\36\3\2\2\2\u0191\u0192\7@\2\2\u0192\u0193")
-        buf.write("\7@\2\2\u0193 \3\2\2\2\u0194\u0195\7(\2\2\u0195\"\3\2")
+        buf.write('\7@\2\2\u0193 \3\2\2\2\u0194\u0195\7(\2\2\u0195"\3\2')
         buf.write("\2\2\u0196\u0197\7~\2\2\u0197$\3\2\2\2\u0198\u0199\7>")
         buf.write("\2\2\u0199&\3\2\2\2\u019a\u019b\7>\2\2\u019b\u019c\7?")
         buf.write("\2\2\u019c(\3\2\2\2\u019d\u019e\7@\2\2\u019e*\3\2\2\2")
@@ -768,7 +768,7 @@ def serializedATN():
         buf.write("\u059b\t\35\2\2\u059b\u0160\3\2\2\2\u059c\u059d\t\36\2")
         buf.write("\2\u059d\u0162\3\2\2\2\u059e\u059f\t\37\2\2\u059f\u0164")
         buf.write("\3\2\2\2\u05a0\u05a1\t \2\2\u05a1\u0166\3\2\2\2\u05a2")
-        buf.write("\u05a3\t!\2\2\u05a3\u0168\3\2\2\2\u05a4\u05a5\t\"\2\2")
+        buf.write('\u05a3\t!\2\2\u05a3\u0168\3\2\2\2\u05a4\u05a5\t"\2\2')
         buf.write("\u05a5\u016a\3\2\2\2\u05a6\u05a7\t#\2\2\u05a7\u016c\3")
         buf.write("\2\2\2\u05a8\u05a9\t$\2\2\u05a9\u016e\3\2\2\2\u05aa\u05ab")
         buf.write("\t%\2\2\u05ab\u0170\3\2\2\2\u05ac\u05ad\t&\2\2\u05ad\u0172")
@@ -783,7 +783,7 @@ class SQLiteLexer(Lexer):
 
     atn = ATNDeserializer().deserialize(serializedATN())
 
-    decisionsToDFA = [ DFA(ds, i) for i, ds in enumerate(atn.decisionToState) ]
+    decisionsToDFA = [DFA(ds, i) for i, ds in enumerate(atn.decisionToState)]
 
     SCOL = 1
     DOT = 2
@@ -943,86 +943,393 @@ class SQLiteLexer(Lexer):
     SPACES = 156
     UNEXPECTED_CHAR = 157
 
-    channelNames = [ u"DEFAULT_TOKEN_CHANNEL", u"HIDDEN" ]
+    channelNames = [u"DEFAULT_TOKEN_CHANNEL", u"HIDDEN"]
 
-    modeNames = [ "DEFAULT_MODE" ]
+    modeNames = ["DEFAULT_MODE"]
 
-    literalNames = [ "<INVALID>",
-            "';'", "'.'", "'('", "')'", "','", "'='", "'*'", "'+'", "'-'", 
-            "'~'", "'||'", "'/'", "'%'", "'<<'", "'>>'", "'&'", "'|'", "'<'", 
-            "'<='", "'>'", "'>='", "'=='", "'!='", "'<>'" ]
+    literalNames = [
+        "<INVALID>",
+        "';'",
+        "'.'",
+        "'('",
+        "')'",
+        "','",
+        "'='",
+        "'*'",
+        "'+'",
+        "'-'",
+        "'~'",
+        "'||'",
+        "'/'",
+        "'%'",
+        "'<<'",
+        "'>>'",
+        "'&'",
+        "'|'",
+        "'<'",
+        "'<='",
+        "'>'",
+        "'>='",
+        "'=='",
+        "'!='",
+        "'<>'",
+    ]
 
-    symbolicNames = [ "<INVALID>",
-            "SCOL", "DOT", "OPEN_PAR", "CLOSE_PAR", "COMMA", "ASSIGN", "STAR", 
-            "PLUS", "MINUS", "TILDE", "PIPE2", "DIV", "MOD", "LT2", "GT2", 
-            "AMP", "PIPE", "LT", "LT_EQ", "GT", "GT_EQ", "EQ", "NOT_EQ1", 
-            "NOT_EQ2", "K_ABORT", "K_ACTION", "K_ADD", "K_AFTER", "K_ALL", 
-            "K_ALTER", "K_ANALYZE", "K_AND", "K_AS", "K_ASC", "K_ATTACH", 
-            "K_AUTOINCREMENT", "K_BEFORE", "K_BEGIN", "K_BETWEEN", "K_BY", 
-            "K_CASCADE", "K_CASE", "K_CAST", "K_CHECK", "K_COLLATE", "K_COLUMN", 
-            "K_COMMIT", "K_CONFLICT", "K_CONSTRAINT", "K_CREATE", "K_CROSS", 
-            "K_CURRENT_DATE", "K_CURRENT_TIME", "K_CURRENT_TIMESTAMP", "K_DATABASE", 
-            "K_DEFAULT", "K_DEFERRABLE", "K_DEFERRED", "K_DELETE", "K_DESC", 
-            "K_DETACH", "K_DISTINCT", "K_DROP", "K_EACH", "K_ELSE", "K_END", 
-            "K_ESCAPE", "K_EXCEPT", "K_EXCLUSIVE", "K_EXISTS", "K_EXPLAIN", 
-            "K_FAIL", "K_FOR", "K_FOREIGN", "K_FROM", "K_FULL", "K_GLOB", 
-            "K_GROUP", "K_HAVING", "K_IF", "K_IGNORE", "K_IMMEDIATE", "K_IN", 
-            "K_INDEX", "K_INDEXED", "K_INITIALLY", "K_INNER", "K_INSERT", 
-            "K_INSTEAD", "K_INTERSECT", "K_INTO", "K_IS", "K_ISNULL", "K_JOIN", 
-            "K_KEY", "K_LEFT", "K_LIKE", "K_LIMIT", "K_MATCH", "K_NATURAL", 
-            "K_NO", "K_NOT", "K_NOTNULL", "K_NULL", "K_OF", "K_OFFSET", 
-            "K_ON", "K_OR", "K_ORDER", "K_OUTER", "K_PLAN", "K_PRAGMA", 
-            "K_PRIMARY", "K_QUERY", "K_RAISE", "K_RECURSIVE", "K_REFERENCES", 
-            "K_REGEXP", "K_REINDEX", "K_RELEASE", "K_RENAME", "K_REPLACE", 
-            "K_RESTRICT", "K_RIGHT", "K_ROLLBACK", "K_ROW", "K_SAVEPOINT", 
-            "K_SELECT", "K_SET", "K_TABLE", "K_TEMP", "K_TEMPORARY", "K_THEN", 
-            "K_TO", "K_TRANSACTION", "K_TRIGGER", "K_UNION", "K_UNIQUE", 
-            "K_UPDATE", "K_USING", "K_VACUUM", "K_VALUES", "K_VIEW", "K_VIRTUAL", 
-            "K_WHEN", "K_WHERE", "K_WITH", "K_WITHOUT", "IDENTIFIER", "NUMERIC_LITERAL", 
-            "BIND_PARAMETER", "STRING_LITERAL", "BLOB_LITERAL", "SINGLE_LINE_COMMENT", 
-            "MULTILINE_COMMENT", "SPACES", "UNEXPECTED_CHAR" ]
+    symbolicNames = [
+        "<INVALID>",
+        "SCOL",
+        "DOT",
+        "OPEN_PAR",
+        "CLOSE_PAR",
+        "COMMA",
+        "ASSIGN",
+        "STAR",
+        "PLUS",
+        "MINUS",
+        "TILDE",
+        "PIPE2",
+        "DIV",
+        "MOD",
+        "LT2",
+        "GT2",
+        "AMP",
+        "PIPE",
+        "LT",
+        "LT_EQ",
+        "GT",
+        "GT_EQ",
+        "EQ",
+        "NOT_EQ1",
+        "NOT_EQ2",
+        "K_ABORT",
+        "K_ACTION",
+        "K_ADD",
+        "K_AFTER",
+        "K_ALL",
+        "K_ALTER",
+        "K_ANALYZE",
+        "K_AND",
+        "K_AS",
+        "K_ASC",
+        "K_ATTACH",
+        "K_AUTOINCREMENT",
+        "K_BEFORE",
+        "K_BEGIN",
+        "K_BETWEEN",
+        "K_BY",
+        "K_CASCADE",
+        "K_CASE",
+        "K_CAST",
+        "K_CHECK",
+        "K_COLLATE",
+        "K_COLUMN",
+        "K_COMMIT",
+        "K_CONFLICT",
+        "K_CONSTRAINT",
+        "K_CREATE",
+        "K_CROSS",
+        "K_CURRENT_DATE",
+        "K_CURRENT_TIME",
+        "K_CURRENT_TIMESTAMP",
+        "K_DATABASE",
+        "K_DEFAULT",
+        "K_DEFERRABLE",
+        "K_DEFERRED",
+        "K_DELETE",
+        "K_DESC",
+        "K_DETACH",
+        "K_DISTINCT",
+        "K_DROP",
+        "K_EACH",
+        "K_ELSE",
+        "K_END",
+        "K_ESCAPE",
+        "K_EXCEPT",
+        "K_EXCLUSIVE",
+        "K_EXISTS",
+        "K_EXPLAIN",
+        "K_FAIL",
+        "K_FOR",
+        "K_FOREIGN",
+        "K_FROM",
+        "K_FULL",
+        "K_GLOB",
+        "K_GROUP",
+        "K_HAVING",
+        "K_IF",
+        "K_IGNORE",
+        "K_IMMEDIATE",
+        "K_IN",
+        "K_INDEX",
+        "K_INDEXED",
+        "K_INITIALLY",
+        "K_INNER",
+        "K_INSERT",
+        "K_INSTEAD",
+        "K_INTERSECT",
+        "K_INTO",
+        "K_IS",
+        "K_ISNULL",
+        "K_JOIN",
+        "K_KEY",
+        "K_LEFT",
+        "K_LIKE",
+        "K_LIMIT",
+        "K_MATCH",
+        "K_NATURAL",
+        "K_NO",
+        "K_NOT",
+        "K_NOTNULL",
+        "K_NULL",
+        "K_OF",
+        "K_OFFSET",
+        "K_ON",
+        "K_OR",
+        "K_ORDER",
+        "K_OUTER",
+        "K_PLAN",
+        "K_PRAGMA",
+        "K_PRIMARY",
+        "K_QUERY",
+        "K_RAISE",
+        "K_RECURSIVE",
+        "K_REFERENCES",
+        "K_REGEXP",
+        "K_REINDEX",
+        "K_RELEASE",
+        "K_RENAME",
+        "K_REPLACE",
+        "K_RESTRICT",
+        "K_RIGHT",
+        "K_ROLLBACK",
+        "K_ROW",
+        "K_SAVEPOINT",
+        "K_SELECT",
+        "K_SET",
+        "K_TABLE",
+        "K_TEMP",
+        "K_TEMPORARY",
+        "K_THEN",
+        "K_TO",
+        "K_TRANSACTION",
+        "K_TRIGGER",
+        "K_UNION",
+        "K_UNIQUE",
+        "K_UPDATE",
+        "K_USING",
+        "K_VACUUM",
+        "K_VALUES",
+        "K_VIEW",
+        "K_VIRTUAL",
+        "K_WHEN",
+        "K_WHERE",
+        "K_WITH",
+        "K_WITHOUT",
+        "IDENTIFIER",
+        "NUMERIC_LITERAL",
+        "BIND_PARAMETER",
+        "STRING_LITERAL",
+        "BLOB_LITERAL",
+        "SINGLE_LINE_COMMENT",
+        "MULTILINE_COMMENT",
+        "SPACES",
+        "UNEXPECTED_CHAR",
+    ]
 
-    ruleNames = [ "SCOL", "DOT", "OPEN_PAR", "CLOSE_PAR", "COMMA", "ASSIGN", 
-                  "STAR", "PLUS", "MINUS", "TILDE", "PIPE2", "DIV", "MOD", 
-                  "LT2", "GT2", "AMP", "PIPE", "LT", "LT_EQ", "GT", "GT_EQ", 
-                  "EQ", "NOT_EQ1", "NOT_EQ2", "K_ABORT", "K_ACTION", "K_ADD", 
-                  "K_AFTER", "K_ALL", "K_ALTER", "K_ANALYZE", "K_AND", "K_AS", 
-                  "K_ASC", "K_ATTACH", "K_AUTOINCREMENT", "K_BEFORE", "K_BEGIN", 
-                  "K_BETWEEN", "K_BY", "K_CASCADE", "K_CASE", "K_CAST", 
-                  "K_CHECK", "K_COLLATE", "K_COLUMN", "K_COMMIT", "K_CONFLICT", 
-                  "K_CONSTRAINT", "K_CREATE", "K_CROSS", "K_CURRENT_DATE", 
-                  "K_CURRENT_TIME", "K_CURRENT_TIMESTAMP", "K_DATABASE", 
-                  "K_DEFAULT", "K_DEFERRABLE", "K_DEFERRED", "K_DELETE", 
-                  "K_DESC", "K_DETACH", "K_DISTINCT", "K_DROP", "K_EACH", 
-                  "K_ELSE", "K_END", "K_ESCAPE", "K_EXCEPT", "K_EXCLUSIVE", 
-                  "K_EXISTS", "K_EXPLAIN", "K_FAIL", "K_FOR", "K_FOREIGN", 
-                  "K_FROM", "K_FULL", "K_GLOB", "K_GROUP", "K_HAVING", "K_IF", 
-                  "K_IGNORE", "K_IMMEDIATE", "K_IN", "K_INDEX", "K_INDEXED", 
-                  "K_INITIALLY", "K_INNER", "K_INSERT", "K_INSTEAD", "K_INTERSECT", 
-                  "K_INTO", "K_IS", "K_ISNULL", "K_JOIN", "K_KEY", "K_LEFT", 
-                  "K_LIKE", "K_LIMIT", "K_MATCH", "K_NATURAL", "K_NO", "K_NOT", 
-                  "K_NOTNULL", "K_NULL", "K_OF", "K_OFFSET", "K_ON", "K_OR", 
-                  "K_ORDER", "K_OUTER", "K_PLAN", "K_PRAGMA", "K_PRIMARY", 
-                  "K_QUERY", "K_RAISE", "K_RECURSIVE", "K_REFERENCES", "K_REGEXP", 
-                  "K_REINDEX", "K_RELEASE", "K_RENAME", "K_REPLACE", "K_RESTRICT", 
-                  "K_RIGHT", "K_ROLLBACK", "K_ROW", "K_SAVEPOINT", "K_SELECT", 
-                  "K_SET", "K_TABLE", "K_TEMP", "K_TEMPORARY", "K_THEN", 
-                  "K_TO", "K_TRANSACTION", "K_TRIGGER", "K_UNION", "K_UNIQUE", 
-                  "K_UPDATE", "K_USING", "K_VACUUM", "K_VALUES", "K_VIEW", 
-                  "K_VIRTUAL", "K_WHEN", "K_WHERE", "K_WITH", "K_WITHOUT", 
-                  "IDENTIFIER", "NUMERIC_LITERAL", "BIND_PARAMETER", "STRING_LITERAL", 
-                  "BLOB_LITERAL", "SINGLE_LINE_COMMENT", "MULTILINE_COMMENT", 
-                  "SPACES", "UNEXPECTED_CHAR", "DIGIT", "A", "B", "C", "D", 
-                  "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", 
-                  "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z" ]
+    ruleNames = [
+        "SCOL",
+        "DOT",
+        "OPEN_PAR",
+        "CLOSE_PAR",
+        "COMMA",
+        "ASSIGN",
+        "STAR",
+        "PLUS",
+        "MINUS",
+        "TILDE",
+        "PIPE2",
+        "DIV",
+        "MOD",
+        "LT2",
+        "GT2",
+        "AMP",
+        "PIPE",
+        "LT",
+        "LT_EQ",
+        "GT",
+        "GT_EQ",
+        "EQ",
+        "NOT_EQ1",
+        "NOT_EQ2",
+        "K_ABORT",
+        "K_ACTION",
+        "K_ADD",
+        "K_AFTER",
+        "K_ALL",
+        "K_ALTER",
+        "K_ANALYZE",
+        "K_AND",
+        "K_AS",
+        "K_ASC",
+        "K_ATTACH",
+        "K_AUTOINCREMENT",
+        "K_BEFORE",
+        "K_BEGIN",
+        "K_BETWEEN",
+        "K_BY",
+        "K_CASCADE",
+        "K_CASE",
+        "K_CAST",
+        "K_CHECK",
+        "K_COLLATE",
+        "K_COLUMN",
+        "K_COMMIT",
+        "K_CONFLICT",
+        "K_CONSTRAINT",
+        "K_CREATE",
+        "K_CROSS",
+        "K_CURRENT_DATE",
+        "K_CURRENT_TIME",
+        "K_CURRENT_TIMESTAMP",
+        "K_DATABASE",
+        "K_DEFAULT",
+        "K_DEFERRABLE",
+        "K_DEFERRED",
+        "K_DELETE",
+        "K_DESC",
+        "K_DETACH",
+        "K_DISTINCT",
+        "K_DROP",
+        "K_EACH",
+        "K_ELSE",
+        "K_END",
+        "K_ESCAPE",
+        "K_EXCEPT",
+        "K_EXCLUSIVE",
+        "K_EXISTS",
+        "K_EXPLAIN",
+        "K_FAIL",
+        "K_FOR",
+        "K_FOREIGN",
+        "K_FROM",
+        "K_FULL",
+        "K_GLOB",
+        "K_GROUP",
+        "K_HAVING",
+        "K_IF",
+        "K_IGNORE",
+        "K_IMMEDIATE",
+        "K_IN",
+        "K_INDEX",
+        "K_INDEXED",
+        "K_INITIALLY",
+        "K_INNER",
+        "K_INSERT",
+        "K_INSTEAD",
+        "K_INTERSECT",
+        "K_INTO",
+        "K_IS",
+        "K_ISNULL",
+        "K_JOIN",
+        "K_KEY",
+        "K_LEFT",
+        "K_LIKE",
+        "K_LIMIT",
+        "K_MATCH",
+        "K_NATURAL",
+        "K_NO",
+        "K_NOT",
+        "K_NOTNULL",
+        "K_NULL",
+        "K_OF",
+        "K_OFFSET",
+        "K_ON",
+        "K_OR",
+        "K_ORDER",
+        "K_OUTER",
+        "K_PLAN",
+        "K_PRAGMA",
+        "K_PRIMARY",
+        "K_QUERY",
+        "K_RAISE",
+        "K_RECURSIVE",
+        "K_REFERENCES",
+        "K_REGEXP",
+        "K_REINDEX",
+        "K_RELEASE",
+        "K_RENAME",
+        "K_REPLACE",
+        "K_RESTRICT",
+        "K_RIGHT",
+        "K_ROLLBACK",
+        "K_ROW",
+        "K_SAVEPOINT",
+        "K_SELECT",
+        "K_SET",
+        "K_TABLE",
+        "K_TEMP",
+        "K_TEMPORARY",
+        "K_THEN",
+        "K_TO",
+        "K_TRANSACTION",
+        "K_TRIGGER",
+        "K_UNION",
+        "K_UNIQUE",
+        "K_UPDATE",
+        "K_USING",
+        "K_VACUUM",
+        "K_VALUES",
+        "K_VIEW",
+        "K_VIRTUAL",
+        "K_WHEN",
+        "K_WHERE",
+        "K_WITH",
+        "K_WITHOUT",
+        "IDENTIFIER",
+        "NUMERIC_LITERAL",
+        "BIND_PARAMETER",
+        "STRING_LITERAL",
+        "BLOB_LITERAL",
+        "SINGLE_LINE_COMMENT",
+        "MULTILINE_COMMENT",
+        "SPACES",
+        "UNEXPECTED_CHAR",
+        "DIGIT",
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H",
+        "I",
+        "J",
+        "K",
+        "L",
+        "M",
+        "N",
+        "O",
+        "P",
+        "Q",
+        "R",
+        "S",
+        "T",
+        "U",
+        "V",
+        "W",
+        "X",
+        "Y",
+        "Z",
+    ]
 
     grammarFileName = "SQLite.g4"
 
-    def __init__(self, input=None, output:TextIO = sys.stdout):
+    def __init__(self, input=None, output: TextIO = sys.stdout):
         super().__init__(input, output)
         self.checkVersion("4.7.1")
-        self._interp = LexerATNSimulator(self, self.atn, self.decisionsToDFA, PredictionContextCache())
+        self._interp = LexerATNSimulator(
+            self, self.atn, self.decisionsToDFA, PredictionContextCache()
+        )
         self._actions = None
         self._predicates = None
-
-

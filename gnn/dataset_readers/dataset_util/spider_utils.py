@@ -14,12 +14,14 @@ from gnn.spider_evaluation.process_sql import get_tables_with_alias, parse_sql
 
 
 class TableColumn:
-    def __init__(self,
-                 name: str,
-                 text: str,
-                 column_type: str,
-                 is_primary_key: bool,
-                 foreign_key: Optional[str]):
+    def __init__(
+        self,
+        name: str,
+        text: str,
+        column_type: str,
+        is_primary_key: bool,
+        foreign_key: Optional[str],
+    ):
         self.name = name
         self.text = text
         self.column_type = column_type
@@ -28,10 +30,7 @@ class TableColumn:
 
 
 class Table:
-    def __init__(self,
-                 name: str,
-                 text: str,
-                 columns: List[TableColumn]):
+    def __init__(self, name: str, text: str, columns: List[TableColumn]):
         self.name = name
         self.text = text
         self.columns = columns
@@ -41,32 +40,36 @@ def read_dataset_schema(schema_path: str) -> Dict[str, List[Table]]:
     schemas: Dict[str, Dict[str, Table]] = defaultdict(dict)
     dbs_json_blob = json.load(open(schema_path, "r"))
     for db in dbs_json_blob:
-        db_id = db['db_id']
+        db_id = db["db_id"]
 
         column_id_to_table = {}
         column_id_to_column = {}
 
-        for i, (column, text, column_type) in enumerate(zip(db['column_names_original'], db['column_names'], db['column_types'])):
+        for i, (column, text, column_type) in enumerate(
+            zip(db["column_names_original"], db["column_names"], db["column_types"])
+        ):
             table_id, column_name = column
             _, column_text = text
 
-            table_name = db['table_names_original'][table_id]
+            table_name = db["table_names_original"][table_id]
 
             if table_name not in schemas[db_id]:
-                table_text = db['table_names'][table_id]
+                table_text = db["table_names"][table_id]
                 schemas[db_id][table_name] = Table(table_name, table_text, [])
 
             if column_name == "*":
                 continue
 
-            is_primary_key = i in db['primary_keys']
-            table_column = TableColumn(column_name.lower(), column_text, column_type, is_primary_key, None)
+            is_primary_key = i in db["primary_keys"]
+            table_column = TableColumn(
+                column_name.lower(), column_text, column_type, is_primary_key, None
+            )
             schemas[db_id][table_name].columns.append(table_column)
             column_id_to_table[i] = table_name
             column_id_to_column[i] = table_column
 
-        for (c1, c2) in db['foreign_keys']:
-            foreign_key = column_id_to_table[c2] + ':' + column_id_to_column[c2].name
+        for (c1, c2) in db["foreign_keys"]:
+            foreign_key = column_id_to_table[c2] + ":" + column_id_to_column[c2].name
             column_id_to_column[c1].foreign_key = foreign_key
 
     return {**schemas}
@@ -88,7 +91,7 @@ def read_dataset_values(db_id: str, dataset_path: str, tables: List[str]):
             cursor.execute(f"SELECT * FROM {table.name} LIMIT 5000")
             values[table] = cursor.fetchall()
         except:
-            conn.text_factory = lambda x: str(x, 'latin1')
+            conn.text_factory = lambda x: str(x, "latin1")
             cursor = conn.cursor()
             cursor.execute(f"SELECT * FROM {table.name} LIMIT 5000")
             values[table] = cursor.fetchall()
@@ -97,12 +100,12 @@ def read_dataset_values(db_id: str, dataset_path: str, tables: List[str]):
 
 
 def ent_key_to_name(key):
-    parts = key.split(':')
-    if parts[0] == 'table':
+    parts = key.split(":")
+    if parts[0] == "table":
         return parts[1]
-    elif parts[0] == 'column':
+    elif parts[0] == "column":
         _, _, table_name, column_name = parts
-        return f'{table_name}@{column_name}'
+        return f"{table_name}@{column_name}"
     else:
         return parts[1]
 
@@ -115,7 +118,8 @@ def fix_number_value(ex: JsonDict):
     """
 
     def split_and_keep(s, sep):
-        if not s: return ['']  # consistent with string.split()
+        if not s:
+            return [""]  # consistent with string.split()
 
         # Find replacement character that is not used in string
         # i.e. just use the highest available character plus one
@@ -125,26 +129,33 @@ def fix_number_value(ex: JsonDict):
         return s.replace(sep, p + sep + p).split(p)
 
     # input is tokenized in different ways... so first try to make splits equal
-    query_toks = ex['query_toks']
-    ex['query_toks'] = []
+    query_toks = ex["query_toks"]
+    ex["query_toks"] = []
     for q in query_toks:
-        ex['query_toks'] += split_and_keep(q, '.')
+        ex["query_toks"] += split_and_keep(q, ".")
 
     i_val, i_no_val = 0, 0
-    while i_val < len(ex['query_toks']) and i_no_val < len(ex['query_toks_no_value']):
-        if ex['query_toks_no_value'][i_no_val] != 'value':
+    while i_val < len(ex["query_toks"]) and i_no_val < len(ex["query_toks_no_value"]):
+        if ex["query_toks_no_value"][i_no_val] != "value":
             i_val += 1
             i_no_val += 1
             continue
 
         i_val_end = i_val
-        while i_val + 1 < len(ex['query_toks']) and \
-                i_no_val + 1 < len(ex['query_toks_no_value']) and \
-                ex['query_toks'][i_val_end + 1].lower() != ex['query_toks_no_value'][i_no_val + 1].lower():
+        while (
+            i_val + 1 < len(ex["query_toks"])
+            and i_no_val + 1 < len(ex["query_toks_no_value"])
+            and ex["query_toks"][i_val_end + 1].lower()
+            != ex["query_toks_no_value"][i_no_val + 1].lower()
+        ):
             i_val_end += 1
 
-        if i_val == i_val_end and ex['query_toks'][i_val] in ["1", "2", "3"] and ex['query_toks'][i_val - 1].lower() == "limit":
-            ex['query_toks_no_value'][i_no_val] = ex['query_toks'][i_val]
+        if (
+            i_val == i_val_end
+            and ex["query_toks"][i_val] in ["1", "2", "3"]
+            and ex["query_toks"][i_val - 1].lower() == "limit"
+        ):
+            ex["query_toks_no_value"][i_no_val] = ex["query_toks"][i_val]
         i_val = i_val_end
 
         i_val += 1
@@ -156,7 +167,9 @@ def fix_number_value(ex: JsonDict):
 _schemas_cache = None
 
 
-def disambiguate_items(db_id: str, query_toks: List[str], tables_file: str, allow_aliases: bool) -> List[str]:
+def disambiguate_items(
+    db_id: str, query_toks: List[str], tables_file: str, allow_aliases: bool
+) -> List[str]:
     """
     we want the query tokens to be non-ambiguous - so we can change each column name to explicitly
     tell which table it belongs to
@@ -183,13 +196,13 @@ def disambiguate_items(db_id: str, query_toks: List[str], tables_file: str, allo
             return self._idMap
 
         def _map(self, schema, table):
-            column_names_original = table['column_names_original']
-            table_names_original = table['table_names_original']
+            column_names_original = table["column_names_original"]
+            table_names_original = table["table_names_original"]
             # print 'column_names_original: ', column_names_original
             # print 'table_names_original: ', table_names_original
             for i, (tab_id, col) in enumerate(column_names_original):
                 if tab_id == -1:
-                    idMap = {'*': i}
+                    idMap = {"*": i}
                 else:
                     key = table_names_original[tab_id].lower()
                     val = col.lower()
@@ -209,20 +222,24 @@ def disambiguate_items(db_id: str, query_toks: List[str], tables_file: str, allo
 
         with open(fpath) as f:
             data = json.load(f)
-        db_names = [db['db_id'] for db in data]
+        db_names = [db["db_id"] for db in data]
 
         tables = {}
         schemas = {}
         for db in data:
-            db_id = db['db_id']
+            db_id = db["db_id"]
             schema = {}  # {'table': [col.lower, ..., ]} * -> __all__
-            column_names_original = db['column_names_original']
-            table_names_original = db['table_names_original']
-            tables[db_id] = {'column_names_original': column_names_original,
-                             'table_names_original': table_names_original}
+            column_names_original = db["column_names_original"]
+            table_names_original = db["table_names_original"]
+            tables[db_id] = {
+                "column_names_original": column_names_original,
+                "table_names_original": table_names_original,
+            }
             for i, tabn in enumerate(table_names_original):
                 table = str(tabn.lower())
-                cols = [str(col.lower()) for td, col in column_names_original if td == i]
+                cols = [
+                    str(col.lower()) for td, col in column_names_original if td == i
+                ]
                 schema[table] = cols
             schemas[db_id] = schema
 
@@ -236,14 +253,14 @@ def disambiguate_items(db_id: str, query_toks: List[str], tables_file: str, allo
     i = 0
     while i < len(query_toks):
         tok = query_toks[i]
-        if tok == 'value' or tok == "'value'":
+        if tok == "value" or tok == "'value'":
             # TODO: value should alawys be between '/" (remove first if clause)
             new_tok = f'"{tok}"'
-        elif tok in ['!','<','>'] and query_toks[i+1] == '=':
-            new_tok = tok + '='
+        elif tok in ["!", "<", ">"] and query_toks[i + 1] == "=":
+            new_tok = tok + "="
             i += 1
-        elif i+1 < len(query_toks) and query_toks[i+1] == '.':
-            new_tok = ''.join(query_toks[i:i+3])
+        elif i + 1 < len(query_toks) and query_toks[i + 1] == ".":
+            new_tok = "".join(query_toks[i : i + 3])
             i += 2
         else:
             new_tok = tok
@@ -251,32 +268,36 @@ def disambiguate_items(db_id: str, query_toks: List[str], tables_file: str, allo
         i += 1
 
     toks = fixed_toks
-    #print(toks)
-    toks_as, tables_with_alias = get_tables_with_alias(schema.schema, toks, tables[db_id])
-    #print(tables_with_alias)
-    _, sql, mapped_entities = parse_sql(toks_as, 0, tables_with_alias, schema, mapped_entities_fn=lambda: [])
-    #print(sql)
+    # print(toks)
+    toks_as, tables_with_alias = get_tables_with_alias(
+        schema.schema, toks, tables[db_id]
+    )
+    # print(tables_with_alias)
+    _, sql, mapped_entities = parse_sql(
+        toks_as, 0, tables_with_alias, schema, mapped_entities_fn=lambda: []
+    )
+    # print(sql)
 
     for i, new_name in mapped_entities:
         curr_tok = toks_as[i]
-        if '.' in curr_tok and allow_aliases:
-            parts = curr_tok.split('.')
-            assert(len(parts) == 2)
-            toks_as[i] = parts[0] + '.' + new_name
+        if "." in curr_tok and allow_aliases:
+            parts = curr_tok.split(".")
+            assert len(parts) == 2
+            toks_as[i] = parts[0] + "." + new_name
         else:
             toks_as[i] = new_name
-    toks=toks_as
+    toks = toks_as
     if not allow_aliases:
-        new_toks=[]
+        new_toks = []
         for i, tok in enumerate(toks):
-           if i == 0:
-              new_toks.append(tok)
-              continue
-           if toks[i-1] not in ['as'] and tok not in ['as']:
-              new_toks.append(tok)
-        #toks = [tok for tok in toks if tok not in ['as']
-        toks=new_toks
+            if i == 0:
+                new_toks.append(tok)
+                continue
+            if toks[i - 1] not in ["as"] and tok not in ["as"]:
+                new_toks.append(tok)
+        # toks = [tok for tok in toks if tok not in ['as']
+        toks = new_toks
 
-    toks = [f'\'value\'' if tok == '"value"' else tok for tok in toks]
+    toks = [f"'value'" if tok == '"value"' else tok for tok in toks]
 
     return toks

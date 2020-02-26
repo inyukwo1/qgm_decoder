@@ -33,7 +33,7 @@ class Beams(object):
         self.actions = []
         self.action_infos = []
         self.inputs = []
-        self.score = 0.
+        self.score = 0.0
         self.t = 0
         self.is_sketch = is_sketch
         self.sketch_step = 0
@@ -104,7 +104,7 @@ class Beams(object):
                 for t in actions:
                     if type(t) != semQL.C:
                         print(t, end="")
-                print('asd')
+                print("asd")
                 print(action)
                 print(stack[-1])
                 raise RuntimeError("Not the right action")
@@ -153,7 +153,7 @@ class Beams(object):
             if isinstance(prev_action, semQL.Filter):
                 if prev_action.id_c > 11:
                     # Nested Query, only select 1 column
-                    return ['N A']
+                    return ["N A"]
             if self.actions[0].id_c != 3:
                 return [self.actions[3].production]
         return semQL.N._init_grammar()
@@ -188,15 +188,24 @@ class Beams(object):
 
         sel_string = list()
         for i in range(len(sel_actions) // 3):
-            if (sel_actions[i * 3 + 0].id_c, sel_actions[i * 3 + 1].id_c, sel_actions[i * 3 + 2].id_c) in sel_string:
+            if (
+                sel_actions[i * 3 + 0].id_c,
+                sel_actions[i * 3 + 1].id_c,
+                sel_actions[i * 3 + 2].id_c,
+            ) in sel_string:
                 return False
             else:
                 sel_string.append(
-                    (sel_actions[i * 3 + 0].id_c, sel_actions[i * 3 + 1].id_c, sel_actions[i * 3 + 2].id_c))
+                    (
+                        sel_actions[i * 3 + 0].id_c,
+                        sel_actions[i * 3 + 1].id_c,
+                        sel_actions[i * 3 + 2].id_c,
+                    )
+                )
         return True
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test = Beams(is_sketch=True)
     # print(semQL.Root1(1).get_next_action())
     test.actions.append(semQL.Root1(3))

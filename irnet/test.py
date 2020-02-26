@@ -7,29 +7,35 @@ import torch
 import os.path
 
 
-SPIDER_MODEL_PATH="test_models/irnet_spider.model"
+SPIDER_MODEL_PATH = "test_models/irnet_spider.model"
 
 
 def prepare_model_spider():
     if os.path.isfile(SPIDER_MODEL_PATH):
         return
-    download_file_from_google_drive("14KvKDymTVwr14bTADXtfj33GNKK4AgWc", SPIDER_MODEL_PATH)
+    download_file_from_google_drive(
+        "14KvKDymTVwr14bTADXtfj33GNKK4AgWc", SPIDER_MODEL_PATH
+    )
 
 
 def test_evaluation_spider():
     arg_parser = arg.init_arg_parser()
     args = arg.init_config(arg_parser)
     grammar = semQL.Grammar()
-    _, _, val_sql_data, \
-    val_table_data = utils.load_dataset(args.dataset, use_small=True, use_eval_only=True)
+    _, _, val_sql_data, val_table_data = utils.load_dataset(
+        args.dataset, use_small=True, use_eval_only=True
+    )
 
     model = IRNet(args, grammar)
 
-    if args.cuda: model.cuda()
+    if args.cuda:
+        model.cuda()
 
-    pretrained_model = torch.load(SPIDER_MODEL_PATH,
-                                  map_location=lambda storage, loc: storage)
+    pretrained_model = torch.load(
+        SPIDER_MODEL_PATH, map_location=lambda storage, loc: storage
+    )
     import copy
+
     pretrained_modeled = copy.deepcopy(pretrained_model)
     for k in pretrained_model.keys():
         if k not in model.state_dict().keys():
@@ -38,8 +44,9 @@ def test_evaluation_spider():
     model.word_emb = utils.load_word_emb(args.glove_embed_path)
     model.load_state_dict(pretrained_modeled)
 
-    json_datas = utils.epoch_acc(model, args.batch_size, val_sql_data, val_table_data,
-                                 beam_size=args.beam_size)
+    json_datas = utils.epoch_acc(
+        model, args.batch_size, val_sql_data, val_table_data, beam_size=args.beam_size
+    )
     acc = utils.eval_acc(json_datas, val_sql_data)
     assert acc == 0.425
 
