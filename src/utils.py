@@ -433,7 +433,7 @@ def epoch_train(
         elif model_name == "transformer":
             tmp = {key: [] for key in result[0].get_keys()}
             for losses in result:
-                for key, item in losses.get_loss_dic().items():
+                for key, item in losses.get_dic().items():
                     tmp[key] += [item]
             tmp = {key: torch.mean(torch.stack(item)) for key, item in tmp.items()}
             loss = tmp["sketch"] + tmp["detail"]
@@ -522,7 +522,12 @@ def epoch_acc(
             gold += tmp
         elif model_name == "transformer":
             pred += model.parse(examples)
-            gold += [example.qgm_action for example in examples]
+            tmp = [model.decoder.grammar.create_data(example.qgm) for example in examples]
+            tmp2 = []
+            for item in tmp:
+                tmp2 += [[model.decoder.grammar.str_to_action(value) for value in item.split(" ")]]
+            tmp = tmp2
+            gold += tmp
         elif model_name == "qgm":
             pred += model.parse(examples)
             gold += [example.qgm for example in examples]

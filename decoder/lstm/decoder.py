@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import qgm_transformer.utils as utils
+import decoder.utils as utils
 from rule.semql.semql import SemQL
 from decoder.lstm.batch_state import LSTM_Batch_State
 

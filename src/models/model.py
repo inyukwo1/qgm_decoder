@@ -11,7 +11,7 @@ from decoder.qgm.qgm_decoder import QGM_Decoder
 from transformers import *
 from qgm_transformer.decoder import QGM_Transformer_Decoder
 from decoder.lstm.decoder import LSTM_Decoder
-
+from decoder.transformer.decoder import Transformer_Decoder
 
 # Transformers has a unified API
 # for 8 transformer architectures and 30 pretrained weights.
@@ -70,7 +70,7 @@ class IRNet(BasicModel):
 
         # QGM Decoder
         if self.decoder_name == "transformer":
-            self.decoder = QGM_Transformer_Decoder(cfg)
+            self.decoder = Transformer_Decoder(cfg)
         elif self.decoder_name == "lstm":
             self.decoder = LSTM_Decoder(cfg)
         elif self.decoder_name == "qgm":
@@ -438,17 +438,21 @@ class IRNet(BasicModel):
                     ]
                     b_tmp += [tab_tmp]
                 tab_col_dic += [b_tmp]
-
+            golds = [self.decoder.grammar.create_data(item) for item in batch.qgm]
+            tmp = []
+            for gold in golds:
+                tmp += [[self.decoder.grammar.str_to_action(item) for item in gold.split(" ")]]
+            golds = tmp
             losses, pred = self.decoder(
-                dec_init_vec,
                 src_encodings,
                 table_embedding,
                 schema_embedding,
                 src_mask,
                 col_mask,
                 tab_mask,
+                col_tab_dic,
                 tab_col_dic,
-                batch.qgm_action,
+                golds,
             )
 
             return losses
@@ -600,17 +604,21 @@ class IRNet(BasicModel):
                         ]
                         b_tmp += [tab_tmp]
                     tab_col_dic += [b_tmp]
-
+                golds = [self.decoder.grammar.create_data(item) for item in batch.qgm]
+                tmp = []
+                for gold in golds:
+                    tmp += [self.decoder.grammar.str_to_action(item) for item in gold.split(" ")]
+                golds = tmp
                 losses, pred = self.decoder(
-                    dec_init_vec,
                     src_encodings,
                     table_embedding,
                     schema_embedding,
                     src_mask,
                     col_mask,
                     tab_mask,
+                    col_tab_dic,
                     tab_col_dic,
-                    batch.qgm_action,
+                    golds,
                 )
 
                 return pred

@@ -1,42 +1,45 @@
 import math
 import torch
 import torch.nn as nn
-import decoder.transformer.utils as utils
-from rule.grammar import Grammar
-from decoder.transformer.batch_state import TransformerBatchState
+import decoder.utils as utils
+from rule.semql.semql import SemQL
+from decoder.transformer.batch_state import Transformer_Batch_State
 from src.transformer_decoder import (
     TransformerDecoderLayer,
     TransformerDecoder,
 )
 
-
 class Transformer_Decoder(nn.Module):
     def __init__(self, cfg):
         super(Transformer_Decoder, self).__init__()
-        # Grammar
         is_bert = cfg.is_bert
-        grammar_path = cfg.grammar_path
+
+        nhead = cfg.nhead
+        layer_num = cfg.layer_num
         hidden_size = cfg.hidden_size
 
-        # Decode Layers
+        #Decode Layers
         dim = 1024 if is_bert else hidden_size
-        d_model = 1024 if is_bert else hidden_size
         self.dim = dim
-        self.nhead = cfg.nhead
-        self.layer_num = cfg.layer_num
-        self.att_affine_layer = nn.Linear(dim, dim)
-        self.tgt_affine_layer = nn.Linear(dim, dim)
-        self.tgt_linear_layer = nn.Linear(dim * 2, d_model)
-        self.out_linear_layer = nn.Linear(d_model, dim)
+        self.nhead = nhead
+        self.layer_num = layer_num
 
-        self.grammar = Grammar(grammar_path, dim)
+        decoder_layer = TransformerDecoderLayer(d_model=dim, nhead=nhead)
+        self.transformer_decoder = TransformerDecoder(decoder_layer, num_layers=layer_num)
+        self._init_positional_embedding(dim)
 
-        # Transformer Layers
-        decoder_layer = TransformerDecoderLayer(d_model=d_model, nhead=self.nhead)
-        self.transformer_decoder = TransformerDecoder(
-            decoder_layer, num_layers=self.layer_num
-        )
-        self._init_positional_embedding(d_model)
+        self.action_affine_layer = nn.Linear(dim, dim)
+        self.symbol_affine_layer = nn.Linear(dim, dim)
+        self.col_affine_layer = nn.Linear(dim, dim)
+        self.tab_affine_layer = nn.Linear(dim, dim)
+        self.tgt_linear_layer = nn.Linear(dim*2, dim)
+        self.out_linear_layer = nn.Linear(dim, dim)
+
+        self.grammar = SemQL(dim)
+        self.col_symbol_id = self.grammar.symbol_to_sid["C"]
+        self.tab_symbol_id = self.grammar.symbol_to_sid["T"]
+        self.start_symbol_id = self.grammar.symbol_to_sid[self.grammar.start_symbol]
+
 
     def _init_positional_embedding(self, d_model, dropout=0.1, max_len=100):
         self.pos_dropout = nn.Dropout(p=dropout)
@@ -56,41 +59,81 @@ class Transformer_Decoder(nn.Module):
 
     def forward(
         self,
-        batch,
-        step=None,  # for captum
-        col_names=None,  # for captum
-        tab_names=None): # for captum
-
-        encoded_src = batch.sen_encoding
-        encoded_col = batch.col_emb
-        encoded_tab = batch.tab_emb
-        src_mask = batch.sen_mask
-        col_mask = batch.col_mask
-        tab_mask = batch.tab_mask
-        tab_col_dic = batch.tab_col_dic
-        gold_qgms = [item.split(" ") if self.training else [] for item in batch.qgm_action]
+        encoded_src,
+        encoded_col,
+        encoded_tab,
+        src_mask,
+        col_mask,
+        tab_mask,
+        col_tab_dic,
+        tab_col_dic,
+        golds,
+    ):
+        init_b_size = encoded_src.shape[0]
+        start_symbol_ids = [[self.start_symbol_id] for _ in range(init_b_size)]
 
         # Mask Batch State
-        state = TransformerBatchState(
-            encoded_src,
-            encoded_col,
-            encoded_tab,
-            src_mask,
-            col_mask,
-            tab_mask,
-            tab_col_dic,
-            list(range(len(encoded_src))),
-            self.grammar,
-            gold_qgms,
-        )
+        state = Transformer_Batch_State(
+                    torch.arange(init_b_size).long(),
+                    encoded_src,
+                    encoded_col,
+                    encoded_tab,
+                    src_mask,
+                    col_mask,
+                    tab_mask,
+                    col_tab_dic,
+                    tab_col_dic,
+                    golds,
+                    start_symbol_ids,
+                )
+
+        # Set Starting conditions
+        losses = [self.grammar.create_loss_object() for _ in range(init_b_size)]
+        pred_histories = [[] for  _ in range(init_b_size)]
+        state.set_state(0, losses, pred_histories)
 
         # Decode
-        decode_step_num = 0
         while not state.is_done():
-            # Get sub-mini-batch
-            memory = state.get_memory()
-            tgt = state.get_tgt(self.tgt_affine_layer, self.tgt_linear_layer)
-            memory_key_padding_mask = state.get_memory_key_padding_mask()
+            # Get prev actions embedding
+            prev_actions = state.get_prev_actions()
+            prev_action_emb = []
+            for idx, actions in enumerate(prev_actions):
+                embs = [torch.zeros(self.grammar.action_emb.embedding_dim).cuda()]
+                for action in actions:
+                    if action[0] == "C":
+                        col_idx = action[1]
+                        embs += [state.get_encoded_col()[idx][col_idx]]
+                    elif action[0] == "T":
+                        tab_idx = action[1]
+                        embs += [state.get_encoded_tab()[idx][tab_idx]]
+                    else:
+                        aid = torch.tensor(self.grammar.action_to_aid[action]).long().cuda()
+                        embs += [self.grammar.action_emb(aid)]
+                prev_action_emb += [torch.stack(embs, dim=0)]
+            prev_action_emb = torch.stack(prev_action_emb, dim=0)
+            tgt_action_emb = self.action_affine_layer(prev_action_emb)
+
+            # Get prev node embeddings
+            tgt_symbol_ids = []
+            for idx, actions in enumerate(prev_actions):
+                sids = [self.grammar.symbol_to_sid[action[0]] for action in actions]
+                tgt_symbol_ids += [sids]
+
+            # Append nonterminals
+            for idx, value in enumerate(state.get_current_action_node()):
+                tgt_symbol_ids[idx] += [int(value)]
+
+            symbol_ids = torch.tensor(tgt_symbol_ids).long().cuda()
+            tgt_symbol_emb = self.grammar.symbol_emb(symbol_ids)
+            tgt_symbol_emb = self.symbol_affine_layer(tgt_symbol_emb)
+
+            # Create tgt
+            tgt = torch.cat([tgt_action_emb, tgt_symbol_emb], dim=-1)
+            tgt = self.tgt_linear_layer(tgt).transpose(0, 1)
+
+            # Get attention
+            memory = state.get_encoded_src().transpose(0, 1)
+            memory_key_padding_mask = state.get_src_mask()
 
             # Decode
             tgt = self.pos_encode(tgt)
@@ -100,172 +143,116 @@ class Transformer_Decoder(nn.Module):
             out = self.out_linear_layer(out[:, -1:, :])
 
             # Get views
-            action_view, column_view, table_view = state.get_views()
-            action_out, column_out, table_out = state.split_by_view(out)
+            action_view_indices, column_view_indices, table_view_indices = \
+                state.get_view_indices(self.col_symbol_id, self.tab_symbol_id)
 
-            if action_view:
-                # Get input: last action
-                current_nodes = action_view.get_current_action_node()
-                next_action_ids = [ self.grammar.get_next_possible_action_ids(cur_node) for cur_node in current_nodes ]
+            if action_view_indices:
+                action_view = state.create_view(action_view_indices)
+                action_out = out[action_view_indices]
 
-                # Get input mask
-                action_masks = torch.ones(
-                    (action_view.get_b_size(), self.grammar.get_action_len()),
-                    dtype=torch.long,
-                ).cuda()
-                for idx, item in enumerate(next_action_ids):
-                    action_masks[idx][item] = 0
+                # Get last action
+                cur_nodes = action_view.get_current_action_node()
+                next_aids = [self.grammar.get_possible_aids(int(symbol)) for symbol in cur_nodes]
 
-                # action to action embedding
-                action_emb = self.grammar.action_emb.weight.contiguous()
-                action_emb = action_emb.unsqueeze(0).repeat(
-                    action_view.get_b_size(), 1, 1
-                )
-                if step is not None and decode_step_num == step:
-                    (
-                        gold_index,
-                        selected_idx,
-                        gold_prob,
-                        selected_prob,
-                    ) = self.predict_for_captum(
-                        action_view, action_out, action_emb, action_masks,
-                    )
-                    gold_action = self.grammar.action_id_to_action[gold_index]
-                    action = self.grammar.action_id_to_action[selected_idx]
-                    return (
-                        "{}({})".format(gold_action[0], gold_action[1]),
-                        "{}({})".format(action[0], action[1]),
-                        gold_prob,
-                        selected_prob,
-                    )
+                action_mask = torch.ones(action_view.get_b_size(), self.grammar.get_action_len()).long().cuda()
 
-                self.predict(
-                    action_view,
-                    action_out,
-                    action_emb,
-                    action_masks,
-                    self.training or step is not None,
-                )
-                decode_step_num += 1
+                for idx, item in enumerate(next_aids):
+                    action_mask[idx][item] = 0
 
-            if column_view:
-                # Get input: column encoding
-                encoded_cols = column_view.encoded_col
+                action_emb = self.grammar.action_emb.weight.unsqueeze(0)
+                action_emb = action_emb.repeat(action_view.get_b_size(), 1, 1)
+                pred_aid = self.predict(action_view, action_out, action_emb, action_mask, self.action_affine_layer)
 
-                # Get input mask
-                # col_masks = column_view.col_mask
-                col_masks = torch.ones(
-                    (column_view.get_b_size(), column_view.encoded_col.shape[1]),
-                    dtype=torch.long,
-                ).cuda()
-                for idx, b_idx in enumerate(column_view.b_indices):
-                    table_ids = [
-                        action[1]
-                        for action in column_view.pred_history[b_idx]
-                        if action[0] == "T"
-                    ]
-                    col_ids = []
-                    for table_id in table_ids:
-                        col_ids += column_view.tab_col_dic[idx][table_id]
-                    col_ids = utils.to_long_tensor(list(set(col_ids)))
-                    col_masks[idx][col_ids] = 0
-                if step is not None and decode_step_num == step:
-                    (
-                        gold_index,
-                        selected_idx,
-                        gold_prob,
-                        selected_prob,
-                    ) = self.predict_for_captum(
-                        column_view, column_out, encoded_cols, col_masks,
-                    )
-                    return (
-                        " ".join(col_names[0][gold_index]),
-                        " ".join(col_names[0][selected_idx]),
-                        gold_prob,
-                        selected_prob,
-                    )
-                self.predict(
-                    column_view,
-                    column_out,
-                    encoded_cols,
-                    col_masks,
-                    self.training or step is not None,
-                )
-                decode_step_num += 1
+                # Append pred_history
+                actions = [self.grammar.aid_to_action[aid] for aid in pred_aid]
+                action_view.insert_pred_history(actions)
 
-            if table_view:
-                # Get input: table encoding
-                encoded_tabs = table_view.encoded_tab
+                # Get next nonterminals
+                nonterminal_symbols = self.grammar.parse_nonterminal_symbols(actions)
+                nonterminal_symbol_ids = [self.grammar.symbols_to_sids(symbols) for symbols in nonterminal_symbols]
+                action_view.insert_nonterminals(nonterminal_symbol_ids)
 
-                # Get input mask
-                tab_masks = table_view.tab_mask
-                if step is not None and decode_step_num == step:
-                    (
-                        gold_index,
-                        selected_idx,
-                        gold_prob,
-                        selected_prob,
-                    ) = self.predict_for_captum(
-                        table_view, table_out, encoded_tabs, tab_masks,
-                    )
 
-                    return (
-                        " ".join(tab_names[0][gold_index]),
-                        " ".join(tab_names[0][selected_idx]),
-                        gold_prob,
-                        selected_prob,
-                    )
-                self.predict(
-                    table_view,
-                    table_out,
-                    encoded_tabs,
-                    tab_masks,
-                    self.training or step is not None,
-                )
-                decode_step_num += 1
+            if column_view_indices:
+                column_view = state.create_view(column_view_indices)
+                column_out = out[column_view_indices]
 
-            # Gather views to original batch state
-            state.combine_views(action_view, column_view, table_view)
+                encoded_col = column_view.get_encoded_col()
+                col_mask = column_view.get_col_mask()
+
+                pred_col_id = self.predict(column_view, column_out, encoded_col, col_mask, self.col_affine_layer)
+                actions = [("C", col_id) for col_id in pred_col_id]
+                column_view.insert_pred_history(actions)
+
+                # Get next nonterminals
+                nonterminal_symbol_ids = [[self.tab_symbol_id] for _ in range(column_view.get_b_size())]
+                column_view.insert_nonterminals(nonterminal_symbol_ids)
+
+            if table_view_indices:
+                table_view = state.create_view(table_view_indices)
+                table_out = out[table_view_indices]
+
+                encoded_tab = table_view.get_encoded_tab()
+
+                # Get Mask from prev col
+                prev_col_id = [item[1] for item in table_view.get_prev_action()]
+                tab_mask = torch.ones(table_view.get_b_size(), len(table_view.tab_mask[0])).cuda()
+                col_tab_dic = table_view.get_col_tab_dic()
+
+                for idx, col_id in enumerate(prev_col_id):
+                    tab_ids = col_tab_dic[idx][col_id]
+                    tab_mask[idx][tab_ids] = 0
+
+                pred_tab_id = self.predict(table_view, table_out, encoded_tab, tab_mask, self.tab_affine_layer)
+                actions = [("T", table_id) for table_id in pred_tab_id]
+                table_view.insert_pred_history(actions)
+
+                # Get next nonterminals
+                table_view.insert_nonterminals([[] for _ in range(table_view.get_b_size())])
 
             # State Transition
-            state.update_state()
-        assert step is None
-        # get losses, preds
+            state = state.get_next_state()
 
+        # get losses, preds
         return (
-            [item.get_loss_dic() for item in state.loss],
+            state.loss,
             state.pred_history,
         )
 
-    def predict_for_captum(self, view, out, src, src_mask):
-        probs = torch.nn.functional.softmax(
-            utils.calculate_attention_weights(
-                src, out, source_mask=src_mask, affine_layer=self.att_affine_layer,
-            ),
-            dim=1,
-        )
-        gold_indices = view.get_gold()
-        gold_index = gold_indices[0]
-        selected_idx = torch.argmax(probs, 1)[-1].item()
-        gold_prob = probs[:, gold_index]
-        selected_prob = probs[:, selected_idx]
-        return gold_index, selected_idx, gold_prob, selected_prob
 
-    def predict(self, view, out, src, src_mask, pred_with_gold):
+    def attention(self, src, src_mask, hidden_state):
+        hidden_state = hidden_state.unsqueeze(1)
+        weights = utils.calculate_similarity(src, hidden_state, source_mask=src_mask, affine_layer=self.tgt_affine_layer, log_softmax=False)
+
+        src = src * weights.unsqueeze(-1)
+        src = torch.sum(src, dim=1)
+
+        return src
+
+
+    def predict(self, view, out, src, src_mask, affine_layer=None):
         # Calculate similarity
-        probs = utils.calculate_attention_weights(
-            src, out, source_mask=src_mask, affine_layer=self.att_affine_layer
+        probs = utils.calculate_similarity(
+            src, out, source_mask=src_mask, affine_layer=affine_layer
         )
 
-        if pred_with_gold:
-            pred_indices = view.get_gold()
-            pred_probs = []
-            for idx, item in enumerate(pred_indices):
-                pred_probs += [probs[idx][item]]
+        if self.training:
+            golds = view.get_gold()
+            if view.nonterminal_stack[0][0] in [self.col_symbol_id, self.tab_symbol_id]:
+                pred_indices = [item[1] for item in golds]
+            else:
+                pred_indices = [self.grammar.action_to_aid[action] for action in golds]
+            pred_probs = [probs[idx][item] for idx, item in enumerate(pred_indices)]
         else:
             pred_probs, pred_indices = torch.topk(probs, 1)
             pred_probs = pred_probs.squeeze(1)
             pred_indices = [int(item) for item in pred_indices.squeeze(1)]
 
-        view.save_loss(pred_probs)
-        view.save_pred(pred_indices)
+        # Append loss
+        for idx, value in enumerate(pred_probs):
+            cur_symbol = view.nonterminal_stack[idx][0]
+            b_idx = view.b_indices[idx]
+            prev_actions = view.pred_history[b_idx]
+            view.loss[idx].add(-value, cur_symbol, prev_actions)
+
+        return pred_indices

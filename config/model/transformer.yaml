@@ -1,0 +1,4 @@
+model_name: transformer
+layer_num: 3
+nhead: 6
+is_col_set: true
