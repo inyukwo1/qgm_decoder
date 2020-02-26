@@ -9,7 +9,6 @@ from src.models.basic_model import BasicModel
 from decoder.qgm.qgm_decoder import QGM_Decoder
 #from decoder.semql.semql_decoder import SemQL_Decoder
 from transformers import *
-from qgm_transformer.decoder import QGM_Transformer_Decoder
 from decoder.lstm.decoder import LSTM_Decoder
 from decoder.transformer.decoder import Transformer_Decoder
 
