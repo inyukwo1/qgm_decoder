@@ -15,7 +15,7 @@ from irnet.preprocess.utils import load_dataSets
 
 sys.path.append("..")
 from irnet.src.rule.semQL import Root1, Root, N, A, C, T, Sel, Sup, Filter, Order
-from sqlparse.parse_sql_one import SQLParser
+from sqlparser.parse_sql_one import SQLParser
 
 
 class Parser:
@@ -485,9 +485,10 @@ class SemQLConverter:
         entry["keys"] = keys
         return entry
 
-    def parse(self, db_id, sql):
+    def parse(self, db_id, sql, entry):
         parsed_sql = self.sqlparser.parse(db_id, sql)
-        entry = self._sql_to_semql(db_id, parsed_sql)
+        new_entry = self._sql_to_semql(db_id, parsed_sql)
+        entry.update(new_entry)
         result = self.semparser.full_parse(entry)
         entry["rule_label"] = " ".join([str(x) for x in result])
         return entry

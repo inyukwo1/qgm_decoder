@@ -1,6 +1,7 @@
+import torch
+import sklearn
 from universal_utils import download_file_from_google_drive
 from gnn.end2end import End2EndGNN
-import torch
 import os.path
 
 

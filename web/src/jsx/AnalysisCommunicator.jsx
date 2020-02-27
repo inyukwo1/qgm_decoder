@@ -20,7 +20,8 @@ const queryAnalysis = (db_id, model, gen_sql, gold_sql, nlq, url) =>
       const correct_systems = response.data.result;
       const diff_points = response.data.diff;
       const similarity = response.data.similarity;
-      return [correct_systems, diff_points, similarity];
+      const captum_html = response.data.captum_html;
+      return [correct_systems, diff_points, similarity, captum_html];
     });
 
 export default queryAnalysis;

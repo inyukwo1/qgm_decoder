@@ -1,3 +1,5 @@
+import torch
+import sklearn
 from validation.check_correctness import compare_two_queries, diff_two_queries
 
 import os
@@ -11,6 +13,7 @@ from plotly.offline import plot
 import time
 from scp import SCPClient
 import paramiko
+import traceback
 from abc import *
 
 PLOTDIR = "web/public/"
@@ -175,6 +178,7 @@ class Service(Resource):
             parser.add_argument("diffmode", default="origin", type=str)
             args = parser.parse_args()
 
+            print(args)
             if args["mode"] == "Explore":
                 return self.handleExploreMode(args)
 
@@ -183,7 +187,7 @@ class Service(Resource):
 
         except Exception as e:
             print("done not well")
-            print(str(e))
+            traceback.print_exc()
             return {"result": str(e)}
 
     def handleExploreMode(self, args):
@@ -304,6 +308,11 @@ class Service(Resource):
                     similarity_score = similarity_score_tmp
         else:
             similarity_score = 100
+
+        # captum
+        captum_html = irnet_end2end["spider"].run_captum(
+            args["db_id"], args["question"], args["gold_sql"]
+        )
         print("Done")
         return {
             "result": equi_class,
@@ -311,6 +320,7 @@ class Service(Resource):
             "canonicalized_gen_sql": new_gen_sql,
             "canonicalized_gold_sql": new_gold_sql,
             "similarity": similarity_score,
+            "captum_html": captum_html,
         }
 
 

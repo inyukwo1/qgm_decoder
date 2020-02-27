@@ -8,7 +8,7 @@
 
 import copy
 
-from irnet import src as define_rule
+from irnet.src.rule import semQL as define_rule
 from irnet.src.models import nn_utils
 
 

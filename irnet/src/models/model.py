@@ -113,6 +113,8 @@ class IRNet(BasicModel):
             args.col_embed_size, args.action_embed_size, bias=False
         )
 
+        self.iden = nn.Identity()
+
         self.dropout = nn.Dropout(args.dropout)
 
         self.column_pointer_net = PointerNet(
@@ -129,16 +131,18 @@ class IRNet(BasicModel):
         nn.init.xavier_normal_(self.N_embed.weight.data)
         print("Use Column Pointer: ", True if self.use_column_pointer else False)
 
-    def forward(self, examples):
+    def forward(self, examples, src_encodings=None, last_state=None, last_cell=None):
         args = self.args
         # now should implement the examples
         batch = Batch(examples, self.grammar, cuda=self.args.cuda)
 
         table_appear_mask = batch.table_appear_mask
+        if src_encodings is None:
+            src_encodings, (last_state, last_cell) = self.encode(
+                batch.src_sents, batch.src_sents_len, None
+            )
 
-        src_encodings, (last_state, last_cell) = self.encode(
-            batch.src_sents, batch.src_sents_len, None
-        )
+        src_encodings = self.iden(src_encodings)
 
         src_encodings = self.dropout(src_encodings)
 

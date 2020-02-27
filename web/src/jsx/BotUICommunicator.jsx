@@ -88,7 +88,9 @@ class BotUICommunicator {
           correct_models,
           pred_sql_wrong_parts,
           similarity,
+          captum_html,
         ] = analysis_result;
+        console.log (correct_models);
         const recommendation = similarity === 100
           ? 'Correct model list: <br /><b>' + correct_models.join (' ') + '</b>'
           : 'There is no exactly correct model, but <b>' +
@@ -109,6 +111,13 @@ class BotUICommunicator {
                 recommendation,
               ]
             )
+          )
+          .then (_ =>
+            this.botui.message.insert (this.state.selected_index + 4, {
+              type: 'html',
+              content: captum_html,
+              delay: 1000,
+            })
           );
         this.state.ready_to_analyze = false;
       });

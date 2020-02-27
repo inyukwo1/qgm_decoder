@@ -18,7 +18,7 @@ from nltk.stem import WordNetLemmatizer
 
 from irnet.src.dataset import Example
 from irnet.src.rule import lf
-from irnet.src.rule.semQL import C
+from irnet.src.rule.semQL import *
 
 wordnet_lemmatizer = WordNetLemmatizer()
 
@@ -139,12 +139,12 @@ def schema_linking(
             continue
         elif t == "table":
             one_hot_type[count_q][0] = 1
-            question_arg[count_q] = ["table"] + question_arg[count_q]
+            question_arg[count_q] = ["[table]"] + question_arg[count_q]
         elif t == "col":
             one_hot_type[count_q][1] = 1
             try:
                 col_set_type[col_set_iter.index(question_arg[count_q])][1] = 5
-                question_arg[count_q] = ["column"] + question_arg[count_q]
+                question_arg[count_q] = ["[column]"] + question_arg[count_q]
             except:
                 print(col_set_iter, question_arg[count_q])
                 raise RuntimeError("not in col set")
@@ -156,7 +156,7 @@ def schema_linking(
             one_hot_type[count_q][4] = 1
         elif t == "value":
             one_hot_type[count_q][5] = 1
-            question_arg[count_q] = ["value"] + question_arg[count_q]
+            question_arg[count_q] = ["[value]"] + question_arg[count_q]
         else:
             if len(t_q) == 1:
                 for col_probase in t_q:
@@ -164,7 +164,7 @@ def schema_linking(
                         continue
                     try:
                         col_set_type[sql["col_set"].index(col_probase)][2] = 5
-                        question_arg[count_q] = ["value"] + question_arg[count_q]
+                        question_arg[count_q] = ["[value]"] + question_arg[count_q]
                     except:
                         print(sql["col_set"], col_probase)
                         raise RuntimeError("not in col")

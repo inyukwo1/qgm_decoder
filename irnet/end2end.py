@@ -1,6 +1,5 @@
 from service import End2End
 import pickle
-import torch
 from irnet.src import args as arg
 from irnet.src import utils
 from irnet.src.models.model import IRNet
@@ -22,6 +21,7 @@ from irnet.src.utils import (
     schema_linking,
     get_col_table_dict,
     get_table_colNames,
+    to_batch_seq,
 )
 from irnet.src.dataset import Example
 from irnet.sem2SQL import transform
@@ -31,16 +31,35 @@ from irnet.src.rule.sem_utils import (
     alter_inter_one_entry,
 )
 import torch
-import json
 import re
-import sqlite3
 import time
 import copy
 import nltk
+from irnet.preprocess.sql2SemQL import SemQLConverter
+from captum.attr import LayerIntegratedGradients
+from captum.attr import visualization as viz
+from irnet.src.dataset import Batch
+
+
+class dummy_arg:
+    def __init__(self):
+        self.cuda = True
+        self.glove_embed_path = "glove/glove.42B.300d.txt"
+        self.embed_size = 300
+        self.col_embed_size = 300
+        self.hidden_size = 300
+        self.type_embed_size = 128
+        self.att_vec_size = 300
+        self.action_embed_size = 128
+        self.column_pointer = True
+        self.sentence_features = True
+        self.readout = "identity"
+        self.dropout = 0.3
+        self.column_att = "affine"
 
 
 class End2EndIRNet(End2End):
-    def prepare_model(self, dataset):
+    def prepare_model(self, dataset, use_dummy_arg=False):
         model_path = "test_models/irnet_{}.model".format(dataset)
         with open("irnet/preprocess/conceptNet/english_RelatedTo.pkl", "rb") as f:
             self.english_RelatedTo = pickle.load(f)
@@ -48,8 +67,11 @@ class End2EndIRNet(End2End):
         with open("irnet/preprocess/conceptNet/english_IsA.pkl", "rb") as f:
             self.english_IsA = pickle.load(f)
 
-        arg_parser = arg.init_arg_parser()
-        args = arg.init_config(arg_parser)
+        if use_dummy_arg:
+            args = dummy_arg()
+        else:
+            arg_parser = arg.init_arg_parser()
+            args = arg.init_config(arg_parser)
 
         grammar = semQL.Grammar()
         _, _, val_sql_data, val_table_data = utils.load_dataset(
@@ -75,6 +97,7 @@ class End2EndIRNet(End2End):
         self.model.load_state_dict(pretrained_modeled)
 
         self.model.eval()
+        self.semql_parser = SemQLConverter("data/{}/tables.json".format(dataset))
 
     def preprocess_data(self, entry):
         if "origin_question_toks" not in entry:
@@ -383,4 +406,154 @@ class End2EndIRNet(End2End):
         return sql, None, entry["question_toks"]
 
     def run_captum(self, db_id, nl_string, gold_sql):
-        pass
+        model = self.model
+        table = self.prepare_table(db_id)
+        entry = self.prepare_entry(table, db_id, nl_string)
+        self.preprocess_data(entry)
+        entry["query"] = gold_sql
+        entry = self.semql_parser.parse(db_id, gold_sql, entry)
+
+        def to_ref_examples(examples, is_bert):
+            new_examples = [copy.copy(example) for example in examples]
+            # TODO
+            if is_bert:
+                for example in new_examples:
+                    example.src_sent = [
+                        ["<unk>"] * len(words) for words in example.src_sent
+                    ]
+            else:
+                for example in new_examples:
+                    example.src_sent = ["<unk>" for _ in example.src_sent]
+            return new_examples
+
+        def summarize_attributions(attributions):
+            attributions = attributions.sum(dim=-1).squeeze(0)
+            attributions = attributions / torch.norm(attributions)
+            return attributions
+
+        def forward_captum(src_encodings, last_state, last_cell, examples):
+            examples = examples * len(src_encodings)
+            sketch_score, lf_score = model.forward(
+                examples, src_encodings, last_state, last_cell
+            )
+            return sketch_score + lf_score
+
+        lig = LayerIntegratedGradients(forward_captum, model.iden)
+        examples = to_batch_seq([entry], self.val_table_data, [0], 0, 1, True)
+        ref_examples = to_ref_examples(examples, True)
+        batch = Batch(examples, model.grammar, cuda=model.args.cuda)
+        ref_batch = Batch(ref_examples, model.grammar, cuda=model.args.cuda)
+
+        src_encodings, (last_state, last_cell) = model.encode(
+            batch.src_sents, batch.src_sents_len, None
+        )
+        ref_src_encodings, (ref_last_state, ref_last_cell) = model.encode(
+            ref_batch.src_sents, ref_batch.src_sents_len, None
+        )
+        attributions, delta = lig.attribute(
+            inputs=src_encodings,
+            baselines=ref_src_encodings,
+            additional_forward_args=(last_state, last_cell, examples),
+            return_convergence_delta=True,
+        )
+        attributions_sum = summarize_attributions(attributions)
+        sketch_score, lf_score = model.forward(
+            examples, src_encodings, last_state, last_cell
+        )
+        print(examples[0].src_sent)
+        vis = viz.VisualizationDataRecord(
+            attributions_sum,
+            (sketch_score + lf_score).data.cpu().item(),
+            0,
+            gold_sql,
+            gold_sql,
+            attributions_sum.sum(),
+            [" ".join(words) for words in examples[0].src_sent],
+            delta,
+        )
+        viz.visualize_text([vis])
+        return self._vis_to_html([vis])
+
+    def _vis_to_html(self, datarecords):
+        def format_classname(classname):
+            return '<td><text style="padding-right:2em"><b>{}</b></text></td>'.format(
+                classname
+            )
+
+        def format_special_tokens(token):
+            if token.startswith("<") and token.endswith(">"):
+                return "#" + token.strip("<>")
+            return token
+
+        def _get_color(attr):
+            # clip values to prevent CSS errors (Values should be from [-1,1])
+            attr = max(-1, min(1, attr))
+            if attr > 0:
+                hue = 120
+                sat = 75
+                lig = 100 - int(50 * attr)
+            else:
+                hue = 0
+                sat = 75
+                lig = 100 - int(-40 * attr)
+            return "hsl({}, {}%, {}%)".format(hue, sat, lig)
+
+        def format_word_importances(words, importances):
+            if importances is None or len(importances) == 0:
+                return "<td></td>"
+            assert len(words) <= len(importances)
+            tags = ["<td>"]
+            for word, importance in zip(words, importances[: len(words)]):
+                word = format_special_tokens(word)
+                color = _get_color(importance)
+                unwrapped_tag = '<mark style="background-color: {color}; opacity:1.0; \
+                            line-height:1.75"><font color="black"> {word}\
+                            </font></mark>'.format(
+                    color=color, word=word
+                )
+                tags.append(unwrapped_tag)
+            tags.append("</td>")
+            return "".join(tags)
+
+        dom = ["<table width: 100%>"]
+        rows = [
+            "<tr><th>Target Label</th>"
+            "<th>Predicted Label</th>"
+            "<th>Attribution Label</th>"
+            "<th>Attribution Score</th>"
+            "<th>Word Importance</th>"
+        ]
+        for datarecord in datarecords:
+            rows.append(
+                "".join(
+                    [
+                        "<tr>",
+                        format_classname(datarecord.true_class),
+                        format_classname(
+                            "{0} ({1:.2f})".format(
+                                datarecord.pred_class, datarecord.pred_prob
+                            )
+                        ),
+                        format_classname(datarecord.attr_class),
+                        format_classname("{0:.2f}".format(datarecord.attr_score)),
+                        format_word_importances(
+                            datarecord.raw_input, datarecord.word_attributions
+                        ),
+                        "<tr>",
+                    ]
+                )
+            )
+
+        dom.append("".join(rows))
+        dom.append("</table>")
+        return "".join(dom)
+
+
+if __name__ == "__main__":
+    end2end = End2EndIRNet()
+    end2end.prepare_model("spider")
+    end2end.run_captum(
+        "concert_singer",
+        "Show the name and theme for all concerts and the number of singers in each concert.",
+        "SELECT T2.concert_name , T2.theme , count(*) FROM singer_in_concert AS T1 JOIN concert AS T2 ON T1.concert_id = T2.concert_id GROUP BY T2.concert_id",
+    )
