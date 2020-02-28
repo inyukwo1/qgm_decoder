@@ -412,7 +412,7 @@ def epoch_train(
         bert_optimizer.zero_grad()
 
     total_loss = {}
-    for st in tqdm(range(0, len(sql_data), batch_size)):
+    for idx, st in enumerate(tqdm(range(0, len(sql_data), batch_size))):
         ed = st + batch_size if st + batch_size < len(perm) else len(perm)
         examples = to_batch_seq(
             sql_data, table_data, perm, st, ed, is_col_set=is_col_set
@@ -465,7 +465,7 @@ def epoch_train(
 
             loss = torch.mean(torch.stack(loss_list))
 
-        elif model_name == "preprocess":
+        elif model_name == "semql":
             sketch_prob_var, lf_prob_var = result
             # Save loss
             if not total_loss:
@@ -483,15 +483,16 @@ def epoch_train(
         if is_train:
             loss.backward()
 
-        if clip_grad > 0.0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
-        if is_train:
-            optimizer.step()
-            if bert_optimizer:
-                bert_optimizer.step()
-            optimizer.zero_grad()
-            if bert_optimizer:
-                bert_optimizer.zero_grad()
+        if idx % 8 == 0:
+            if clip_grad > 0.0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
+            if is_train:
+                optimizer.step()
+                if bert_optimizer:
+                    bert_optimizer.step()
+                optimizer.zero_grad()
+                if bert_optimizer:
+                    bert_optimizer.zero_grad()
 
     # Average loss
     for key in total_loss.keys():
@@ -533,7 +534,7 @@ def epoch_acc(
         elif model_name == "qgm":
             pred += model.parse(examples)
             gold += [example.qgm for example in examples]
-        elif model_name == "preprocess":
+        elif model_name == "semql":
             for example in examples:
                 pred += [model.parse([example])]
                 gold += [example.tgt_actions]

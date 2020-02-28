@@ -38,7 +38,7 @@ def train(cfg):
 
     # Set optimizer
     optimizer_cls = (
-        RAdam if cfg.optimizer == "radam" else eval("torch.optim.%s" % cfg.optimizer)
+        RAdam if cfg.optimizer.lower() == "radam" else eval("torch.optim.%s" % cfg.optimizer)
     )
     optimizer = optimizer_cls(model.without_bert_params, lr=cfg.lr)
     if cfg.is_bert:

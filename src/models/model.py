@@ -39,6 +39,7 @@ class IRNet(BasicModel):
         self.cfg = cfg
         self.is_bert = cfg.is_bert
         self.is_cuda = cfg.cuda != -1
+        self.use_col_set = cfg.is_col_set
         self.encoder_name = cfg.encoder_name
         self.decoder_name = cfg.decoder_name
 
@@ -310,7 +311,7 @@ class IRNet(BasicModel):
         with torch.no_grad():
             batch = Batch(examples, is_cuda=self.is_cuda)
             if self.encoder_name == "ra_transformer":
-                src = batch.src_sents
+                src = self.gen_x_batch(batch.src_sents)
                 col = self.gen_x_batch(batch.table_sents)
                 tab = self.gen_x_batch(batch.table_names)
 
