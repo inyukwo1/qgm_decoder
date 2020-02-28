@@ -1,4 +1,5 @@
 import math
+import numpy as np
 import torch
 import torch.nn as nn
 import decoder.utils as utils
@@ -34,6 +35,7 @@ class Transformer_Decoder(nn.Module):
         self.tab_affine_layer = nn.Linear(dim, dim)
         self.tgt_linear_layer = nn.Linear(dim*2, dim)
         self.out_linear_layer = nn.Linear(dim, dim)
+        self.linear_gate = nn.Linear(dim, 1)
 
         self.grammar = SemQL(dim)
         self.col_symbol_id = self.grammar.symbol_to_sid["C"]
@@ -70,6 +72,7 @@ class Transformer_Decoder(nn.Module):
         golds,
     ):
         init_b_size = encoded_src.shape[0]
+        col_memory_map = np.zeros(col_mask.shape)
         start_symbol_ids = [[self.start_symbol_id] for _ in range(init_b_size)]
 
         # Mask Batch State
@@ -85,6 +88,7 @@ class Transformer_Decoder(nn.Module):
                     tab_col_dic,
                     golds,
                     start_symbol_ids,
+                    col_memory_map,
                 )
 
         # Set Starting conditions
@@ -180,9 +184,17 @@ class Transformer_Decoder(nn.Module):
                 encoded_col = column_view.get_encoded_col()
                 col_mask = column_view.get_col_mask()
 
-                pred_col_id = self.predict(column_view, column_out, encoded_col, col_mask, self.col_affine_layer)
+                # get column memory ma
+                col_history = column_view.get_col_memory_map()
+                gate = torch.sigmoid(self.linear_gate(column_out)).squeeze(-1).expand(-1, col_history.shape[1])
+                gate_values = torch.where(torch.tensor(col_history).byte().cuda(), gate, 1 - gate)
+
+                pred_col_id = self.predict(column_view, column_out, encoded_col, col_mask, self.col_affine_layer, gate_values)
                 actions = [("C", col_id) for col_id in pred_col_id]
                 column_view.insert_pred_history(actions)
+
+                # update column memory map
+                column_view.update_col_memory_map(pred_col_id)
 
                 # Get next nonterminals
                 nonterminal_symbol_ids = [[self.tab_symbol_id] for _ in range(column_view.get_b_size())]
@@ -230,10 +242,10 @@ class Transformer_Decoder(nn.Module):
         return src
 
 
-    def predict(self, view, out, src, src_mask, affine_layer=None):
+    def predict(self, view, out, src, src_mask, affine_layer=None, col_weights=None):
         # Calculate similarity
         probs = utils.calculate_similarity(
-            src, out, source_mask=src_mask, affine_layer=affine_layer
+            src, out, source_mask=src_mask, affine_layer=affine_layer, col_weights=col_weights
         )
 
         if self.training:

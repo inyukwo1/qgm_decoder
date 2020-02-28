@@ -15,6 +15,7 @@ class Transformer_Batch_State:
         tab_col_dic,
         golds,
         nonterminal_stack,
+        col_memory_map,
         ):
 
         self.step_cnt = 0
@@ -29,6 +30,7 @@ class Transformer_Batch_State:
         self.tab_col_dic = tab_col_dic
         self.golds = golds
         self.nonterminal_stack = nonterminal_stack  # Symbol ids
+        self.col_memory_map = col_memory_map
 
         # This two are not narrowing down.
         self.loss = None
@@ -61,6 +63,7 @@ class Transformer_Batch_State:
             [self.tab_col_dic[idx] for idx in view_indices],
             [self.golds[idx] for idx in view_indices],
             [self.nonterminal_stack[idx] for idx in view_indices],
+            self.col_memory_map[view_indices],
         )
 
         new_view.set_state(self.step_cnt, self.loss, self.pred_history)
@@ -112,6 +115,13 @@ class Transformer_Batch_State:
     def get_encoded_tab(self):
         return self.encoded_tab
 
+    def get_col_memory_map(self):
+        return self.col_memory_map
+
+    def update_col_memory_map(self, selected_col_indices):
+        for idx, col_idx in enumerate(selected_col_indices):
+            self.col_memory_map[idx][col_idx] = 1
+
     def get_next_state(self):
         next_indices = []
         if self.step_cnt <= 50:
@@ -130,7 +140,8 @@ class Transformer_Batch_State:
             [self.col_tab_dic[idx] for idx in next_indices],
             [self.tab_col_dic[idx] for idx in next_indices],
             [self.golds[idx] for idx in next_indices],
-            [self.nonterminal_stack[idx] for idx in next_indices]
+            [self.nonterminal_stack[idx] for idx in next_indices],
+            self.col_memory_map[next_indices],
         )
 
         next_state.set_state(self.step_cnt+1, self.loss, self.pred_history)
