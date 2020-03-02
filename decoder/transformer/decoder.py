@@ -31,9 +31,7 @@ class Transformer_Decoder(nn.Module):
         self.transformer_decoder = TransformerDecoder(
             decoder_layer, num_layers=layer_num
         )
-        # self.fine_transformer_decoder = TransformerDecoder(
-        #     decoder_layer, num_layers=layer_num
-        # )
+
         self._init_positional_embedding(dim)
 
         self.action_affine_layer = nn.Linear(dim, dim)
@@ -180,9 +178,9 @@ class Transformer_Decoder(nn.Module):
                 column_view_indices = []
                 table_view_indices = []
                 for idx, actions in enumerate(prev_actions):
-                    if actions[step_idx] == "C":
+                    if actions[step_idx][0] == "C":
                         column_view_indices += [idx]
-                    elif actions[step_idx] == "T":
+                    elif actions[step_idx][0] == "T":
                         table_view_indices += [idx]
                     else:
                         action_view_indices += [idx]
@@ -202,24 +200,24 @@ class Transformer_Decoder(nn.Module):
                     action_emb = self.grammar.action_emb.weight.unsqueeze(0)
                     action_emb = action_emb.repeat(action_view.get_b_size(), 1, 1)
 
-                    action_prev_actions = [prev_actions[idx] for idx in action_view_indices]
+                    action_prev_actions = [prev_actions[idx][:step_idx+1] for idx in action_view_indices]
                     self.calculate_and_add_loss(action_view, action_out, action_emb, action_mask, self.action_affine_layer,
                                 action_prev_actions)
 
                 if column_view_indices:
                     column_view = state.create_view(column_view_indices)
-                    column_out = out[column_view_indices, step_idx]
+                    column_out = out[column_view_indices, step_idx].unsqueeze(1)
 
                     encoded_col = column_view.get_encoded_col()
                     col_mask = column_view.get_col_mask()
 
-                    col_prev_actions = [prev_actions[idx] for idx in column_view_indices]
+                    col_prev_actions = [prev_actions[idx][:step_idx+1] for idx in column_view_indices]
                     self.calculate_and_add_loss(column_view, column_out, encoded_col, col_mask, self.col_affine_layer,
                                  col_prev_actions)
 
                 if table_view_indices:
                     table_view = state.create_view(table_view_indices)
-                    table_out = out[table_view_indices, step_idx]
+                    table_out = out[table_view_indices, step_idx].unsqueeze(1)
 
                     encoded_tab = table_view.get_encoded_tab()
 
@@ -232,8 +230,8 @@ class Transformer_Decoder(nn.Module):
                         tab_ids = col_tab_dic[idx][col_id]
                         tab_mask[idx][tab_ids] = 0
 
-                    table_prev_actions = [prev_actions[idx] for idx in table_view_indices]
-                    self.calculate_and_add_loss( table_view, table_out, encoded_tab, tab_mask, self.tab_affine_layer,
+                    table_prev_actions = [prev_actions[idx][:step_idx+1] for idx in table_view_indices]
+                    self.calculate_and_add_loss(table_view, table_out, encoded_tab, tab_mask, self.tab_affine_layer,
                                   table_prev_actions)
 
             out = out[:, -1:, :]
