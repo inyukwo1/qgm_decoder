@@ -14,12 +14,12 @@ class SemQL_Loss(Loss):
         self.c = symbol_to_sid["C"]
         self.t = symbol_to_sid["T"]
 
-    def _get_key(self, action_node, prev_actions):
-        if action_node == self.root:
+    def _get_key(self, symbol_id, prev_actions):
+        if symbol_id == self.root:
             key = "predicate_num"
-        elif action_node == self.sel:
+        elif symbol_id == self.sel:
             key = "head_num"
-        elif action_node == self.a:
+        elif symbol_id == self.a:
             prev_symbols = [
                 prev_action[0]
                 for prev_action in prev_actions
@@ -27,9 +27,9 @@ class SemQL_Loss(Loss):
             ]
             assert len(prev_symbols) > 0, "Wrong prev_actions: {}".format(prev_actions)
             key = "head_agg" if prev_symbols[-1] == "Sel" else "predicate_agg"
-        elif action_node == self.filter:
+        elif symbol_id == self.filter:
             key = "predicate_num"
-        elif action_node == self.c:
+        elif symbol_id == self.c:
             prev_symbols = [
                 prev_action[0]
                 for prev_action in prev_actions
@@ -37,7 +37,7 @@ class SemQL_Loss(Loss):
             ]
             assert len(prev_symbols) > 0, "Wrong prev_actions: {}".format(prev_actions)
             key = "head_col" if prev_symbols[-1] == "Sel" else "predicate_col"
-        elif action_node == self.t:
+        elif symbol_id == self.t:
             key = "quantifier_tab"
         else:
             raise RuntimeError("Should not be here")

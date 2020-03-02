@@ -170,8 +170,73 @@ class Transformer_Decoder(nn.Module):
             out = self.transformer_decoder(
                 tgt, memory, memory_key_padding_mask=memory_key_padding_mask
             ).transpose(0, 1)
-            out = self.out_linear_layer(out[:, -1:, :])
 
+            out = self.out_linear_layer(out)
+            # Loss for all step
+            for step_idx in range(out.shape[1]-1):
+                prev_actions = state.get_prev_actions()
+                # Get action view indices
+                action_view_indices = []
+                column_view_indices = []
+                table_view_indices = []
+                for idx, actions in enumerate(prev_actions):
+                    if actions[step_idx] == "C":
+                        column_view_indices += [idx]
+                    elif actions[step_idx] == "T":
+                        table_view_indices += [idx]
+                    else:
+                        action_view_indices += [idx]
+
+                if action_view_indices:
+                    action_view = state.create_view(action_view_indices)
+                    action_out = out[action_view_indices, step_idx].unsqueeze(1)
+                    # Get last action
+                    prev_nodes = [prev_actions[idx][step_idx-1][0] for idx in action_view_indices]
+                    next_aids = [self.grammar.get_possible_aids(symbol) for symbol in prev_nodes]
+
+                    # Action mask
+                    action_mask = torch.ones(action_view.get_b_size(), self.grammar.get_action_len()).long().cuda()
+                    for idx, item in enumerate(next_aids):
+                        action_mask[idx][item] = 0
+
+                    action_emb = self.grammar.action_emb.weight.unsqueeze(0)
+                    action_emb = action_emb.repeat(action_view.get_b_size(), 1, 1)
+
+                    action_prev_actions = [prev_actions[idx] for idx in action_view_indices]
+                    self.calculate_and_add_loss(action_view, action_out, action_emb, action_mask, self.action_affine_layer,
+                                action_prev_actions)
+
+                if column_view_indices:
+                    column_view = state.create_view(column_view_indices)
+                    column_out = out[column_view_indices, step_idx]
+
+                    encoded_col = column_view.get_encoded_col()
+                    col_mask = column_view.get_col_mask()
+
+                    col_prev_actions = [prev_actions[idx] for idx in column_view_indices]
+                    self.calculate_and_add_loss(column_view, column_out, encoded_col, col_mask, self.col_affine_layer,
+                                 col_prev_actions)
+
+                if table_view_indices:
+                    table_view = state.create_view(table_view_indices)
+                    table_out = out[table_view_indices, step_idx]
+
+                    encoded_tab = table_view.get_encoded_tab()
+
+                    # Get Mask from prev col
+                    prev_col_id = [prev_actions[idx][step_idx-1][1] for idx in table_view_indices]
+                    tab_mask = torch.ones(table_view.get_b_size(), len(table_view.tab_mask[0])).cuda()
+                    col_tab_dic = table_view.get_col_tab_dic()
+
+                    for idx, col_id in enumerate(prev_col_id):
+                        tab_ids = col_tab_dic[idx][col_id]
+                        tab_mask[idx][tab_ids] = 0
+
+                    table_prev_actions = [prev_actions[idx] for idx in table_view_indices]
+                    self.calculate_and_add_loss( table_view, table_out, encoded_tab, tab_mask, self.tab_affine_layer,
+                                  table_prev_actions)
+
+            out = out[:, -1:, :]
             # Get views
             (
                 action_view_indices,
@@ -535,3 +600,17 @@ class Transformer_Decoder(nn.Module):
                 view.loss[idx].add(-value, cur_symbol, prev_actions, key="fine")
 
         return pred_indices
+
+
+    def calculate_and_add_loss(self, view, out, src, src_mask, affine_layer, prev_actions):
+        # Calculate Similarity
+        probs = utils.calculate_similarity(src, out, source_mask=src_mask, affine_layer=affine_layer)
+
+        # Get loss
+        gold_indices = [actions[-1][1] for actions in prev_actions]
+        losses = [probs[idx][item] for idx, item in enumerate(gold_indices)]
+
+        # Append loss
+        cur_node_sid = self.grammar.symbols_to_sids([actions[-1][0] for actions in prev_actions])
+        for idx, loss in enumerate(losses):
+            view.loss[idx].add(-loss, cur_node_sid[idx], prev_actions[idx][:-1])

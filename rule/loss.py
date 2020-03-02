@@ -20,9 +20,9 @@ class Loss:
         ]
         self.loss_dic = {key: torch.tensor(0.0).cuda() for key in keys}
 
-    def add(self, value, action_node, prev_actions, key=None):
+    def add(self, value, action_symbol_id, prev_actions, key=None):
         if not key:
-            key = self._get_key(action_node, prev_actions)
+            key = self._get_key(action_symbol_id, prev_actions)
         assert key in self.loss_dic.keys(), "key:{}".format(key)
         self.loss_dic[key] += value
         if "col" in key or "agg" in key or "tab" in key:
