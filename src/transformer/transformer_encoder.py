@@ -9,6 +9,7 @@ from torch.nn.modules.normalization import LayerNorm
 
 from src.transformer.multi_head_attention import MultiheadAttention
 
+
 class TransformerEncoder(Module):
     r"""TransformerEncoder is a stack of N encoder layers
     Args:
@@ -21,7 +22,7 @@ class TransformerEncoder(Module):
         >>> src = torch.rand(10, 32, 512)
         >>> out = transformer_encoder(src)
     """
-    __constants__ = ['norm']
+    __constants__ = ["norm"]
 
     def __init__(self, encoder_layer, num_layers, norm=None):
         super(TransformerEncoder, self).__init__()
@@ -42,7 +43,9 @@ class TransformerEncoder(Module):
         output = src
 
         for mod in self.layers:
-            output = mod(output, src_mask=mask, src_key_padding_mask=src_key_padding_mask)
+            output = mod(
+                output, src_mask=mask, src_key_padding_mask=src_key_padding_mask
+            )
 
         if self.norm is not None:
             output = self.norm(output)
@@ -69,7 +72,9 @@ class TransformerEncoderLayer(Module):
         >>> out = encoder_layer(src)
     """
 
-    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="relu"):
+    def __init__(
+        self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="relu"
+    ):
         super(TransformerEncoderLayer, self).__init__()
         self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout)
         # Implementation of Feedforward model
@@ -85,8 +90,8 @@ class TransformerEncoderLayer(Module):
         self.activation = _get_activation_fn(activation)
 
     def __setstate__(self, state):
-        if 'activation' not in state:
-            state['activation'] = F.relu
+        if "activation" not in state:
+            state["activation"] = F.relu
         super(TransformerEncoderLayer, self).__setstate__(state)
 
     def forward(self, src, src_mask=None, src_key_padding_mask=None):
@@ -99,8 +104,9 @@ class TransformerEncoderLayer(Module):
         Shape:
             see the docs in Transformer class.
         """
-        src2 = self.self_attn(src, src, src, attn_mask=src_mask,
-                              key_padding_mask=src_key_padding_mask)[0]
+        src2 = self.self_attn(
+            src, src, src, attn_mask=src_mask, key_padding_mask=src_key_padding_mask
+        )[0]
         src = src + self.dropout1(src2)
         src = self.norm1(src)
         src2 = self.linear2(self.dropout(self.activation(self.linear1(src))))

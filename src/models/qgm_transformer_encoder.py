@@ -14,7 +14,6 @@ class QGM_Transformer_Encoder(nn.Module):
 
         self._init_positional_embedding(300)
 
-
     def _init_positional_embedding(self, d_model, dropout=0.1, max_len=100):
         self.pos_dropout = nn.Dropout(p=dropout)
         pe = torch.zeros(max_len, d_model)
@@ -27,11 +26,9 @@ class QGM_Transformer_Encoder(nn.Module):
         pe = pe.unsqueeze(0).transpose(0, 1)
         self.register_buffer("pe", pe)
 
-
     def _pos_encode(self, x):
         x = x + self.pe[: x.size(0), :]
         return self.pos_dropout(x)
-
 
     def forward(self, src, col, tab, src_mask, col_mask, tab_mask):
 
@@ -43,12 +40,14 @@ class QGM_Transformer_Encoder(nn.Module):
         input_mask = torch.cat([src_mask, col_mask, tab_mask], dim=1).bool()
 
         # Encode with transformer
-        encoded_input = self.transformer_encoder(input_emb, src_key_padding_mask=input_mask).transpose(0, 1)
+        encoded_input = self.transformer_encoder(
+            input_emb, src_key_padding_mask=input_mask
+        ).transpose(0, 1)
 
         # Split indices
         src_idx = src.shape[1]
-        col_idx = src_idx+col.shape[1]
-        tab_idx = col_idx+tab.shape[1]
+        col_idx = src_idx + col.shape[1]
+        tab_idx = col_idx + tab.shape[1]
         assert tab_idx == input_emb.shape[0]
 
         # Split output

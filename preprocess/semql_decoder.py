@@ -9,6 +9,7 @@ from transformers import *
 from src.models import nn_utils
 from src.beam import Beams, ActionInfo
 from src.models.pointer_net import PointerNet
+
 log = logging.getLogger(__name__)
 
 # Transformers has a unified API
@@ -106,7 +107,9 @@ class SemQL_Decoder(nn.Module):
 
         self.q_att = nn.Linear(hidden_size, self.embed_size)
 
-        self.column_rnn_input = nn.Linear(self.embed_size, action_embed_size, bias=False)
+        self.column_rnn_input = nn.Linear(
+            self.embed_size, action_embed_size, bias=False
+        )
         self.table_rnn_input = nn.Linear(self.embed_size, action_embed_size, bias=False)
 
         self.column_pointer_net = PointerNet(
@@ -123,7 +126,9 @@ class SemQL_Decoder(nn.Module):
         nn.init.xavier_normal_(self.production_embed.weight.data)
         nn.init.xavier_normal_(self.type_embed.weight.data)
         nn.init.xavier_normal_(self.N_embed.weight.data)
-        log.info("Use Column Pointer: {}".format(True if self.use_column_pointer else False))
+        log.info(
+            "Use Column Pointer: {}".format(True if self.use_column_pointer else False)
+        )
 
     def decode_forward(
         self,

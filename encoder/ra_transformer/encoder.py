@@ -25,8 +25,8 @@ class RA_Transformer_Encoder(nn.Module):
     def forward(self, sen, col, tab, sen_len, col_len, tab_len, sen_mask, col_mask, tab_mask, relation):
         # LSTM
         sen = self.encode_with_lstm(sen, sen_len, self.sen_lstm)
-        #col = self.encode_with_lstm(col, col_len, self.col_lstm)
-        #tab = self.encode_with_lstm(tab, tab_len, self.tab_lstm)
+        col = self.encode_with_lstm(col, col_len, self.col_lstm)
+        tab = self.encode_with_lstm(tab, tab_len, self.tab_lstm)
 
         # Get len
         sen_max_len = sen.shape[1]

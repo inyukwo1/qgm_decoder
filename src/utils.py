@@ -283,7 +283,7 @@ def process(sql, table, is_col_set=True):
     process_dict["table_names"] = table_names
     process_dict["tab_set_iter"] = tab_set_iter
     process_dict["qgm"] = sql["qgm"]
-    #process_dict["qgm_action"] = sql["qgm_action"]
+    # process_dict["qgm_action"] = sql["qgm_action"]
 
     return process_dict
 
@@ -376,7 +376,7 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed, is_col_set=True):
             tokenized_src_sent=process_dict["col_set_type"],
             tgt_actions=rule_label,
             qgm=process_dict["qgm"],
-            #qgm_action=process_dict["rule_label"],
+            # qgm_action=process_dict["rule_label"],
             qgm_action=rule_label,
             relation=sql["relation"]
         )
@@ -503,7 +503,13 @@ def epoch_train(
 
 
 def epoch_acc(
-    model, batch_size, sql_data, table_data, model_name, is_col_set=True, return_details=False,
+    model,
+    batch_size,
+    sql_data,
+    table_data,
+    model_name,
+    is_col_set=True,
+    return_details=False,
 ):
     model.eval()
     perm = list(range(len(sql_data)))
@@ -518,18 +524,32 @@ def epoch_acc(
         example_list += examples
         if model_name == "lstm":
             pred += model.parse(examples)
-            tmp = [model.decoder.grammar.create_data(example.qgm) for example in examples]
+            tmp = [
+                model.decoder.grammar.create_data(example.qgm) for example in examples
+            ]
             tmp2 = []
             for item in tmp:
-                tmp2 += [[model.decoder.grammar.str_to_action(value) for value in item.split(" ")]]
+                tmp2 += [
+                    [
+                        model.decoder.grammar.str_to_action(value)
+                        for value in item.split(" ")
+                    ]
+                ]
             tmp = tmp2
             gold += tmp
         elif model_name == "transformer":
             pred += model.parse(examples)
-            tmp = [model.decoder.grammar.create_data(example.qgm) for example in examples]
+            tmp = [
+                model.decoder.grammar.create_data(example.qgm) for example in examples
+            ]
             tmp2 = []
             for item in tmp:
-                tmp2 += [[model.decoder.grammar.str_to_action(value) for value in item.split(" ")]]
+                tmp2 += [
+                    [
+                        model.decoder.grammar.str_to_action(value)
+                        for value in item.split(" ")
+                    ]
+                ]
             tmp = tmp2
             gold += tmp
         elif model_name == "qgm":

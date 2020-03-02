@@ -1,4 +1,5 @@
 import torch
+import copy
 
 
 class Transformer_Batch_State:
@@ -15,7 +16,6 @@ class Transformer_Batch_State:
         tab_col_dic,
         golds,
         nonterminal_stack,
-        col_memory_map,
         ):
 
         self.step_cnt = 0
@@ -30,22 +30,22 @@ class Transformer_Batch_State:
         self.tab_col_dic = tab_col_dic
         self.golds = golds
         self.nonterminal_stack = nonterminal_stack  # Symbol ids
-        self.col_memory_map = col_memory_map
 
         # This two are not narrowing down.
         self.loss = None
         self.pred_history = None  # Action
 
+        # only for fine prediction
+        self.second_pred_history = None
 
-    def set_state(self, step_cnt, loss, pred_history):
+    def set_state(self, step_cnt, loss, pred_history, second_pred_history=None):
         self.step_cnt = step_cnt
         self.loss = loss
         self.pred_history = pred_history
-
+        self.second_pred_history = second_pred_history
 
     def get_b_size(self):
         return len(self.b_indices)
-
 
     def create_view(self, view_indices):
         if not view_indices:
@@ -63,12 +63,12 @@ class Transformer_Batch_State:
             [self.tab_col_dic[idx] for idx in view_indices],
             [self.golds[idx] for idx in view_indices],
             [self.nonterminal_stack[idx] for idx in view_indices],
-            self.col_memory_map[view_indices],
         )
 
-        new_view.set_state(self.step_cnt, self.loss, self.pred_history)
+        new_view.set_state(
+            self.step_cnt, self.loss, self.pred_history, self.second_pred_history
+        )
         return new_view
-
 
     def is_done(self):
         return self.get_b_size() == 0
@@ -88,11 +88,62 @@ class Transformer_Batch_State:
                 action_view_indices += [idx]
         return action_view_indices, column_view_indices, table_view_indices
 
+    def get_second_view_indices_and_location(self, column_s, table_s, action_s):
+        action_view_indices = []
+        action_view_location = []
+        column_view_indices = []
+        column_view_location = []
+        table_view_indices = []
+        table_view_location = []
+        for idx, b_idx in enumerate(self.b_indices):
+            actions = self.pred_history[b_idx]
+            second_actions = self.second_pred_history[b_idx]
+            copied_second_actions = copy.copy(second_actions)
+            for action_idx, action in enumerate(actions):
+                if action[0] == column_s:
+                    if copied_second_actions:
+                        second_action = copied_second_actions.pop(0)
+                        assert second_action[0] == column_s
+                    else:
+                        column_view_indices.append(idx)
+                        column_view_location.append(action_idx)
+                        break
+                elif action[0] == table_s:
+                    if copied_second_actions:
+                        second_action = copied_second_actions.pop(0)
+                        assert second_action[0] == table_s
+                    else:
+                        table_view_indices.append(idx)
+                        table_view_location.append(action_idx)
+                        break
+                elif action[0] == action_s:
+                    if copied_second_actions:
+                        second_action = copied_second_actions.pop(0)
+                        assert second_action[0] == action_s
+                    else:
+                        action_view_indices.append(idx)
+                        action_view_location.append(action_idx)
+                        break
+        return (
+            column_view_indices,
+            column_view_location,
+            table_view_indices,
+            table_view_location,
+            action_view_indices,
+            action_view_location,
+        )
+
     def get_prev_actions(self):
         return [self.pred_history[b_idx] for b_idx in self.b_indices]
 
+    def get_second_prev_actions(self):
+        return [self.second_pred_history[b_idx] for b_idx in self.b_indices]
+
     def get_prev_action(self):
         return [self.pred_history[b_idx][-1] for b_idx in self.b_indices]
+
+    def get_second_prev_action(self):
+        return [self.second_pred_history[b_idx][-1] for b_idx in self.b_indices]
 
     def get_current_action_node(self):
         return torch.tensor([item[0] for item in self.nonterminal_stack]).long().cuda()
@@ -115,19 +166,29 @@ class Transformer_Batch_State:
     def get_encoded_tab(self):
         return self.encoded_tab
 
-    def get_col_memory_map(self):
-        return self.col_memory_map
-
-    def update_col_memory_map(self, selected_col_indices):
-        for idx, col_idx in enumerate(selected_col_indices):
-            self.col_memory_map[idx][col_idx] = 1
-
-    def get_next_state(self):
+    def get_next_state(self, second=False, second_state_symbols=None):
         next_indices = []
-        if self.step_cnt <= 50:
-            for idx, nonterminal_stack in enumerate(self.nonterminal_stack):
-                if nonterminal_stack:
-                    next_indices += [idx]
+        if second:
+            self.nonterminal_stack = [[] for _ in range(self.get_b_size())]
+            for idx, b_idx in enumerate(self.b_indices):
+                actions = self.pred_history[b_idx]
+                second_actions = self.second_pred_history[b_idx]
+                copied_second_actions = copy.copy(second_actions)
+                for action_idx, action in enumerate(actions):
+                    if action[0] in second_state_symbols:
+                        if copied_second_actions:
+                            second_action = copied_second_actions.pop(0)
+                            assert second_action[0] in second_state_symbols
+                        else:
+                            next_indices.append(idx)
+                            self.nonterminal_stack[idx].append(action)
+                            break
+
+        else:
+            if self.step_cnt <= 50:
+                for idx, nonterminal_stack in enumerate(self.nonterminal_stack):
+                    if nonterminal_stack:
+                        next_indices += [idx]
 
         next_state = Transformer_Batch_State(
             self.b_indices[next_indices],
@@ -141,10 +202,16 @@ class Transformer_Batch_State:
             [self.tab_col_dic[idx] for idx in next_indices],
             [self.golds[idx] for idx in next_indices],
             [self.nonterminal_stack[idx] for idx in next_indices],
-            self.col_memory_map[next_indices],
         )
-
-        next_state.set_state(self.step_cnt+1, self.loss, self.pred_history)
+        if not second:
+            next_state.set_state(self.step_cnt + 1, self.loss, self.pred_history)
+        else:
+            next_state.set_state(
+                self.step_cnt + 1,
+                self.loss,
+                self.pred_history,
+                self.second_pred_history,
+            )
         return next_state
 
     def insert_pred_history(self, actions):
@@ -152,6 +219,12 @@ class Transformer_Batch_State:
             b_idx = self.b_indices[idx]
             self.pred_history[b_idx].insert(len(self.pred_history[b_idx]), action)
 
+    def insert_second_pred_history(self, actions):
+        for idx, action in enumerate(actions):
+            b_idx = self.b_indices[idx]
+            self.second_pred_history[b_idx].insert(
+                len(self.second_pred_history[b_idx]), action
+            )
 
     def insert_nonterminals(self, nonterminals):
         for idx, symbols in enumerate(nonterminals):
@@ -159,6 +232,17 @@ class Transformer_Batch_State:
             for symbol in reversed(symbols):
                 self.nonterminal_stack[idx].insert(0, symbol)
 
-
     def get_gold(self):
         return [golds[self.step_cnt] for golds in self.golds]
+
+    def combine_history(self, second_state_symbols):
+        for idx, b_idx in enumerate(self.b_indices):
+            actions = self.pred_history[b_idx]
+            second_actions = self.second_pred_history[b_idx]
+            copied_second_actions = copy.copy(second_actions)
+            for action_idx, action in enumerate(actions):
+                if action[0] in second_state_symbols:
+                    assert copied_second_actions
+                    second_action = copied_second_actions.pop(0)
+                    assert second_action[0] in second_state_symbols
+                    actions[action_idx] = second_action

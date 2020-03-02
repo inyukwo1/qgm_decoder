@@ -1,7 +1,7 @@
 import torch
 
 
-class Loss():
+class Loss:
     def __init__(self):
         keys = [
             "head_agg",
@@ -15,13 +15,14 @@ class Loss():
             "quantifier_tab",
             "sketch",
             "detail",
+            "fine",
             "total",
         ]
         self.loss_dic = {key: torch.tensor(0.0).cuda() for key in keys}
 
-
-    def add(self, value, action_node, prev_actions):
-        key = self._get_key(action_node, prev_actions)
+    def add(self, value, action_node, prev_actions, key=None):
+        if not key:
+            key = self._get_key(action_node, prev_actions)
         assert key in self.loss_dic.keys(), "key:{}".format(key)
         self.loss_dic[key] += value
         if "col" in key or "agg" in key or "tab" in key:
@@ -30,19 +31,14 @@ class Loss():
             self.loss_dic["sketch"] += value
         self.loss_dic["total"] += value
 
-
     def get_dic(self):
         return self.loss_dic
-
 
     def get_keys(self):
         return self.loss_dic.keys()
 
-
     def get_loss_of(self, key):
         return self.loss_dic[key]
 
-
     def get_total_loss(self):
         return self.get_loss("total")
-

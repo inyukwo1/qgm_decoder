@@ -7,7 +7,8 @@ from torch.autograd import Variable
 from src.dataset import Batch
 from src.models.basic_model import BasicModel
 from decoder.qgm.qgm_decoder import QGM_Decoder
-#from decoder.semql.semql_decoder import SemQL_Decoder
+
+# from decoder.semql.semql_decoder import SemQL_Decoder
 from transformers import *
 from decoder.lstm.decoder import LSTM_Decoder
 from decoder.transformer.decoder import Transformer_Decoder
@@ -222,20 +223,25 @@ class IRNet(BasicModel):
             golds = [self.decoder.grammar.create_data(item) for item in batch.qgm]
             tmp = []
             for gold in golds:
-                tmp += [[self.decoder.grammar.str_to_action(item) for item in gold.split(" ")]]
+                tmp += [
+                    [
+                        self.decoder.grammar.str_to_action(item)
+                        for item in gold.split(" ")
+                    ]
+                ]
             golds = tmp
             losses, pred = self.decoder(
-                                dec_init_vec,
-                                src_encodings,
-                                table_embedding,
-                                schema_embedding,
-                                src_mask,
-                                col_mask,
-                                tab_mask,
-                                col_tab_dic,
-                                tab_col_dic,
-                                golds,
-                                )
+                dec_init_vec,
+                src_encodings,
+                table_embedding,
+                schema_embedding,
+                src_mask,
+                col_mask,
+                tab_mask,
+                col_tab_dic,
+                tab_col_dic,
+                golds,
+            )
             return losses
         elif self.decoder_name == "transformer":
             src_mask = batch.src_token_mask
@@ -257,7 +263,12 @@ class IRNet(BasicModel):
             golds = [self.decoder.grammar.create_data(item) for item in batch.qgm]
             tmp = []
             for gold in golds:
-                tmp += [[self.decoder.grammar.str_to_action(item) for item in gold.split(" ")]]
+                tmp += [
+                    [
+                        self.decoder.grammar.str_to_action(item)
+                        for item in gold.split(" ")
+                    ]
+                ]
             golds = tmp
             losses, pred = self.decoder(
                 src_encodings,
@@ -423,19 +434,23 @@ class IRNet(BasicModel):
                 golds = [self.decoder.grammar.create_data(item) for item in batch.qgm]
                 tmp = []
                 for gold in golds:
-                    tmp += [self.decoder.grammar.str_to_action(item) for item in gold.split(" ")]
+                    tmp += [
+                        self.decoder.grammar.str_to_action(item)
+                        for item in gold.split(" ")
+                    ]
                 golds = tmp
-                losses, pred = self.decoder(dec_init_vec,
-                                            src_encodings,
-                                            table_embedding,
-                                            schema_embedding,
-                                            src_mask,
-                                            col_mask,
-                                            tab_mask,
-                                            col_tab_dic,
-                                            tab_col_dic,
-                                            golds,
-                                            )
+                losses, pred = self.decoder(
+                    dec_init_vec,
+                    src_encodings,
+                    table_embedding,
+                    schema_embedding,
+                    src_mask,
+                    col_mask,
+                    tab_mask,
+                    col_tab_dic,
+                    tab_col_dic,
+                    golds,
+                )
                 return pred
             elif self.decoder_name == "transformer":
                 src_mask = batch.src_token_mask
@@ -457,7 +472,10 @@ class IRNet(BasicModel):
                 golds = [self.decoder.grammar.create_data(item) for item in batch.qgm]
                 tmp = []
                 for gold in golds:
-                    tmp += [self.decoder.grammar.str_to_action(item) for item in gold.split(" ")]
+                    tmp += [
+                        self.decoder.grammar.str_to_action(item)
+                        for item in gold.split(" ")
+                    ]
                 golds = tmp
                 losses, pred = self.decoder(
                     src_encodings,
