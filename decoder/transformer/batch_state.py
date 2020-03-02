@@ -15,7 +15,7 @@ class Transformer_Batch_State:
         tab_col_dic,
         golds,
         nonterminal_stack,
-        ):
+    ):
 
         self.step_cnt = 0
         self.b_indices = b_indices
@@ -34,16 +34,13 @@ class Transformer_Batch_State:
         self.loss = None
         self.pred_history = None  # Action
 
-
     def set_state(self, step_cnt, loss, pred_history):
         self.step_cnt = step_cnt
         self.loss = loss
         self.pred_history = pred_history
 
-
     def get_b_size(self):
         return len(self.b_indices)
-
 
     def create_view(self, view_indices):
         if not view_indices:
@@ -65,7 +62,6 @@ class Transformer_Batch_State:
 
         new_view.set_state(self.step_cnt, self.loss, self.pred_history)
         return new_view
-
 
     def is_done(self):
         return self.get_b_size() == 0
@@ -130,10 +126,10 @@ class Transformer_Batch_State:
             [self.col_tab_dic[idx] for idx in next_indices],
             [self.tab_col_dic[idx] for idx in next_indices],
             [self.golds[idx] for idx in next_indices],
-            [self.nonterminal_stack[idx] for idx in next_indices]
+            [self.nonterminal_stack[idx] for idx in next_indices],
         )
 
-        next_state.set_state(self.step_cnt+1, self.loss, self.pred_history)
+        next_state.set_state(self.step_cnt + 1, self.loss, self.pred_history)
         return next_state
 
     def insert_pred_history(self, actions):
@@ -141,13 +137,11 @@ class Transformer_Batch_State:
             b_idx = self.b_indices[idx]
             self.pred_history[b_idx].insert(len(self.pred_history[b_idx]), action)
 
-
     def insert_nonterminals(self, nonterminals):
         for idx, symbols in enumerate(nonterminals):
             del self.nonterminal_stack[idx][0]
             for symbol in reversed(symbols):
                 self.nonterminal_stack[idx].insert(0, symbol)
-
 
     def get_gold(self):
         return [golds[self.step_cnt] for golds in self.golds]

@@ -122,7 +122,12 @@ def train(cfg):
             log.info("Evaluation:")
 
             train_acc = utils.epoch_acc(
-                model, cfg.batch_size, train_data, table_data, cfg.model_name, cfg.is_col_set,
+                model,
+                cfg.batch_size,
+                train_data,
+                table_data,
+                cfg.model_name,
+                cfg.is_col_set,
             )
 
             val_loss = utils.epoch_train(
@@ -138,7 +143,12 @@ def train(cfg):
                 is_train=False,
             )
             val_acc = utils.epoch_acc(
-                model, cfg.batch_size, val_data, table_data, cfg.model_name, cfg.is_col_set,
+                model,
+                cfg.batch_size,
+                val_data,
+                table_data,
+                cfg.model_name,
+                cfg.is_col_set,
             )
 
             # Logging to tensorboard

@@ -21,7 +21,7 @@ class SemQL(Grammar):
 
         # Sel
         sel_len = len(qgm_box["head"])
-        actions += "Sel({}) ".format(sel_len-1)
+        actions += "Sel({}) ".format(sel_len - 1)
         for idx, head in enumerate(qgm_box["head"]):
             actions += "A({}) ".format(head[0])
             actions += "C({}) ".format(head[1])
@@ -32,7 +32,7 @@ class SemQL(Grammar):
         for idx, predicate in enumerate(qgm_box["body"]["local_predicates"]):
             if idx + 1 < p_len:
                 actions += "Filter({}) ".format(0)
-            actions += "Filter({}) ".format(predicate[2]+1)
+            actions += "Filter({}) ".format(predicate[2] + 1)
             actions += "A({}) ".format(predicate[0])
             actions += "C({}) ".format(predicate[1][0])
             actions += "T({}) ".format(predicate[1][1])
@@ -40,9 +40,10 @@ class SemQL(Grammar):
         actions = actions.strip(" ")
         return actions
 
-
     def cal_acc(self, pred_actions, gold_actions):
-        assert len(pred_actions) == len(gold_actions), "Num diff: {}, {}".format(len(pred_actions), len(gold_actions))
+        assert len(pred_actions) == len(gold_actions), "Num diff: {}, {}".format(
+            len(pred_actions), len(gold_actions)
+        )
         keys = [
             "total",
             "detail",
@@ -86,7 +87,9 @@ class SemQL(Grammar):
             head_num_is_correct = p_head_num == g_head_num
 
             # Head agg: Check A after sel
-            head_agg_is_correct = head_col_is_correct = head_tab_is_correct = head_num_is_correct
+            head_agg_is_correct = (
+                head_col_is_correct
+            ) = head_tab_is_correct = head_num_is_correct
             if head_num_is_correct:
                 # Head agg: check A after sel
                 p_head_agg = utils.filter_action(p_actions, "A", ["Sel"])
@@ -113,8 +116,12 @@ class SemQL(Grammar):
             g_predicate_num = utils.count_symbol(g_actions, "Filter")
             predicate_num_is_correct = p_predicate_num == g_predicate_num
 
-            predicate_op_is_correct = predicate_agg_is_correct = predicate_num_is_correct
-            predicate_col_is_correct = predicate_tab_is_correct = predicate_num_is_correct
+            predicate_op_is_correct = (
+                predicate_agg_is_correct
+            ) = predicate_num_is_correct
+            predicate_col_is_correct = (
+                predicate_tab_is_correct
+            ) = predicate_num_is_correct
 
             if predicate_num_is_correct:
                 # predicate ops

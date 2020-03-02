@@ -26,8 +26,7 @@ class LSTM_Decoder(nn.Module):
         self.start_symbol_id = self.grammar.symbol_to_sid[self.grammar.start_symbol]
 
         # LSTM Decoder
-        self.lstm_decoder = nn.LSTMCell(dim*3, dim)
-
+        self.lstm_decoder = nn.LSTMCell(dim * 3, dim)
 
     def forward(
         self,
@@ -47,23 +46,23 @@ class LSTM_Decoder(nn.Module):
 
         # Mask Batch State
         state = LSTM_Batch_State(
-                    torch.arange(init_b_size).long(),
-                    encoded_src,
-                    encoded_col,
-                    encoded_tab,
-                    src_mask,
-                    col_mask,
-                    tab_mask,
-                    col_tab_dic,
-                    tab_col_dic,
-                    golds,
-                    init_lstm_state,
-                    start_symbol_ids,
-                )
+            torch.arange(init_b_size).long(),
+            encoded_src,
+            encoded_col,
+            encoded_tab,
+            src_mask,
+            col_mask,
+            tab_mask,
+            col_tab_dic,
+            tab_col_dic,
+            golds,
+            init_lstm_state,
+            start_symbol_ids,
+        )
 
         # Set Starting conditions
         losses = [self.grammar.create_loss_object() for _ in range(init_b_size)]
-        pred_histories = [[] for  _ in range(init_b_size)]
+        pred_histories = [[] for _ in range(init_b_size)]
         state.set_state(0, losses, pred_histories)
 
         # Decode
@@ -79,7 +78,11 @@ class LSTM_Decoder(nn.Module):
                         tab_idx = action[1]
                         prev_action_emb += [state.get_encoded_tab()[idx][tab_idx]]
                     else:
-                        prev_action_id = torch.tensor(self.grammar.action_to_aid[action]).long().cuda()
+                        prev_action_id = (
+                            torch.tensor(self.grammar.action_to_aid[action])
+                            .long()
+                            .cuda()
+                        )
                         prev_action_emb += [self.grammar.action_emb(prev_action_id)]
                 prev_action_emb = torch.stack(prev_action_emb, dim=0)
             else:
@@ -110,8 +113,11 @@ class LSTM_Decoder(nn.Module):
             out = self.out_linear_layer(new_lstm_state[0]).unsqueeze(1)
 
             # Get views
-            action_view_indices, column_view_indices, table_view_indices = \
-                state.get_view_indices(self.col_symbol_id, self.tab_symbol_id)
+            (
+                action_view_indices,
+                column_view_indices,
+                table_view_indices,
+            ) = state.get_view_indices(self.col_symbol_id, self.tab_symbol_id)
 
             if action_view_indices:
                 action_view = state.create_view(action_view_indices)
@@ -119,16 +125,28 @@ class LSTM_Decoder(nn.Module):
 
                 # Get last action
                 cur_nodes = action_view.get_current_action_node()
-                next_aids = [self.grammar.get_possible_aids(int(symbol)) for symbol in cur_nodes]
+                next_aids = [
+                    self.grammar.get_possible_aids(int(symbol)) for symbol in cur_nodes
+                ]
 
-                action_mask = torch.ones(action_view.get_b_size(), self.grammar.get_action_len()).long().cuda()
+                action_mask = (
+                    torch.ones(action_view.get_b_size(), self.grammar.get_action_len())
+                    .long()
+                    .cuda()
+                )
 
                 for idx, item in enumerate(next_aids):
                     action_mask[idx][item] = 0
 
                 action_emb = self.grammar.action_emb.weight.unsqueeze(0)
                 action_emb = action_emb.repeat(action_view.get_b_size(), 1, 1)
-                pred_aid = self.predict(action_view, action_out, action_emb, action_mask, self.action_affine_layer)
+                pred_aid = self.predict(
+                    action_view,
+                    action_out,
+                    action_emb,
+                    action_mask,
+                    self.action_affine_layer,
+                )
 
                 # Append pred_history
                 actions = [self.grammar.aid_to_action[aid] for aid in pred_aid]
@@ -136,9 +154,11 @@ class LSTM_Decoder(nn.Module):
 
                 # Get next nonterminals
                 nonterminal_symbols = self.grammar.parse_nonterminal_symbols(actions)
-                nonterminal_symbol_ids = [self.grammar.symbols_to_sids(symbols) for symbols in nonterminal_symbols]
+                nonterminal_symbol_ids = [
+                    self.grammar.symbols_to_sids(symbols)
+                    for symbols in nonterminal_symbols
+                ]
                 action_view.insert_nonterminals(nonterminal_symbol_ids)
-
 
             if column_view_indices:
                 column_view = state.create_view(column_view_indices)
@@ -147,12 +167,20 @@ class LSTM_Decoder(nn.Module):
                 encoded_col = column_view.get_encoded_col()
                 col_mask = column_view.get_col_mask()
 
-                pred_col_id = self.predict(column_view, column_out, encoded_col, col_mask, self.col_affine_layer)
+                pred_col_id = self.predict(
+                    column_view,
+                    column_out,
+                    encoded_col,
+                    col_mask,
+                    self.col_affine_layer,
+                )
                 actions = [("C", col_id) for col_id in pred_col_id]
                 column_view.insert_pred_history(actions)
 
                 # Get next nonterminals
-                nonterminal_symbol_ids = [[self.tab_symbol_id] for _ in range(column_view.get_b_size())]
+                nonterminal_symbol_ids = [
+                    [self.tab_symbol_id] for _ in range(column_view.get_b_size())
+                ]
                 column_view.insert_nonterminals(nonterminal_symbol_ids)
 
             if table_view_indices:
@@ -163,19 +191,25 @@ class LSTM_Decoder(nn.Module):
 
                 # Get Mask from prev col
                 prev_col_id = [item[1] for item in table_view.get_prev_action()]
-                tab_mask = torch.ones(table_view.get_b_size(), len(table_view.tab_mask[0])).cuda()
+                tab_mask = torch.ones(
+                    table_view.get_b_size(), len(table_view.tab_mask[0])
+                ).cuda()
                 col_tab_dic = table_view.get_col_tab_dic()
 
                 for idx, col_id in enumerate(prev_col_id):
                     tab_ids = col_tab_dic[idx][col_id]
                     tab_mask[idx][tab_ids] = 0
 
-                pred_tab_id = self.predict(table_view, table_out, encoded_tab, tab_mask, self.tab_affine_layer)
+                pred_tab_id = self.predict(
+                    table_view, table_out, encoded_tab, tab_mask, self.tab_affine_layer
+                )
                 actions = [("T", table_id) for table_id in pred_tab_id]
                 table_view.insert_pred_history(actions)
 
                 # Get next nonterminals
-                table_view.insert_nonterminals([[] for _ in range(table_view.get_b_size())])
+                table_view.insert_nonterminals(
+                    [[] for _ in range(table_view.get_b_size())]
+                )
 
             # State Transition
             state = state.get_next_state()
@@ -186,16 +220,20 @@ class LSTM_Decoder(nn.Module):
             state.pred_history,
         )
 
-
     def attention(self, src, src_mask, hidden_state):
         hidden_state = hidden_state.unsqueeze(1)
-        weights = utils.calculate_similarity(src, hidden_state, source_mask=src_mask, affine_layer=self.tgt_affine_layer, log_softmax=False)
+        weights = utils.calculate_similarity(
+            src,
+            hidden_state,
+            source_mask=src_mask,
+            affine_layer=self.tgt_affine_layer,
+            log_softmax=False,
+        )
 
         src = src * weights.unsqueeze(-1)
         src = torch.sum(src, dim=1)
 
         return src
-
 
     def predict(self, view, out, src, src_mask, affine_layer=None):
         # Calculate similarity

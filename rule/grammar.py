@@ -34,7 +34,6 @@ class Grammar(nn.Module):
         self.symbol_emb = nn.Embedding(len(self.symbols), emb_dim)
         self.action_emb = nn.Embedding(len(self.action_to_aid), emb_dim)
 
-
     def _create_grammar(self, manifesto_path):
         cur_line = 0
 
@@ -50,9 +49,9 @@ class Grammar(nn.Module):
             return prev_state
 
         def parse_symbol(line):
-            assert len(line.split(" ")) == 1, "Symbol format error in line {}: {}".format(
-                cur_line, line
-            )
+            assert (
+                len(line.split(" ")) == 1
+            ), "Symbol format error in line {}: {}".format(cur_line, line)
             if line in self.symbols:
                 print("Repeated symbol in line {}: {}".format(cur_line, line))
             else:
@@ -65,7 +64,9 @@ class Grammar(nn.Module):
             left_symbol, right_symbols = line.split(ACTION_SIGN)
             actions = right_symbols.strip(" ").split(" | ")
             # Check left symbol
-            assert left_symbol in self.symbols, "Undeclared symbol '{}' in line {}".format(left_symbol, cur_line)
+            assert (
+                left_symbol in self.symbols
+            ), "Undeclared symbol '{}' in line {}".format(left_symbol, cur_line)
             assert (
                 left_symbol not in self.actions.keys()
             ), "Overwriting previous action rule in line {}".format(cur_line)
@@ -73,7 +74,9 @@ class Grammar(nn.Module):
             # Check Right symbols are declared
             for symbols in actions:
                 for symbol in symbols.split(" "):
-                    assert symbol in self.symbols, "Undeclared symbol '{}' in line {}".format(symbol, cur_line)
+                    assert (
+                        symbol in self.symbols
+                    ), "Undeclared symbol '{}' in line {}".format(symbol, cur_line)
             self.actions[left_symbol] = actions
 
             # Set Start Symbol
@@ -108,24 +111,16 @@ class Grammar(nn.Module):
                 action_list += [(key, idx)]
 
         # action-to-id
-        self.action_to_aid = {
-            action_list[idx]: idx for idx in range(len(action_list))
-        }
+        self.action_to_aid = {action_list[idx]: idx for idx in range(len(action_list))}
 
         # id-to-action
-        self.aid_to_action = {
-            idx: action_list[idx] for idx in range(len(action_list))
-        }
+        self.aid_to_action = {idx: action_list[idx] for idx in range(len(action_list))}
 
         # symbol_id_to_symbol
-        self.sid_to_symbol = {
-            idx: symbol for idx, symbol in enumerate(self.symbols)
-        }
+        self.sid_to_symbol = {idx: symbol for idx, symbol in enumerate(self.symbols)}
 
         # symbol_to_symbol_id
-        self.symbol_to_sid = {
-            symbol: idx for idx, symbol in enumerate(self.symbols)
-        }
+        self.symbol_to_sid = {symbol: idx for idx, symbol in enumerate(self.symbols)}
 
     # Symbols to symbol ids
     def symbols_to_sids(self, symbols):
@@ -140,14 +135,23 @@ class Grammar(nn.Module):
     # Get next action
     def get_possible_aids(self, symbol_id):
         symbol = self.sid_to_symbol[symbol_id]
-        return [self.action_to_aid[(symbol, idx)] for idx in range(len(self.actions[symbol]))]
+        return [
+            self.action_to_aid[(symbol, idx)]
+            for idx in range(len(self.actions[symbol]))
+        ]
 
     # Parse and get nonterminals
     def parse_nonterminal_symbols(self, actions):
         nonterminals = []
         for action in actions:
             symbol, id = action
-            nonterminals += [[item for item in self.actions[symbol][id].split(" ") if item not in self.terminals]]
+            nonterminals += [
+                [
+                    item
+                    for item in self.actions[symbol][id].split(" ")
+                    if item not in self.terminals
+                ]
+            ]
         return nonterminals
 
     # Get ALL
@@ -166,6 +170,8 @@ class Grammar(nn.Module):
 
 
 if __name__ == "__main__":
-    grammar = Grammar("/home/hkkang/debugging/irnet_qgm_transformer/rule/preprocess/preprocess.manifesto")
+    grammar = Grammar(
+        "/home/hkkang/debugging/irnet_qgm_transformer/rule/preprocess/preprocess.manifesto"
+    )
     stop = None
     pass
