@@ -3,10 +3,10 @@ import copy
 import hydra
 import logging
 import datetime
+from radam import RAdam
 
 import torch
 import torch.optim as optim
-from RAdam.radam import RAdam
 from torch.utils.tensorboard import SummaryWriter
 
 from src import utils
