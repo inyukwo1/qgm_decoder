@@ -10,6 +10,7 @@ from src.transformer.transformer_decoder import (
     TransformerDecoder,
 )
 
+
 class Transformer_Decoder(nn.Module):
     def __init__(self, cfg):
         super(Transformer_Decoder, self).__init__()
@@ -18,12 +19,14 @@ class Transformer_Decoder(nn.Module):
         nhead = cfg.nhead
         layer_num = cfg.layer_num
         hidden_size = cfg.hidden_size
+        use_mem_pointer = cfg.use_mem_pointer
 
         #Decode Layers
         dim = 1024 if is_bert else hidden_size
         self.dim = dim
         self.nhead = nhead
         self.layer_num = layer_num
+        self.use_mem_pointer = use_mem_pointer
 
         decoder_layer = TransformerDecoderLayer(d_model=dim, nhead=nhead)
         self.transformer_decoder = TransformerDecoder(decoder_layer, num_layers=layer_num)
@@ -35,7 +38,9 @@ class Transformer_Decoder(nn.Module):
         self.tab_affine_layer = nn.Linear(dim, dim)
         self.tgt_linear_layer = nn.Linear(dim*2, dim)
         self.out_linear_layer = nn.Linear(dim, dim)
-        self.linear_gate = nn.Linear(dim, 1)
+
+        if use_mem_pointer:
+            self.linear_gate = nn.Linear(dim, 1)
 
         self.grammar = SemQL(dim)
         self.col_symbol_id = self.grammar.symbol_to_sid["C"]
@@ -185,9 +190,12 @@ class Transformer_Decoder(nn.Module):
                 col_mask = column_view.get_col_mask()
 
                 # get column memory ma
-                col_history = column_view.get_col_memory_map()
-                gate = torch.sigmoid(self.linear_gate(column_out)).squeeze(-1).expand(-1, col_history.shape[1])
-                gate_values = torch.where(torch.tensor(col_history).byte().cuda(), gate, 1 - gate)
+                if self.use_mem_pointer:
+                    col_history = column_view.get_col_memory_map()
+                    gate = torch.sigmoid(self.linear_gate(column_out)).squeeze(-1).expand(-1, col_history.shape[1])
+                    gate_values = torch.where(torch.tensor(col_history).byte().cuda(), gate, 1 - gate)
+                else:
+                    gate_values = None
 
                 pred_col_id = self.predict(column_view, column_out, encoded_col, col_mask, self.col_affine_layer, gate_values)
                 actions = [("C", col_id) for col_id in pred_col_id]

@@ -109,6 +109,7 @@ def train(cfg):
             cfg.clip_grad,
             cfg.decoder_name,
             is_col_set=cfg.is_col_set,
+            optimize_freq=cfg.optimize_freq,
         )
 
         dataset_name = cfg.dataset.name
@@ -136,6 +137,7 @@ def train(cfg):
                 cfg.decoder_name,
                 is_col_set=cfg.is_col_set,
                 is_train=False,
+                optimize_freq=cfg.optimize_freq,
             )
             val_acc = utils.epoch_acc(
                 model, cfg.batch_size, val_data, table_data, cfg.decoder_name, cfg.is_col_set,

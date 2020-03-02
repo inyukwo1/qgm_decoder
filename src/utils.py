@@ -400,6 +400,7 @@ def epoch_train(
     model_name,
     is_col_set=True,
     is_train=True,
+    optimize_freq=1,
 ):
     if is_train:
         model.train()
@@ -483,7 +484,7 @@ def epoch_train(
         if is_train:
             loss.backward()
 
-        if idx % 1 == 0:
+        if idx % optimize_freq == 0:
             if clip_grad > 0.0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
             if is_train:

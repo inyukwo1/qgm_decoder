@@ -60,8 +60,8 @@ class RATransformerEncoderLayer(nn.Module):
         relation_v2 = torch.where(tmp == zeros, zeros, relation_v)
 
         # self Multi-head Attention & Residual & Norm
-        pre_LN = True
-        if pre_LN:
+        POST_LN = True
+        if POST_LN:
             src2 = self.self_attn(src, src, src, relation_k=relation_k2, relation_v=relation_v2, attn_mask=src_mask,
                                   key_padding_mask=src_key_padding_mask)
             src = src + self.dropout(src2)
@@ -71,7 +71,7 @@ class RATransformerEncoderLayer(nn.Module):
             src2 = self.feed_forward(src)
             src = src + src2
             src = self.norm2(src)
-        # Post LN
+        # Pre LN
         else:
             # Self Multi-head attention & Residual & Norm
             src = self.norm1(src)
