@@ -1,5 +1,4 @@
 import math
-import numpy as np
 import torch
 import torch.nn as nn
 import decoder.utils as utils
@@ -9,8 +8,6 @@ from src.transformer.transformer_decoder import (
     TransformerDecoderLayer,
     TransformerDecoder,
 )
-import copy
-
 
 
 class Transformer_Decoder(nn.Module):
