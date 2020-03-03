@@ -1,5 +1,6 @@
 import math
 import torch
+import random
 import torch.nn as nn
 import decoder.utils as utils
 from rule.semql.semql import SemQL
@@ -115,6 +116,7 @@ class Transformer_Decoder(nn.Module):
         state.set_state(0, losses, pred_histories)
         fine_state.set_state(0, losses, pred_histories, second_pred_histories)
 
+        USE_RAND_MASK = True
         # Decode
         while not state.is_done():
             # Get prev actions embedding
@@ -122,8 +124,11 @@ class Transformer_Decoder(nn.Module):
             prev_action_emb = []
             for idx, actions in enumerate(prev_actions):
                 embs = []
-                for action in actions:
-                    if action[0] == "C":
+                rand_idx = random.randint(0, len(actions))
+                for a_idx, action in enumerate(actions):
+                    if USE_RAND_MASK and len(actions) > 5 and a_idx == rand_idx:
+                        embs += [self.one_dim_zero_tensor]
+                    elif action[0] == "C":
                         col_idx = action[1]
                         embs += [state.get_encoded_col()[idx][col_idx]]
                     elif action[0] == "T":
@@ -170,69 +175,70 @@ class Transformer_Decoder(nn.Module):
             ).transpose(0, 1)
 
             out = self.out_linear_layer(out)
-            # Loss for all step
-            for step_idx in range(out.shape[1]-1):
-                prev_actions = state.get_prev_actions()
-                # Get action view indices
-                action_view_indices = []
-                column_view_indices = []
-                table_view_indices = []
-                for idx, actions in enumerate(prev_actions):
-                    if actions[step_idx][0] == "C":
-                        column_view_indices += [idx]
-                    elif actions[step_idx][0] == "T":
-                        table_view_indices += [idx]
-                    else:
-                        action_view_indices += [idx]
+            MORE_LOSS = True
+            if MORE_LOSS:
+                # Loss for all step
+                for step_idx in range(out.shape[1]-1):
+                    prev_actions = state.get_prev_actions()
+                    action_view_indices = []
+                    column_view_indices = []
+                    table_view_indices = []
+                    for idx, actions in enumerate(prev_actions):
+                        if actions[step_idx][0] == "C":
+                            column_view_indices += [idx]
+                        elif actions[step_idx][0] == "T":
+                            table_view_indices += [idx]
+                        else:
+                            action_view_indices += [idx]
 
-                if action_view_indices:
-                    action_view = state.create_view(action_view_indices)
-                    action_out = out[action_view_indices, step_idx].unsqueeze(1)
-                    # Get last action
-                    prev_nodes = [prev_actions[idx][step_idx-1][0] for idx in action_view_indices]
-                    next_aids = [self.grammar.get_possible_aids(symbol) for symbol in prev_nodes]
+                    if action_view_indices:
+                        action_view = state.create_view(action_view_indices)
+                        action_out = out[action_view_indices, step_idx].unsqueeze(1)
+                        # Get last action
+                        cur_nodes = [prev_actions[idx][step_idx][0] for idx in action_view_indices]
+                        next_aids = [self.grammar.get_possible_aids(symbol) for symbol in cur_nodes]
 
-                    # Action mask
-                    action_mask = torch.ones(action_view.get_b_size(), self.grammar.get_action_len()).long().cuda()
-                    for idx, item in enumerate(next_aids):
-                        action_mask[idx][item] = 0
+                        # Action mask
+                        action_mask = torch.ones(action_view.get_b_size(), self.grammar.get_action_len()).long().cuda()
+                        for idx, item in enumerate(next_aids):
+                            action_mask[idx][item] = 0
 
-                    action_emb = self.grammar.action_emb.weight.unsqueeze(0)
-                    action_emb = action_emb.repeat(action_view.get_b_size(), 1, 1)
+                        action_emb = self.grammar.action_emb.weight.unsqueeze(0)
+                        action_emb = action_emb.repeat(action_view.get_b_size(), 1, 1)
 
-                    action_prev_actions = [prev_actions[idx][:step_idx+1] for idx in action_view_indices]
-                    self.calculate_and_add_loss(action_view, action_out, action_emb, action_mask, self.action_affine_layer,
-                                action_prev_actions)
+                        action_prev_actions = [prev_actions[idx][:step_idx+1] for idx in action_view_indices]
+                        self.calculate_and_add_loss(action_view, action_out, action_emb, action_mask, self.action_affine_layer,
+                                    action_prev_actions)
 
-                if column_view_indices:
-                    column_view = state.create_view(column_view_indices)
-                    column_out = out[column_view_indices, step_idx].unsqueeze(1)
+                    if column_view_indices:
+                        column_view = state.create_view(column_view_indices)
+                        column_out = out[column_view_indices, step_idx].unsqueeze(1)
 
-                    encoded_col = column_view.get_encoded_col()
-                    col_mask = column_view.get_col_mask()
+                        encoded_col = column_view.get_encoded_col()
+                        col_mask = column_view.get_col_mask()
 
-                    col_prev_actions = [prev_actions[idx][:step_idx+1] for idx in column_view_indices]
-                    self.calculate_and_add_loss(column_view, column_out, encoded_col, col_mask, self.col_affine_layer,
-                                 col_prev_actions)
+                        col_prev_actions = [prev_actions[idx][:step_idx+1] for idx in column_view_indices]
+                        self.calculate_and_add_loss(column_view, column_out, encoded_col, col_mask, self.col_affine_layer,
+                                     col_prev_actions)
 
-                if table_view_indices:
-                    table_view = state.create_view(table_view_indices)
-                    table_out = out[table_view_indices, step_idx].unsqueeze(1)
+                    if table_view_indices:
+                        table_view = state.create_view(table_view_indices)
+                        table_out = out[table_view_indices, step_idx].unsqueeze(1)
 
-                    encoded_tab = table_view.get_encoded_tab()
+                        encoded_tab = table_view.get_encoded_tab()
 
-                    # Get Mask from prev col
-                    prev_col_id = [prev_actions[idx][step_idx-1][1] for idx in table_view_indices]
-                    tab_mask = torch.ones(table_view.get_b_size(), len(table_view.tab_mask[0])).cuda()
-                    col_tab_dic = table_view.get_col_tab_dic()
+                        # Get Mask from prev col
+                        prev_col_id = [prev_actions[idx][step_idx-1][1] for idx in table_view_indices]
+                        tab_mask = torch.ones(table_view.get_b_size(), len(table_view.tab_mask[0])).cuda()
+                        col_tab_dic = table_view.get_col_tab_dic()
 
-                    for idx, col_id in enumerate(prev_col_id):
-                        tab_ids = col_tab_dic[idx][col_id]
-                        tab_mask[idx][tab_ids] = 0
+                        for idx, col_id in enumerate(prev_col_id):
+                            tab_ids = col_tab_dic[idx][col_id]
+                            tab_mask[idx][tab_ids] = 0
 
-                    table_prev_actions = [prev_actions[idx][:step_idx+1] for idx in table_view_indices]
-                    self.calculate_and_add_loss(table_view, table_out, encoded_tab, tab_mask, self.tab_affine_layer,
-                                  table_prev_actions)
+                        table_prev_actions = [prev_actions[idx][:step_idx+1] for idx in table_view_indices]
+                        self.calculate_and_add_loss(table_view, table_out, encoded_tab, tab_mask, self.tab_affine_layer,
+                                      table_prev_actions)
 
             out = out[:, -1:, :]
             # Get views

@@ -9,6 +9,8 @@ RELATION_LIST = [
     'qt_exact', 'qt_partial', 'qt_no', 'qc_exact', 'qc_partial', 'qc_no', #20
     'tq_exact', 'tq_partial', 'tq_no', 'cq_exact', 'cq_partial', 'cq_no', #26
     'qq_-2', 'qq_-1', 'qq_0', 'qq_1', 'qq_2' #32
+    #0: identical #1: Dependent #2: Dependent Reversed #3: ETC
+    "0", "1", "2", "3" #37
 ]
 
 # Dictionary
@@ -47,7 +49,7 @@ def create_relation(data, dbs, use_col_set=True):
     table = split_words(table)
 
     # Sen - Sen
-    qq_relation = parse_q_q_relation(data["question_arg"])
+    qq_relation = parse_q_q_relation(data["question_arg"], data["question_relation"])
 
     # Sen & Col
     qc_relation = parse_match_relation(sentence, column_name, "q", "c")
@@ -214,16 +216,23 @@ def parse_c_c_relation(cols, foreign_keys, fp_relations):
     return relations
 
 
-def parse_q_q_relation(sentence):
-    relations = []
-    question_length = len(sentence)
-    for idx_1 in range(question_length):
-        tmp = []
-        for idx_2 in range(question_length):
-            key = 'qq_' + str(max(min(idx_1-idx_2, 2), -2))
-            tmp += [RELATION_TYPE[key]]
-        relations += [tmp]
-    return relations
+def parse_q_q_relation(sentence, relation_matrix):
+    USE_DEP = False
+    if USE_DEP:
+        new_relation_matrix = []
+        for relations in relation_matrix:
+            new_relation_matrix += [[RELATION_TYPE[str(relation)] for relation in relations]]
+        return new_relation_matrix
+    else:
+        relations = []
+        question_length = len(sentence)
+        for idx_1 in range(question_length):
+            tmp = []
+            for idx_2 in range(question_length):
+                key = 'qq_' + str(max(min(idx_1-idx_2, 2), -2))
+                tmp += [RELATION_TYPE[key]]
+            relations += [tmp]
+        return relations
 
 
 def parse_match_relation(words_1, words_2, type_1, type_2):
