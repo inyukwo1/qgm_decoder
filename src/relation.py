@@ -8,9 +8,9 @@ RELATION_LIST = [
     'tt_identical', 'tt_foreign', 'tt_reversed', 'tt_both', 'tt_etc', #15
     'qt_exact', 'qt_partial', 'qt_no', 'qc_exact', 'qc_partial', 'qc_no', #20
     'tq_exact', 'tq_partial', 'tq_no', 'cq_exact', 'cq_partial', 'cq_no', #26
-    'qq_-2', 'qq_-1', 'qq_0', 'qq_1', 'qq_2' #32
+    'qq_-2', 'qq_-1', 'qq_0', 'qq_1', 'qq_2', #32
     #0: identical #1: Dependent #2: Dependent Reversed #3: ETC
-    "0", "1", "2", "3" #37
+    "0", "1", "2", "3", #37
 ]
 
 # Dictionary
