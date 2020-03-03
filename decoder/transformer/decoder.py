@@ -1,3 +1,4 @@
+import random
 import math
 import torch
 import torch.nn as nn
@@ -122,8 +123,11 @@ class Transformer_Decoder(nn.Module):
             prev_action_emb = []
             for idx, actions in enumerate(prev_actions):
                 embs = []
-                for action in actions:
-                    if action[0] == "C":
+                rand_idx = random.randint(0, len(actions))
+                for a_idx, action in enumerate(actions):
+                    if len(actions) > 5 and a_idx == rand_idx:
+                        embs += [self.one_dim_zero_tensor]
+                    elif action[0] == "C":
                         col_idx = action[1]
                         embs += [state.get_encoded_col()[idx][col_idx]]
                     elif action[0] == "T":
@@ -170,6 +174,7 @@ class Transformer_Decoder(nn.Module):
             ).transpose(0, 1)
 
             out = self.out_linear_layer(out)
+            """
             # Loss for all step
             for step_idx in range(out.shape[1]-1):
                 prev_actions = state.get_prev_actions()
@@ -233,7 +238,7 @@ class Transformer_Decoder(nn.Module):
                     table_prev_actions = [prev_actions[idx][:step_idx+1] for idx in table_view_indices]
                     self.calculate_and_add_loss(table_view, table_out, encoded_tab, tab_mask, self.tab_affine_layer,
                                   table_prev_actions)
-
+            """
             out = out[:, -1:, :]
             # Get views
             (
