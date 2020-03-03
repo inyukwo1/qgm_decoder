@@ -8,7 +8,6 @@ from src.transformer_decoder import (
     TransformerDecoder,
 )
 from framework.sequential_monad import TensorPromise
-from framework.promise import OneDimTensorPromise
 
 
 class LazyModule(ABC):
@@ -17,7 +16,7 @@ class LazyModule(ABC):
         self.later_buffer = []
         self.done_buffer = []
 
-    def compute_if_not_done(self):
+    def wait_if_not_done(self):
         if not self.computed:
             self.compute()
             self.later_buffer = []
