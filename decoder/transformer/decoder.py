@@ -1,3 +1,4 @@
+import random
 import math
 import torch
 import random
@@ -175,6 +176,7 @@ class Transformer_Decoder(nn.Module):
             ).transpose(0, 1)
 
             out = self.out_linear_layer(out)
+
             MORE_LOSS = True
             if MORE_LOSS:
                 # Loss for all step
