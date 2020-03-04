@@ -8,33 +8,34 @@ from src.transformer_decoder import (
     TransformerDecoder,
 )
 from framework.sequential_monad import TensorPromise
+from framework.utils import assert_dim, stack_sequential_tensor_with_mask
 
 
 class LazyModule(ABC):
     def __init__(self):
-        self.computed = False
         self.later_buffer = []
+        self.promises = []
         self.done_buffer = []
 
     def wait_if_not_done(self):
-        if not self.computed:
+        if self.later_buffer:
             self.compute()
+            for idx in range(len(self.later_buffer)):
+                self.promises[idx].result = self.done_buffer[idx]
             self.later_buffer = []
-            self.computed = True
+            self.promises = []
+            self.done_buffer = []
 
-    def forward_later(self, any: Any) -> TensorPromise:
-        self.assert_input(any)
-        self.later_buffer.append(any)
+    def forward_later(self, *inputs) -> TensorPromise:
+        self.assert_input(*inputs)
+        self.later_buffer.append(inputs)
         appended_index = len(self.later_buffer) - 1
-        return TensorPromise(self, appended_index)
+        promise = TensorPromise(self, appended_index)
+        self.promises.append(promise)
+        return promise
 
     def fetch(self, index: int) -> Any:
         return self.done_buffer[index]
-
-    def reset(self):
-        self.computed = False
-        self.later_buffer = []
-        self.done_buffer = []
 
     def assert_input(self, any: Any):
         pass
@@ -42,13 +43,6 @@ class LazyModule(ABC):
     @abstractmethod
     def compute(self) -> None:
         pass
-
-
-def assert_dim(dim, tensor: torch.Tensor):
-    tensor_dim = list(tensor.size())
-    for expected, real in zip(dim, tensor_dim):
-        if expected is not None:
-            assert expected == real, "expected: {} real: {}".format(dim, tensor_dim)
 
 
 class LazyLinear(nn.Module, LazyModule):
@@ -59,12 +53,17 @@ class LazyLinear(nn.Module, LazyModule):
         self.in_dim = in_dim
         self.out_dim = out_dim
 
-    def assert_input(self, any: Any):
-        assert isinstance(any, torch.Tensor)
-        assert_dim([self.in_dim], any)
+    def assert_input(self, *inputs):
+        [tensor] = inputs
+        assert isinstance(tensor, torch.Tensor)
+        if len(tensor.size()) == 1:
+            assert_dim([self.in_dim], tensor)
+        elif len(tensor.size()) == 1:
+            assert_dim([None, self.in_dim], tensor)
 
     def compute(self):
-        stacked_tensors = torch.stack(self.later_buffer)
+        tensor_list = [inputs[0] for inputs in self.later_buffer]
+        stacked_tensors = torch.stack(tensor_list)
         computed_tensors = self.module(stacked_tensors)
         self.done_buffer = [
             computed_tensors[idx] for idx in range(len(computed_tensors))
@@ -79,9 +78,12 @@ class LazyTransformerDecoder(nn.Module, LazyModule):
         self.transformer_decoder = TransformerDecoder(
             decoder_layer, num_layers=layer_num
         )
-        self._init_positional_embedding(in_dim)
+        self.in_dim = in_dim
+        self._init_positional_embedding()
 
-    def _init_positional_embedding(self, d_model, dropout=0.1, max_len=100):
+    def _init_positional_embedding(self, dropout=0.1, max_len=100):
+        d_model = self.in_dim
+
         self.pos_dropout = nn.Dropout(p=dropout)
         pe = torch.zeros(max_len, d_model)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
@@ -96,3 +98,29 @@ class LazyTransformerDecoder(nn.Module, LazyModule):
     def _pos_encode(self, x):
         x = x + self.pe[: x.size(0), :]
         return self.pos_dropout(x)
+
+    def assert_input(self, *inputs):
+        tgt, mem = inputs
+        assert_dim([None, self.in_dim], tgt)
+        assert_dim([None, self.in_dim], mem)
+
+    def compute(self):
+        tgt_list: List[torch.Tensor] = []
+        mem_list: List[torch.Tensor] = []
+        for tgt, mem in self.later_buffer:
+            tgt_list.append(tgt)
+            mem_list.append(mem)
+        stacked_tgt, tgt_mask = stack_sequential_tensor_with_mask(tgt_list)
+        stacked_mem, mem_mask = stack_sequential_tensor_with_mask(mem_list)
+        stacked_tgt_batch_second = stacked_tgt.transpose(0, 1)
+        stacked_mem_batch_second = stacked_mem.transpose(0, 1)
+        pos_encoded_tgt_batch_second = self._pos_encode(stacked_tgt_batch_second)
+        out_batch_first = self.transformer_decoder(
+            pos_encoded_tgt_batch_second,
+            stacked_mem_batch_second,
+            tgt_key_padding_mask=tgt_mask,
+            memory_key_padding_mask=mem_mask,
+        ).transpose(0, 1)
+        self.done_buffer = [
+            out_batch_first[idx] for idx in range(len(self.later_buffer))
+        ]

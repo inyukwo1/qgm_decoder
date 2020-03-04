@@ -8,11 +8,9 @@ from src.dataset import Batch
 from src.models.basic_model import BasicModel
 from decoder.qgm.qgm_decoder import QGM_Decoder
 
-# from decoder.semql.semql_decoder import SemQL_Decoder
 from transformers import *
-from qgm_transformer.decoder import QGM_Transformer_Decoder
 from decoder.lstm.decoder import LSTM_Decoder
-from decoder.transformer.decoder import Transformer_Decoder
+from decoder.transformer_framework.decoder import TransformerDecoderFramework
 
 # Transformers has a unified API
 # for 8 transformer architectures and 30 pretrained weights.
@@ -71,7 +69,7 @@ class IRNet(BasicModel):
 
         # QGM Decoder
         if self.decoder_name == "transformer":
-            self.decoder = Transformer_Decoder(cfg)
+            self.decoder = TransformerDecoderFramework(cfg)
         elif self.decoder_name == "lstm":
             self.decoder = LSTM_Decoder(cfg)
         elif self.decoder_name == "qgm":
@@ -454,13 +452,13 @@ class IRNet(BasicModel):
                     ]
                 ]
             golds = tmp
-            losses, pred = self.decoder(
+            losses = self.decoder(
                 src_encodings,
                 table_embedding,
                 schema_embedding,
-                src_mask,
-                col_mask,
-                tab_mask,
+                batch.src_sents_len,
+                batch.col_num,
+                batch.table_len,
                 col_tab_dic,
                 tab_col_dic,
                 golds,
@@ -627,16 +625,16 @@ class IRNet(BasicModel):
                         for item in gold.split(" ")
                     ]
                 golds = tmp
-                losses, pred = self.decoder(
+                pred = self.decoder(
                     src_encodings,
                     table_embedding,
                     schema_embedding,
-                    src_mask,
-                    col_mask,
-                    tab_mask,
+                    batch.src_sents_len,
+                    batch.col_num,
+                    batch.table_len,
                     col_tab_dic,
                     tab_col_dic,
-                    golds,
+                    golds=None,
                 )
 
                 return pred

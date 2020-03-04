@@ -40,3 +40,14 @@ class Loss:
 
     def get_total_loss(self):
         return self.get_loss("total")
+
+    def __radd__(self, other):
+        return self.__add__(other)
+
+    def __add__(self, other):
+        if other == 0:
+            return self
+        new_loss = Loss()
+        for key in self.loss_dic:
+            new_loss.loss_dic[key] = self.loss_dic[key] + other.loss_dic[key]
+        return new_loss

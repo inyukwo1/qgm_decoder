@@ -431,17 +431,12 @@ def epoch_train(
             for key, item in tmp.items():
                 total_loss[key] += [float(item)]
         elif model_name == "transformer":
-            tmp = {key: [] for key in result[0].get_keys()}
-            for losses in result:
-                for key, item in losses.get_dic().items():
-                    tmp[key] += [item]
-            tmp = {key: torch.mean(torch.stack(item)) for key, item in tmp.items()}
-            loss = tmp["sketch"] + tmp["detail"]
+            loss = result.loss_dic["sketch"] + result.loss_dic["detail"]
 
             # Save
             if not total_loss:
-                total_loss = {key: [] for key in result[0].get_keys()}
-            for key, item in tmp.items():
+                total_loss = {key: [] for key in result.get_keys()}
+            for key, item in result.loss_dic.items():
                 total_loss[key] += [float(item)]
 
         elif model_name == "qgm":

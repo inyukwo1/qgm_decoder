@@ -1,14 +1,19 @@
+from typing import NewType
 from rule.grammar import Grammar
 from rule.semql.semql_loss import SemQL_Loss
 
 import rule.utils as utils
 
+
 SKETCH_SYMBOLS = ["A", "C", "T"]
 
-
+# Singleton
 class SemQL(Grammar):
+    semql: "SemQL" = None
+
     def __init__(self, emb_dim=300):
         super(SemQL, self).__init__("./rule/semql/semql.manifesto", emb_dim)
+        SemQL.semql = self
 
     def create_loss_object(self):
         return SemQL_Loss(self.symbol_to_sid)

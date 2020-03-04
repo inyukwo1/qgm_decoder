@@ -1,4 +1,5 @@
 import torch.nn as nn
+from typing import NewType, Tuple, Dict, List
 
 ACTION_SIGN = " ::= "
 
@@ -9,6 +10,13 @@ SYMBOL_START = "<symbol_start>"
 SYMBOL_END = "<symbol_end>"
 GRAMMAR_START = "<grammar_start>"
 GRAMMAR_END = "<grammar_end>"
+
+# Types
+Symbol = NewType("Symbol", str)
+SymbolId = NewType("SymbolId", int)
+LocalActionId = NewType("LocalActionId", int)
+GlobalActionId = NewType("GlobalActionId", int)
+Action = NewType("Action", Tuple[Symbol, LocalActionId])
 
 
 class Grammar(nn.Module):
@@ -23,7 +31,7 @@ class Grammar(nn.Module):
 
         # Action
         self.actions = {}
-        self.action_to_aid = {}
+        self.action_to_aid: Dict[Action, GlobalActionId] = {}
         self.aid_to_action = {}
         self._create_grammar(grammar_path)
         self.terminals = [
@@ -141,18 +149,19 @@ class Grammar(nn.Module):
         ]
 
     # Parse and get nonterminals
-    def parse_nonterminal_symbols(self, actions):
+    def parse_nonterminal_symbols(self, actions: List[Action]):
         nonterminals = []
         for action in actions:
-            symbol, id = action
-            nonterminals += [
-                [
-                    item
-                    for item in self.actions[symbol][id].split(" ")
-                    if item not in self.terminals
-                ]
-            ]
+            nonterminals += [self.parse_nonterminal_symbol(action)]
         return nonterminals
+
+    def parse_nonterminal_symbol(self, action: Action):
+        symbol, id = action
+        return [
+            item
+            for item in self.actions[symbol][id].split(" ")
+            if item not in self.terminals
+        ]
 
     # Get ALL
     def get_all_symbols(self):
