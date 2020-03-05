@@ -529,7 +529,7 @@ def epoch_acc(
             tmp = tmp2
             gold += tmp
         elif model_name == "transformer":
-            pred += model.parse(examples)
+            pred += model(examples)
             tmp = [
                 model.decoder.grammar.create_data(example.qgm) for example in examples
             ]
