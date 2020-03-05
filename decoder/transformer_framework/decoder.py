@@ -15,7 +15,11 @@ from framework.sequential_monad import (
     TensorPromiseOrTensor,
     TensorPromise,
 )
-from framework.lazy_modules import LazyLinear, LazyTransformerDecoder
+from framework.lazy_modules import (
+    LazyLinear,
+    LazyTransformerDecoder,
+    LazyCalculateSimilarity,
+)
 
 
 class TransformerDecoderFramework(nn.Module):
@@ -40,9 +44,9 @@ class TransformerDecoderFramework(nn.Module):
         self.tgt_linear_layer = LazyLinear(dim * 2, dim)
         self.out_linear_layer = LazyLinear(dim, dim)
 
-        self.action_decode_affine_layer = nn.Linear(dim, dim)
-        self.col_decode_affine_layer = nn.Linear(dim, dim)
-        self.tab_decode_affine_layer = nn.Linear(dim, dim)
+        self.action_similarity = LazyCalculateSimilarity(dim, dim)
+        self.column_similarity = LazyCalculateSimilarity(dim, dim)
+        self.table_similarity = LazyCalculateSimilarity(dim, dim)
 
         self.grammar = SemQL(dim)
         self.col_symbol_id = self.grammar.symbol_to_sid["C"]
@@ -112,9 +116,7 @@ class TransformerDecoderFramework(nn.Module):
                 for b_idx in range(b_size)
             ]
 
-        def embed_history_actions(
-            state: TransformerState,
-        ) -> Dict[str, TensorPromiseOrTensor]:
+        def embed_history_actions(state: TransformerState,) -> Dict[str, TensorPromise]:
             history_actions: List[Action] = state.get_history_actions()
             history_action_embeddings: List[torch.Tensor] = [
                 self.action_to_embedding(state, action) for action in history_actions
@@ -128,8 +130,8 @@ class TransformerDecoderFramework(nn.Module):
             return {"action_embedding": action_embeddings_promise}
 
         def embed_history_symbols(
-            state: TransformerState, prev_tensor_dict: Dict[str, torch.Tensor]
-        ) -> Dict[str, TensorPromiseOrTensor]:
+            state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
+        ) -> Dict[str, TensorPromise]:
             history_symbols: List[Symbol] = state.get_history_symbols()
             current_symbol: Symbol = state.get_current_symbol()
             history_symbols += [current_symbol]
@@ -143,10 +145,10 @@ class TransformerDecoderFramework(nn.Module):
             return new_tensor_dict
 
         def combine_symbol_action_embeddings(
-            state: TransformerState, prev_tensor_dict: Dict[str, torch.Tensor]
-        ) -> Dict[str, TensorPromiseOrTensor]:
-            action_embedding: torch.Tensor = prev_tensor_dict["action_embedding"]
-            symbol_embedding: torch.Tensor = prev_tensor_dict["symbol_embedding"]
+            state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
+        ) -> Dict[str, TensorPromise]:
+            action_embedding: torch.Tensor = prev_tensor_dict["action_embedding"].result
+            symbol_embedding: torch.Tensor = prev_tensor_dict["symbol_embedding"].result
             combined_embedding: torch.Tensor = torch.cat(
                 (action_embedding, symbol_embedding), dim=-1
             )
@@ -156,9 +158,11 @@ class TransformerDecoderFramework(nn.Module):
             return {"combined_embedding": combined_embedding_promise}
 
         def pass_transformer(
-            state: TransformerState, prev_tensor_dict: Dict[str, torch.Tensor]
-        ) -> Dict[str, TensorPromiseOrTensor]:
-            combined_embedding: torch.Tensor = prev_tensor_dict["combined_embedding"]
+            state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
+        ) -> Dict[str, TensorPromise]:
+            combined_embedding: torch.Tensor = prev_tensor_dict[
+                "combined_embedding"
+            ].result
             src_embedding: torch.Tensor = state.encoded_src
             decoder_out_promise: TensorPromise = self.transformer_decoder.forward_later(
                 combined_embedding, src_embedding
@@ -166,82 +170,69 @@ class TransformerDecoderFramework(nn.Module):
             return {"decoder_out": decoder_out_promise}
 
         def pass_out_linear(
-            state: TransformerState, prev_tensor_dict: Dict[str, torch.Tensor]
-        ) -> Dict[str, TensorPromiseOrTensor]:
-            decoder_out: torch.Tensor = prev_tensor_dict["decoder_out"]
+            state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
+        ) -> Dict[str, TensorPromise]:
+            decoder_out: torch.Tensor = prev_tensor_dict["decoder_out"].result
             decoder_out_promise: TensorPromise = self.out_linear_layer.forward_later(
                 decoder_out
             )
             return {"decoder_out": decoder_out_promise}
 
         def calc_prod(
-            state: TransformerState, prev_tensor_dict: Dict[str, torch.Tensor]
-        ) -> Dict[str, TensorPromiseOrTensor]:
-            def calculate_similarity(source, query, affine_layer, mask=None):
-                source = affine_layer(source)
-                weight = torch.mm(source.unsqueeze(0), query.transpose(0, 1)).squeeze()
-                if mask is not None:
-                    weight.data.masked_fill_(mask.bool(), -float("inf"))
-                prob = torch.log_softmax(weight, dim=-1)
-                return prob
+            state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
+        ) -> List[TensorPromise]:
+            def calc_prod_with_idx_and_symbol(idx, symbol):
+                if symbol == "C":
+                    prod = self.column_similarity.forward_later(
+                        decoder_out[idx], state.encoded_col, None
+                    )
+                elif symbol == "T":
+                    prod = self.table_similarity.forward_later(
+                        decoder_out[idx],
+                        state.encoded_tab,
+                        state.impossible_table_indices(idx),
+                    )
+                else:
+                    prod = self.action_similarity.forward_later(
+                        decoder_out[idx], self.grammar.action_emb.weight, None
+                    )
+                return prod
 
-            def calculate_similarity_action(source):
-                return calculate_similarity(
-                    source,
-                    self.grammar.action_emb.weight,
-                    self.action_decode_affine_layer,
-                )
-
-            def calculate_similarity_column(source):
-                return calculate_similarity(
-                    source, state.encoded_col, self.col_decode_affine_layer
-                )
-
-            def calculate_similarity_table(source, possible_table_indices: List[int]):
-                mask = torch.ones(len(state.encoded_tab)).cuda()
-                for index in possible_table_indices:
-                    mask[index] = 0
-                return calculate_similarity(
-                    source, state.encoded_tab, self.tab_decode_affine_layer, mask
-                )
-
-            decoder_out: torch.Tensor = prev_tensor_dict["decoder_out"]
+            decoder_out: torch.Tensor = prev_tensor_dict["decoder_out"].result
             current_symbol: Symbol = state.get_current_symbol()
+            promise_prods: List[TensorPromise] = []
             if isinstance(state, TransformerStateGold):
                 history_symbols: List[Symbol] = state.get_history_symbols()
                 history_symbols += [current_symbol]
                 for idx, symbol in enumerate(history_symbols):
-                    if symbol == "C":
-                        prod = calculate_similarity_column(decoder_out[idx])
-                    elif symbol == "T":
-                        prod = calculate_similarity_table(
-                            decoder_out[idx], state.possible_table_indices(idx)
-                        )
-                    else:
-                        prod = calculate_similarity_action(decoder_out[idx])
+                    prod = calc_prod_with_idx_and_symbol(idx, symbol)
+                    promise_prods.append(prod)
+            else:
+                assert isinstance(state, TransformerStatePred)
+                prod = calc_prod_with_idx_and_symbol(-1, current_symbol)
+                promise_prods.append(prod)
+            return promise_prods
+
+        def apply_prod(state: TransformerState, prev_tensor_list: List[TensorPromise]):
+            if isinstance(state, TransformerStateGold):
+                for idx, prod_promise in enumerate(prev_tensor_list):
+                    prod = prod_promise.result
                     state.apply_loss(idx, prod)
             else:
                 assert isinstance(state, TransformerStatePred)
-                if current_symbol == "C":
-                    prod = calculate_similarity_column(decoder_out[-1])
-                elif current_symbol == "T":
-                    prod = calculate_similarity_table(
-                        decoder_out[-1], state.possible_table_indices(-1)
-                    )
-                else:
-                    prod = calculate_similarity_action(decoder_out[-1])
-
+                prod = prev_tensor_list[0].result
                 state.apply_pred(prod)
             state.step()
-            return dict()
 
         states = SequentialMonad(states)(
-            WhileLogic(state_class.is_not_done)(
-                LogicUnit(state_class.is_not_done)(embed_history_actions)(
-                    embed_history_symbols
-                )(combine_symbol_action_embeddings)(pass_transformer)(pass_out_linear)(
-                    calc_prod
-                )
+            WhileLogic.While(state_class.is_not_done).Do(
+                LogicUnit.If(state_class.is_not_done)
+                .Then(embed_history_actions)
+                .Then(embed_history_symbols)
+                .Then(combine_symbol_action_embeddings)
+                .Then(pass_transformer)
+                .Then(pass_out_linear)(calc_prod)
+                .Then(apply_prod)
             )
         ).states
 

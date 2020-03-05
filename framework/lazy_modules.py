@@ -12,30 +12,33 @@ from framework.utils import assert_dim, stack_sequential_tensor_with_mask
 
 
 class LazyModule(ABC):
+    waiting_lazy_modules: List["LazyModule"] = []
+
     def __init__(self):
         self.later_buffer = []
         self.promises = []
         self.done_buffer = []
 
-    def wait_if_not_done(self):
-        if self.later_buffer:
-            self.compute()
-            for idx in range(len(self.later_buffer)):
-                self.promises[idx].result = self.done_buffer[idx]
-            self.later_buffer = []
-            self.promises = []
-            self.done_buffer = []
+    @classmethod
+    def wait_all(cls):
+        for lazy_module in LazyModule.waiting_lazy_modules:
+            lazy_module.compute()
+            for idx in range(len(lazy_module.later_buffer)):
+                lazy_module.promises[idx].result = lazy_module.done_buffer[idx]
+            lazy_module.later_buffer = []
+            lazy_module.promises = []
+            lazy_module.done_buffer = []
+        LazyModule.waiting_lazy_modules = []
 
     def forward_later(self, *inputs) -> TensorPromise:
+        if self not in LazyModule.waiting_lazy_modules:
+            LazyModule.waiting_lazy_modules.append(self)
         self.assert_input(*inputs)
         self.later_buffer.append(inputs)
         appended_index = len(self.later_buffer) - 1
         promise = TensorPromise(self, appended_index)
         self.promises.append(promise)
         return promise
-
-    def fetch(self, index: int) -> Any:
-        return self.done_buffer[index]
 
     def assert_input(self, any: Any):
         pass
@@ -122,5 +125,44 @@ class LazyTransformerDecoder(nn.Module, LazyModule):
             memory_key_padding_mask=mem_mask,
         ).transpose(0, 1)
         self.done_buffer = [
-            out_batch_first[idx] for idx in range(len(self.later_buffer))
+            out_batch_first[idx, : len(tgt_list[idx])]
+            for idx in range(len(self.later_buffer))
+        ]
+
+
+class LazyCalculateSimilarity(nn.Module, LazyModule):
+    def __init__(self, in_dim, out_dim):
+        super(LazyCalculateSimilarity, self).__init__()
+        LazyModule.__init__(self)
+        self.affine_layer = nn.Linear(in_dim, out_dim)
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+
+    def assert_input(self, *inputs):
+        [source, query, impossible_indices] = inputs
+        assert isinstance(source, torch.Tensor)
+        assert isinstance(query, torch.Tensor)
+        assert_dim([self.in_dim], source)
+        assert_dim([None, self.out_dim], query)
+
+    def compute(self):
+        source_list: List[torch.Tensor] = [inputs[0] for inputs in self.later_buffer]
+        query_list: List[torch.Tensor] = [inputs[1] for inputs in self.later_buffer]
+        impossible_indices_list: List[List[int]] = [
+            inputs[2] for inputs in self.later_buffer
+        ]
+        stacked_source = torch.stack(source_list, dim=0)
+        affined_source = self.affine_layer(stacked_source)
+        stacked_query, query_mask = stack_sequential_tensor_with_mask(query_list)
+        weight_scores = torch.bmm(
+            affined_source.unsqueeze(1), stacked_query.transpose(1, 2)
+        ).squeeze(1)
+        for idx, impossible_indices in enumerate(impossible_indices_list):
+            if impossible_indices is not None:
+                query_mask[idx, impossible_indices] = 1
+        weight_scores.data.masked_fill_(query_mask.bool(), -float("inf"))
+        weight_probs = torch.log_softmax(weight_scores, dim=-1)
+        self.done_buffer = [
+            weight_probs[idx, : len(query_list[idx])]
+            for idx in range(len(weight_probs))
         ]

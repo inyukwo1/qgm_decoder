@@ -1,6 +1,7 @@
 from typing import Callable, Type, Dict, Any, Iterable, Tuple, Union, NewType, List
 from abc import ABC
 from framework.promise import TensorPromise
+from framework.lazy_modules import LazyModule
 import torch
 import time
 from torch import nn
@@ -22,6 +23,13 @@ TensorChain = NewType(
 
 
 class LogicUnit:
+    @classmethod
+    def If(cls, state_checker: Type[StateChecker]) -> "LogicUnit":
+        return LogicUnit(state_checker)
+
+    def Then(self, tensorchain: TensorChain) -> "LogicUnit":
+        return self.__call__(tensorchain)
+
     def __init__(self, state_checker: Type[StateChecker]):
         self.state_checker = state_checker
         self.tensor_chains = []
@@ -32,36 +40,34 @@ class LogicUnit:
 
     def bind(self, state_iter):
         checked_states = [state for state in state_iter if self.state_checker(state)]
-        list_tensor_dict = None
-        st_time = time.time()
+        list_prev_return = None
         for tensor_chain in self.tensor_chains:
-            list_tensor_dict = self._invoke_tensorchain(
-                tensor_chain, checked_states, list_tensor_dict
+            list_prev_return = self._invoke_tensorchain(
+                tensor_chain, checked_states, list_prev_return
             )
 
     def _invoke_tensorchain(
-        self,
-        callback: TensorChain,
-        states: List[State],
-        list_tensor_dict: List[Dict[str, torch.Tensor]] = None,
+        self, callback: TensorChain, states: List[State], list_prev_return: List = None,
     ):
-        if list_tensor_dict is None:
-            list_promise_dict = [callback(state) for state in states]
+        if list_prev_return is None:
+            list_new_return = [callback(state) for state in states]
         else:
-            list_promise_dict = [
+            list_new_return = [
                 callback(state, tensor_dict)
-                for state, tensor_dict in zip(states, list_tensor_dict)
+                for state, tensor_dict in zip(states, list_prev_return)
             ]
-        TensorPromise.wait_list_promisedict(list_promise_dict)
-
-        new_list_tensor_dict = [
-            TensorPromise.promisedict_to_tensordict(promise_dict)
-            for promise_dict in list_promise_dict
-        ]
-        return new_list_tensor_dict
+        LazyModule.wait_all()
+        return list_new_return
 
 
 class WhileLogic:
+    @classmethod
+    def While(cls, stop_if_all_false: StateChecker) -> "WhileLogic":
+        return WhileLogic(stop_if_all_false)
+
+    def Do(self, logic_unit: LogicUnit) -> "WhileLogic":
+        return self.__call__(logic_unit)
+
     def __init__(self, stop_if_all_false: StateChecker):
         self.stop_if_all_false = stop_if_all_false
         self.logic_units = []

@@ -35,7 +35,7 @@ class TransformerState(State):
     def get_current_symbol(self) -> Symbol:
         pass
 
-    def possible_table_indices(self, idx) -> List[int]:
+    def impossible_table_indices(self, idx) -> List[int]:
         pass
 
 
@@ -74,9 +74,13 @@ class TransformerStateGold(TransformerState):
     def get_current_symbol(self) -> Symbol:
         return self.gold[self.step_cnt][0]
 
-    def possible_table_indices(self, idx) -> List[int]:
+    def impossible_table_indices(self, idx) -> List[int]:
         prev_col_idx = self.gold[idx - 1][1]
-        return self.col_tab_dic[prev_col_idx]
+        possible_indices = self.col_tab_dic[prev_col_idx]
+        impossible_indices = [
+            idx for idx in range(len(self.tab_col_dic)) if idx not in possible_indices
+        ]
+        return impossible_indices
 
     def apply_loss(self, idx, prod: torch.Tensor):
         gold_action = self.gold[idx]
@@ -127,9 +131,13 @@ class TransformerStatePred(TransformerState):
     def get_current_symbol(self) -> Symbol:
         return self.nonterminal_symbol_stack[0]
 
-    def possible_table_indices(self, idx) -> List[int]:
-        prev_col_idx = self.preds[idx - 1][1]
-        return self.col_tab_dic[prev_col_idx]
+    def impossible_table_indices(self, idx) -> List[int]:
+        prev_col_idx = self.preds[idx][1]
+        possible_indices = self.col_tab_dic[prev_col_idx]
+        impossible_indices = [
+            idx for idx in range(len(self.tab_col_dic)) if idx not in possible_indices
+        ]
+        return impossible_indices
 
     def apply_pred(self, prod):
         pred_idx = torch.argmax(prod).item()
