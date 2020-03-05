@@ -11,6 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from src import utils
 from src.models.model import IRNet
+from models.LSTMEncoderQGMTransformerDecoder import LSTMEncoderQGMTransformerDecoder
 
 log = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ def train(cfg):
     # Set model
     if cfg.cuda != -1:
         torch.cuda.set_device(cfg.cuda)
-    model = IRNet(cfg)
+    model = LSTMEncoderQGMTransformerDecoder(cfg)
     if cfg.cuda != -1:
         model.cuda()
 
@@ -40,7 +41,7 @@ def train(cfg):
     optimizer_cls = (
         RAdam if cfg.optimizer == "radam" else eval("torch.optim.%s" % cfg.optimizer)
     )
-    optimizer = optimizer_cls(model.without_bert_params, lr=cfg.lr)
+    optimizer = optimizer_cls(model.parameters(), lr=cfg.lr)
     if cfg.is_bert:
         bert_optimizer = optimizer_cls(
             model.transformer_encoder.parameters(), lr=cfg.bert_lr
@@ -74,8 +75,6 @@ def train(cfg):
                 del pretrained_modeled[k]
 
         model.load_state_dict(pretrained_modeled)
-
-    model.word_emb = None if cfg.is_bert else utils.load_word_emb(cfg.glove_embed_path)
 
     # Log path
     log_model_path = os.path.join(log_path, "model")
