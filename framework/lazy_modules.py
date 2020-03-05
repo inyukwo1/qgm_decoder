@@ -2,6 +2,7 @@ from typing import Any, List
 from abc import ABC, abstractmethod
 import torch
 from torch import nn
+import numpy as np
 import math
 from src.transformer_decoder import (
     TransformerDecoderLayer,
@@ -9,6 +10,8 @@ from src.transformer_decoder import (
 )
 from framework.sequential_monad import TensorPromise
 from framework.utils import assert_dim, stack_sequential_tensor_with_mask
+
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 
 class LazyModule(ABC):
@@ -40,7 +43,7 @@ class LazyModule(ABC):
         self.promises.append(promise)
         return promise
 
-    def assert_input(self, any: Any):
+    def assert_input(self, *inputs):
         pass
 
     @abstractmethod
@@ -61,16 +64,24 @@ class LazyLinear(nn.Module, LazyModule):
         assert isinstance(tensor, torch.Tensor)
         if len(tensor.size()) == 1:
             assert_dim([self.in_dim], tensor)
-        elif len(tensor.size()) == 1:
+        elif len(tensor.size()) == 2:
             assert_dim([None, self.in_dim], tensor)
 
     def compute(self):
         tensor_list = [inputs[0] for inputs in self.later_buffer]
-        stacked_tensors = torch.stack(tensor_list)
-        computed_tensors = self.module(stacked_tensors)
-        self.done_buffer = [
-            computed_tensors[idx] for idx in range(len(computed_tensors))
-        ]
+        one_tensor = tensor_list[0]
+        b_size = len(tensor_list)
+        if len(one_tensor.size()) == 1:
+            stacked_tensors = torch.stack(tensor_list)
+            computed_tensors = self.module(stacked_tensors)
+            self.done_buffer = [computed_tensors[idx] for idx in range(b_size)]
+        elif len(one_tensor.size()) == 2:
+            stacked_tensors, mask = stack_sequential_tensor_with_mask(tensor_list)
+            len_tensor_list = [len(tensor) for tensor in tensor_list]
+            computed_tensors = self.module(stacked_tensors)
+            self.done_buffer = [
+                computed_tensors[idx, : len_tensor_list[idx]] for idx in range(b_size)
+            ]
 
 
 class LazyTransformerDecoder(nn.Module, LazyModule):
@@ -142,6 +153,7 @@ class LazyCalculateSimilarity(nn.Module, LazyModule):
         [source, query, impossible_indices] = inputs
         assert isinstance(source, torch.Tensor)
         assert isinstance(query, torch.Tensor)
+        assert impossible_indices is None or isinstance(impossible_indices, List)
         assert_dim([self.in_dim], source)
         assert_dim([None, self.out_dim], query)
 
@@ -165,4 +177,46 @@ class LazyCalculateSimilarity(nn.Module, LazyModule):
         self.done_buffer = [
             weight_probs[idx, : len(query_list[idx])]
             for idx in range(len(weight_probs))
+        ]
+
+
+class LazyBiLSTM(nn.Module, LazyModule):
+    def __init__(self, in_dim, hidden_dim):
+        super(LazyBiLSTM, self).__init__()
+        LazyModule.__init__(self)
+        self.in_dim = in_dim
+        self.hidden_dim = hidden_dim
+
+        self.lstm = nn.LSTM(
+            self.in_dim, hidden_dim // 2, bidirectional=True, batch_first=True,
+        )
+
+    def assert_input(self, *inputs):
+        [sequence] = inputs
+        assert_dim([None, self.in_dim], sequence)
+
+    def compute(self):
+        sequence_list: List[torch.Tensor] = [inputs[0] for inputs in self.later_buffer]
+        sequence_len_list = [len(sequence) for sequence in sequence_list]
+        sequence_len_tensor = torch.LongTensor(sequence_len_list)
+        sorted_seq_lengths, perm_idx = sequence_len_tensor.sort(0, descending=True)
+        stacked_sequence, _ = stack_sequential_tensor_with_mask(sequence_list)
+        sorted_stacked_sequence = stacked_sequence[perm_idx]
+        sorted_packed_input = pack_padded_sequence(
+            sorted_stacked_sequence, sorted_seq_lengths.cpu().numpy(), batch_first=True
+        )
+        sorted_packed_output, (sorted_last_state, sorted_last_cell) = self.lstm(
+            sorted_packed_input
+        )
+        sorted_src_encodings, _ = pad_packed_sequence(
+            sorted_packed_output, batch_first=True
+        )
+        sorted_last_state = torch.cat([sorted_last_state[0], sorted_last_state[1]], -1)
+        sorted_last_cell = torch.cat([sorted_last_cell[0], sorted_last_cell[1]], -1)
+        self.done_buffer = [
+            (
+                sorted_src_encodings[idx, : sorted_seq_lengths[idx]],
+                (sorted_last_state[idx], sorted_last_cell[idx]),
+            )
+            for idx in perm_idx
         ]

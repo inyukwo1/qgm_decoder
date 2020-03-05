@@ -77,25 +77,16 @@ class TransformerDecoderFramework(nn.Module):
         return torch.zeros(self.dim).cuda()
 
     def forward(
-        self,
-        encoded_src,
-        encoded_col,
-        encoded_tab,
-        src_lens,
-        col_lens,
-        tab_lens,
-        col_tab_dic,
-        tab_col_dic,
-        golds,
+        self, encoded_src, encoded_col, encoded_tab, col_tab_dic, tab_col_dic, golds,
     ):
         b_size = len(encoded_src)
         if golds:
             state_class = TransformerStateGold
             states = [
                 TransformerStateGold(
-                    encoded_src[b_idx, : src_lens[b_idx]],
-                    encoded_col[b_idx, : col_lens[b_idx]],
-                    encoded_tab[b_idx, : tab_lens[b_idx]],
+                    encoded_src[b_idx],
+                    encoded_col[b_idx],
+                    encoded_tab[b_idx],
                     col_tab_dic[b_idx],
                     tab_col_dic[b_idx],
                     golds[b_idx],
@@ -105,10 +96,10 @@ class TransformerDecoderFramework(nn.Module):
         else:
             state_class = TransformerStatePred
             states = [
-                TransformerStatePred(
-                    encoded_src[b_idx, : src_lens[b_idx]],
-                    encoded_col[b_idx, : col_lens[b_idx]],
-                    encoded_tab[b_idx, : tab_lens[b_idx]],
+                TransformerStateGold(
+                    encoded_src[b_idx],
+                    encoded_col[b_idx],
+                    encoded_tab[b_idx],
                     col_tab_dic[b_idx],
                     tab_col_dic[b_idx],
                     self.grammar.start_symbol,
@@ -231,7 +222,8 @@ class TransformerDecoderFramework(nn.Module):
                 .Then(embed_history_symbols)
                 .Then(combine_symbol_action_embeddings)
                 .Then(pass_transformer)
-                .Then(pass_out_linear)(calc_prod)
+                .Then(pass_out_linear)
+                .Then(calc_prod)
                 .Then(apply_prod)
             )
         ).states
