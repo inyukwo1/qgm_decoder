@@ -38,24 +38,37 @@ class LogicUnit:
         self.tensor_chains.append(tensorchain)
         return self
 
-    def bind(self, state_iter):
-        checked_states = [state for state in state_iter if self.state_checker(state)]
-        list_prev_return = None
+    def bind(self, state_iter, list_prev_return):
+        true_indices = [
+            idx for idx, state in enumerate(state_iter) if self.state_checker(state)
+        ]
+        checked_states = [
+            state for idx, state in enumerate(state_iter) if idx in true_indices
+        ]
+        checked_prev_return = [
+            prev_return
+            for idx, prev_return in enumerate(list_prev_return)
+            if idx in true_indices
+        ]
+
         for tensor_chain in self.tensor_chains:
-            list_prev_return = self._invoke_tensorchain(
-                tensor_chain, checked_states, list_prev_return
+            tmp = self._invoke_tensorchain(
+                tensor_chain, checked_states, checked_prev_return
             )
+            checked_prev_return = tmp
+
+        for idx, new_return_value in zip(true_indices, checked_prev_return):
+            list_prev_return[idx] = new_return_value
+
+        return list_prev_return
 
     def _invoke_tensorchain(
-        self, callback: TensorChain, states: List[State], list_prev_return: List = None,
+        self, callback: TensorChain, states: List[State], list_prev_return: List,
     ):
-        if list_prev_return is None:
-            list_new_return = [callback(state) for state in states]
-        else:
-            list_new_return = [
-                callback(state, tensor_dict)
-                for state, tensor_dict in zip(states, list_prev_return)
-            ]
+        list_new_return = [
+            callback(state, tensor_dict)
+            for state, tensor_dict in zip(states, list_prev_return)
+        ]
         LazyModule.wait_all()
         return list_new_return
 
@@ -78,14 +91,15 @@ class WhileLogic:
 
     def bind(self, state_iter):
         state_list = [state for state in state_iter]
+        prev_return = [None] * len(state_iter)
 
         def is_not_done():
             check_results = [self.stop_if_all_false(state) for state in state_list]
             return any(check_results)
 
         while is_not_done():
-            for logic_unit in self.logic_units:
-                logic_unit.bind(state_list)
+            for idx, logic_unit in enumerate(self.logic_units):
+                prev_return = logic_unit.bind(state_list, prev_return)
 
 
 class SequentialMonad:
@@ -93,5 +107,8 @@ class SequentialMonad:
         self.states = [state for state in state_iter]
 
     def __call__(self, logic: Union[WhileLogic, LogicUnit]) -> "SequentialMonad":
-        logic.bind(self.states)
+        if isinstance(logic, WhileLogic):
+            logic.bind(self.states)
+        else:
+            logic.bind(self.states, [None] * len(self.states))
         return self

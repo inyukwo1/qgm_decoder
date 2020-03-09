@@ -141,8 +141,9 @@ class Grammar(nn.Module):
         return (symbol, id)
 
     # Get next action
-    def get_possible_aids(self, symbol_id):
-        symbol = self.sid_to_symbol[symbol_id]
+    def get_possible_aids(self, symbol):
+        if isinstance(symbol, int):
+            symbol = self.sid_to_symbol[symbol]
         return [
             self.action_to_aid[(symbol, idx)]
             for idx in range(len(self.actions[symbol]))
@@ -157,6 +158,8 @@ class Grammar(nn.Module):
 
     def parse_nonterminal_symbol(self, action: Action):
         symbol, id = action
+        if symbol in ["T", "C"]:
+            id = 0
         return [
             item
             for item in self.actions[symbol][id].split(" ")

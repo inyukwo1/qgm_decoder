@@ -17,6 +17,10 @@ class TransformerState(State):
         self.tab_col_dic = tab_col_dic
 
     @classmethod
+    def is_to_refine(cls, state) -> bool:
+        pass
+
+    @classmethod
     def is_not_done(cls, state) -> bool:
         pass
 
@@ -56,6 +60,10 @@ class TransformerStateGold(TransformerState):
         self.loss = SemQL_Loss_New()
 
     @classmethod
+    def is_to_refine(cls, state) -> bool:
+        return False
+
+    @classmethod
     def is_not_done(cls, state) -> bool:
         assert state.step_cnt <= len(state.gold)
         return state.step_cnt < len(state.gold)
@@ -72,7 +80,7 @@ class TransformerStateGold(TransformerState):
         return symbol_list[: self.step_cnt]
 
     def get_current_symbol(self) -> Symbol:
-        return self.gold[self.step_cnt][0]
+        return self.gold[self.step_cnt][0] if self.step_cnt < len(self.gold) else None
 
     def impossible_table_indices(self, idx) -> List[int]:
         prev_col_idx = self.gold[idx - 1][1]
@@ -109,6 +117,11 @@ class TransformerStatePred(TransformerState):
         )
         self.preds: List[Action] = []
         self.nonterminal_symbol_stack: List[Symbol] = [start_symbol]
+        self.refine_step_cnt = 0
+
+    @classmethod
+    def is_to_refine(cls, state) -> bool:
+        return state.nonterminal_symbol_stack == [] and state.refine_step_cnt < state.step_cnt
 
     @classmethod
     def is_not_done(cls, state) -> bool:
@@ -129,10 +142,12 @@ class TransformerStatePred(TransformerState):
         return symbol_list[: self.step_cnt]
 
     def get_current_symbol(self) -> Symbol:
-        return self.nonterminal_symbol_stack[0]
+        return (
+            self.nonterminal_symbol_stack[0] if self.nonterminal_symbol_stack else None
+        )
 
     def impossible_table_indices(self, idx) -> List[int]:
-        prev_col_idx = self.preds[idx][1]
+        prev_col_idx = self.preds[idx - 1][1]
         possible_indices = self.col_tab_dic[prev_col_idx]
         impossible_indices = [
             idx for idx in range(len(self.tab_col_dic)) if idx not in possible_indices

@@ -11,6 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from src import utils
 from src.models.model import IRNet
+from models.LSTMEncoderQGMTransformerDecoder import LSTMEncoderQGMTransformerDecoder
 
 log = logging.getLogger(__name__)
 

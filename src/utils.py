@@ -585,7 +585,7 @@ def load_data_new(sql_path, use_small=False, is_bert=False, query_type="simple")
     # Filter data with qgm that has nested query
     sql_data = filter_datas(sql_data, query_type)
 
-    return sql_data[:80] if use_small else sql_data
+    return sql_data[:20] if use_small else sql_data
 
 
 def load_dataset(is_toy, is_bert, dataset_path, query_type):
