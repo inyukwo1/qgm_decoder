@@ -40,10 +40,9 @@ class TransformerDecoderFramework(nn.Module):
         self.decoder_transformer = LazyTransformerDecoder(dim, nhead, layer_num)
         self.refine_transformer = LazyTransformerDecoder(dim, nhead, layer_num)
 
-
         self.refine_action_affine_layer = LazyLinear(dim, dim)
         self.refine_symbol_affine_layer = LazyLinear(dim, dim)
-        self.refine_tgt_linear_layer = LazyLinear(dim * 2, dim)
+        self.refine_tgt_linear_layer = LazyLinear(dim * 3, dim)
 
         self.action_affine_layer = LazyLinear(dim, dim)
         self.symbol_affine_layer = LazyLinear(dim, dim)
@@ -228,14 +227,14 @@ class TransformerDecoderFramework(nn.Module):
             for idx, symbol in enumerate(history_symbols):
                 prod = calc_prod_with_idx_and_symbol(idx, symbol)
                 promise_prods.append(prod)
-            prev_tensor_dict.update({"prods": promise_prods})
+            prev_tensor_dict.update({"infer_prods": promise_prods})
             return prev_tensor_dict
 
         def apply_prod(
             state: TransformerState,
             prev_tensor_dict: Dict[str, Union[List[TensorPromise], TensorPromise]],
         ):
-            prev_tensor_list = prev_tensor_dict["prods"]
+            prev_tensor_list = prev_tensor_dict["infer_prods"]
             if isinstance(state, TransformerStateGold):
                 for idx, prod_promise in enumerate(prev_tensor_list):
                     prod = prod_promise.result
@@ -248,7 +247,7 @@ class TransformerDecoderFramework(nn.Module):
             return prev_tensor_dict
 
         # Functions for refinement stage
-        def embed_history_actions_for_refine(state: TransformerState, _) -> Dict[str, TensorPromise]:
+        def embed_history_actions_for_refine(state: TransformerState, prev_tensor_dict: Dict) -> Dict[str, TensorPromise]:
             history_actions: List[Action] = state.get_history_actions()
             history_action_embeddings: List[torch.Tensor] = [
                 self.action_to_embedding(state, action) for action in history_actions
@@ -257,7 +256,8 @@ class TransformerDecoderFramework(nn.Module):
             action_embeddings_promise: TensorPromise = self.refine_action_affine_layer.forward_later(
                 action_embeddings
             )
-            return {"action_embedding": action_embeddings_promise}
+            prev_tensor_dict.update({"action_embedding": action_embeddings_promise})
+            return prev_tensor_dict
 
         def embed_history_symbols_for_refine(state: TransformerState, prev_tensor_dict: Dict):
             history_symbols: List[Symbol] = state.get_history_symbols()
@@ -275,8 +275,9 @@ class TransformerDecoderFramework(nn.Module):
         ) -> Dict[str, TensorPromise]:
             action_embedding: torch.Tensor = prev_tensor_dict["action_embedding"].result
             symbol_embedding: torch.Tensor = prev_tensor_dict["symbol_embedding"].result
+            hidden_vectors: torch.Tensor = prev_tensor_dict["decoder_out"].result
             combined_embedding: torch.Tensor = torch.cat(
-                (action_embedding, symbol_embedding), dim=-1
+                (action_embedding, symbol_embedding, hidden_vectors), dim=-1
             )
             combined_embedding_promise: TensorPromise = self.refine_tgt_linear_layer.forward_later(
                 combined_embedding
@@ -344,7 +345,7 @@ class TransformerDecoderFramework(nn.Module):
             for idx, symbol in enumerate(history_symbols):
                 prod = calc_prod_with_idx_and_symbol(idx, symbol)
                 promise_prods.append(prod)
-            prev_tensor_dict.update({"prods": promise_prods})
+            prev_tensor_dict.update({"refine_prods": promise_prods})
             return prev_tensor_dict
 
         def apply_prod_for_refine(
@@ -366,7 +367,7 @@ class TransformerDecoderFramework(nn.Module):
                 return stack
 
             history_actions: List[Action] = state.get_history_actions()
-            prev_tensor_list = prev_tensor_dict["prods"]
+            prev_tensor_list = prev_tensor_dict["refine_prods"]
 
             # Find argmax for all prods
             pred_indices = [torch.argmax(item.result).item() for item in prev_tensor_list]
