@@ -66,10 +66,17 @@ class LazyLinear(nn.Module, LazyModule):
 
     def compute(self):
         tensor_list = [inputs[0] for inputs in self.later_buffer]
-        stacked_tensors = torch.stack(tensor_list)
+        tensor_length = [len(item) for item in tensor_list]
+
+        stacked_tensors = torch.zeros(len(tensor_list), max(tensor_length), tensor_list[0].shape[-1]).cuda()
+        for idx, _tensor in enumerate(tensor_list):
+            stacked_tensors[idx][:len(_tensor)] = _tensor
+
         computed_tensors = self.module(stacked_tensors)
+
+        # Split
         self.done_buffer = [
-            computed_tensors[idx] for idx in range(len(computed_tensors))
+            computed_tensor[:length] for length, computed_tensor in zip(tensor_length, computed_tensors)
         ]
 
 

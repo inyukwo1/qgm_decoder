@@ -39,6 +39,7 @@ class Grammar(nn.Module):
         ]
 
         # Embeddings
+        self.key_emb = nn.Embedding(1, emb_dim)
         self.symbol_emb = nn.Embedding(len(self.symbols), emb_dim)
         self.action_emb = nn.Embedding(len(self.action_to_aid), emb_dim)
 
@@ -179,6 +180,9 @@ class Grammar(nn.Module):
 
     def get_action_len(self):
         return len(self.action_to_aid)
+
+    def get_key_emb(self):
+        return self.key_emb.weight.data.squeeze(0)
 
 
 if __name__ == "__main__":

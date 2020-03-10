@@ -38,7 +38,8 @@ class TransformerDecoderFramework(nn.Module):
         self.layer_num = layer_num
 
         self.decoder_transformer = LazyTransformerDecoder(dim, nhead, layer_num)
-        self.refine_transformer = LazyTransformerDecoder(dim, nhead, layer_num)
+        self.refine_transformer = self.decoder_transformer
+        #self.refine_transformer = LazyTransformerDecoder(dim, nhead, layer_num)
 
         self.action_affine_layer = LazyLinear(dim, dim)
         self.symbol_affine_layer = LazyLinear(dim, dim)
@@ -241,6 +242,7 @@ class TransformerDecoderFramework(nn.Module):
                 state.apply_pred(prod)
             state.step()
             return prev_tensor_dict
+
 
         def pass_refine_transformer(
             state: TransformerState,
