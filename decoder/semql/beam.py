@@ -8,7 +8,7 @@
 
 import copy
 
-from rule.semql import semQL
+from rule.semql.semql import SemQL
 
 
 class ActionInfo(object):
@@ -206,7 +206,7 @@ class Beams(object):
 if __name__ == "__main__":
     test = Beams(is_sketch=True)
     # print(semQL.Root1(1).get_next_action())
-    test.actions.append(semQL.Root1(3))
-    test.actions.append(semQL.Root(5))
+    test.actions.append(SemQL.Root1(3))
+    test.actions.append(SemQL.Root(5))
 
     print(str(test.get_availableClass()))

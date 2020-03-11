@@ -5,11 +5,10 @@ from torch.autograd import Variable
 
 import torch
 import logging
-from preprocess.rule.semql import semQL
-from preprocess.rule.semql import semQL as define_rule
-from encoder.irnet import nn_utils
+import preprocess.rule.semQL as define_rule
 from decoder.semql.beam import Beams, ActionInfo
 from encoder.irnet.pointer_net import PointerNet
+import src.models.nn_utils as nn_utils
 
 log = logging.getLogger(__name__)
 
@@ -23,7 +22,7 @@ class SemQL_Decoder(nn.Module):
         self.cfg = cfg
         self.embed_size = 1024 if cfg.is_bert else 300
         self.is_cuda = cfg.cuda != -1
-        self.grammar = semQL.Grammar()
+        self.grammar = define_rule.Grammar()
         self.use_column_pointer = cfg.column_pointer
 
         if self.is_cuda:
@@ -37,15 +36,10 @@ class SemQL_Decoder(nn.Module):
         action_embed_size = cfg.action_embed_size
         input_dim = action_embed_size + att_vec_size + type_embed_size
 
-        self.encoder_lstm = nn.LSTM(
-            self.embed_size, hidden_size // 2, bidirectional=True, batch_first=True,
-        )
-
         self.decode_max_time_step = 40
         self.action_embed_size = action_embed_size
         self.type_embed_size = type_embed_size
 
-        self.decoder_cell_init = nn.Linear(hidden_size, hidden_size)
         self.lf_decoder_lstm = nn.LSTMCell(input_dim, hidden_size)
         self.sketch_decoder_lstm = nn.LSTMCell(input_dim, hidden_size)
 
@@ -113,14 +107,8 @@ class SemQL_Decoder(nn.Module):
             "Use Column Pointer: {}".format(True if self.use_column_pointer else False)
         )
 
-    def _init_decoder_state(self, enc_last_cell):
-        h_0 = self.decoder_cell_init(enc_last_cell)
-        h_0 = torch.tanh(h_0)
-
-        return h_0, Variable(self.new_tensor(h_0.size()).zero_())
-
-    def forward(self, batch, step=None):  # Step for captum
-        b_size = batch.b_size
+    def forward(self, batch, step=None):
+        b_size = len(batch.src_sents)
         sketches = batch.semql_sketch
         src_encodings = batch.sen_encoding
         table_embedding = batch.col_emb
@@ -137,7 +125,7 @@ class SemQL_Decoder(nn.Module):
         utterance_encodings_sketch_linear = self.att_sketch_linear(src_encodings)
         utterance_encodings_lf_linear = self.att_lf_linear(src_encodings)
 
-        h_tm1 = self._init_decoder_state(dec_init_vec)
+        h_tm1 = dec_init_vec
         action_probs = [[] for _ in range(b_size)]
 
         zero_action_embed = Variable(self.new_tensor(self.action_embed_size).zero_())
@@ -249,7 +237,7 @@ class SemQL_Decoder(nn.Module):
         table_enable = np.zeros(shape=(b_size))
         action_probs = [[] for _ in range(b_size)]
 
-        h_tm1 = self._init_decoder_state(dec_init_vec)
+        h_tm1 = dec_init_vec
 
         detail_t = 0
 
@@ -481,7 +469,7 @@ class SemQL_Decoder(nn.Module):
         utterance_encodings_sketch_linear = self.att_sketch_linear(src_encodings)
         utterance_encodings_lf_linear = self.att_lf_linear(src_encodings)
 
-        h_tm1 = self._init_decoder_state(dec_init_vec)
+        h_tm1 = dec_init_vec
 
         t = 0
         beams = [Beams(is_sketch=True)]

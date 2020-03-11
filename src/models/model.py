@@ -9,6 +9,7 @@ from decoder.qgm.qgm_decoder import QGM_Decoder
 
 from decoder.lstm.decoder import LSTM_Decoder
 from decoder.transformer_framework.decoder import TransformerDecoderFramework
+from decoder.semql.semql_decoder import SemQL_Decoder
 
 from encoder.ra_transformer.encoder import RA_Transformer_Encoder
 from encoder.transformer.encoder import Transformer_Encoder
@@ -52,10 +53,9 @@ class IRNet(BasicModel):
         elif self.decoder_name == "qgm":
             self.decoder = QGM_Decoder(cfg)
         elif self.decoder_name == "semql":
-            #self.decoder = SemQL_Decoder(cfg)
-            raise RuntimeError("Not yet")
+            self.decoder = SemQL_Decoder(cfg)
         else:
-            raise RuntimeError("Unsupported decoder name")
+            raise RuntimeError("Unsupported decoder name: {}".format(self.decoder_name))
 
         self.without_bert_params = list(self.parameters(recurse=True))
 
@@ -94,7 +94,7 @@ class IRNet(BasicModel):
 
             src_encodings, table_embedding, schema_embedding = \
                 self.encoder(src, col, tab, src_len, col_len, tab_len, src_mask, col_mask, tab_mask, relation_matrix)
-
+            dec_init_vec = None
         elif self.encoder_name == "transformer":
             (
                 src_encodings,
@@ -110,6 +110,7 @@ class IRNet(BasicModel):
                 table_embeddings,
                 schema_embeddings
             ) = self.encoder(src_encodings, table_embedding, schema_embedding, src_mask, col_mask, tab_mask)
+            dec_init_vec = None
         elif self.encoder_name == "bert":
             (
                 src_encodings,
@@ -218,14 +219,8 @@ class IRNet(BasicModel):
             )
             return losses, pred_boxes
         elif self.decoder_name == "semql":
-            sketch_prob_var, lf_prob_var = self.decoder.decode_forward(
-                examples,
-                batch,
-                src_encodings,
-                table_embedding,
-                schema_embedding,
-                dec_init_vec,
-            )
+            raise RuntimeError("Not yet")
+            sketch_prob_var, lf_prob_var = self.decoder.forward(batch)
             return sketch_prob_var, lf_prob_var
         else:
             raise RuntimeError("Unsupported Decoder Name")
@@ -399,17 +394,9 @@ class IRNet(BasicModel):
                 _, losses, pred_boxes = self.decoder.decode(
                     b_indices, None, dec_init_vec, prev_box=None, gold_boxes=None
                 )
-
                 return pred_boxes
             elif self.decoder_name == "semql":
-                completed_beams, _ = self.decoder.decode_parse(
-                    batch,
-                    src_encodings,
-                    table_embedding,
-                    schema_embedding,
-                    dec_init_vec,
-                    beam_size=5,
-                )
+                completed_beams, _ = self.decoder.parse(batch)
                 highest_prob_actions = (
                     completed_beams[0].actions if completed_beams else []
                 )

@@ -1,4 +1,4 @@
-decoder_name: preprocess
+decoder_name: semql
 beam_size: 5
 att_vec_size: 300
 decode_max_time_step: 40
@@ -8,3 +8,4 @@ readout: identity
 column_att: "affine"
 type_embed_size: 128
 action_embed_size: 128
+is_col_set: true

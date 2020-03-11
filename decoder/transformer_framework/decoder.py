@@ -206,8 +206,8 @@ class TransformerDecoderFramework(nn.Module):
                     if not symbol:
                         symbol = state.get_history_symbols()[idx]
                     possible_action_ids = SemQL.semql.get_possible_aids(symbol)
-
                     impossible_indices = [idx for idx in range(SemQL.semql.get_action_len()) if idx not in possible_action_ids]
+                    impossible_indices = None
 
                     prod = self.action_similarity.forward_later(
                         decoder_out[idx], self.grammar.action_emb.weight, impossible_indices
@@ -243,6 +243,7 @@ class TransformerDecoderFramework(nn.Module):
             state.step()
             return prev_tensor_dict
 
+        """
         # Functions for refinement stage
         def embed_history_actions_for_refine(state: TransformerState, prev_tensor_dict: Dict) -> Dict[str, TensorPromise]:
             history_actions: List[Action] = state.get_history_actions()
@@ -393,7 +394,7 @@ class TransformerDecoderFramework(nn.Module):
                         state.nonterminal_symbol_stack = roll_back_nonterminal_stack(state.preds)
                         break
                 state.refine_step_cnt = idx+1
-
+                
         states = SequentialMonad(states)(
             WhileLogic.While(state_class.is_not_done)
             .Do(
@@ -415,6 +416,20 @@ class TransformerDecoderFramework(nn.Module):
                 .Then(pass_refine_out_linear)
                 .Then(calc_prod_for_refine)
                 .Then(apply_prod_for_refine)
+            )
+        ).states
+        """
+        states = SequentialMonad(states)(
+            WhileLogic.While(state_class.is_not_done)
+            .Do(
+                LogicUnit.If(state_class.is_not_done)
+                .Then(embed_history_actions)
+                .Then(embed_history_symbols)
+                .Then(combine_symbol_action_embeddings)
+                .Then(pass_decoder_transformer)
+                .Then(pass_decoder_out_linear)
+                .Then(calc_prod)
+                .Then(apply_prod)
             )
         ).states
 
