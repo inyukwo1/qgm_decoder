@@ -202,9 +202,6 @@ class TransformerDecoderFramework(nn.Module):
                     )
                 else:
                     # Get possible actions from nonterminal stack
-                    symbol = state.get_current_symbol()
-                    if not symbol:
-                        symbol = state.get_history_symbols()[idx]
                     possible_action_ids = SemQL.semql.get_possible_aids(symbol)
                     impossible_indices = [idx for idx in range(SemQL.semql.get_action_len()) if idx not in possible_action_ids]
                     impossible_indices = None
