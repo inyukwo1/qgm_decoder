@@ -91,7 +91,6 @@ class TransformerDecoderFramework(nn.Module):
         col_lens,
         tab_lens,
         col_tab_dic,
-        tab_col_dic,
         golds,
     ):
         b_size = len(encoded_src)
@@ -103,7 +102,6 @@ class TransformerDecoderFramework(nn.Module):
                     encoded_col[b_idx, : col_lens[b_idx]],
                     encoded_tab[b_idx, : tab_lens[b_idx]],
                     col_tab_dic[b_idx],
-                    tab_col_dic[b_idx],
                     golds[b_idx],
                 )
                 for b_idx in range(b_size)
@@ -116,7 +114,6 @@ class TransformerDecoderFramework(nn.Module):
                     encoded_col[b_idx, : col_lens[b_idx]],
                     encoded_tab[b_idx, : tab_lens[b_idx]],
                     col_tab_dic[b_idx],
-                    tab_col_dic[b_idx],
                     self.grammar.start_symbol,
                 )
                 for b_idx in range(b_size)

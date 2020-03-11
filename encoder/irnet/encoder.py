@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,7 +8,7 @@ from typing import Dict, List
 from encoder.irnet.state import LSTMEncoderState
 from src import utils
 from framework.utils import assert_dim
-from framework.lazy_modules import LazyLinear, LazyBiLSTM
+#from framework.lazy_modules import LazyLinear, LazyBiLSTM
 from framework.sequential_monad import TensorPromiseOrTensor, SequentialMonad, LogicUnit
 
 

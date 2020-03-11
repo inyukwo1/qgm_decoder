@@ -8,13 +8,12 @@ from rule.semql.semql_loss import SemQL_Loss_New
 
 
 class TransformerState(State):
-    def __init__(self, encoded_src, encoded_col, encoded_tab, col_tab_dic, tab_col_dic):
+    def __init__(self, encoded_src, encoded_col, encoded_tab, col_tab_dic):
         self.step_cnt = 0
         self.encoded_src = encoded_src
         self.encoded_col = encoded_col
         self.encoded_tab = encoded_tab
         self.col_tab_dic = col_tab_dic
-        self.tab_col_dic = tab_col_dic
 
     @classmethod
     def is_to_refine(cls, state) -> bool:
@@ -50,11 +49,10 @@ class TransformerStateGold(TransformerState):
         encoded_col,
         encoded_tab,
         col_tab_dic: Dict[int, List[int]],
-        tab_col_dic: Dict[int, List[int]],
         gold: List[Action],
     ):
         TransformerState.__init__(
-            self, encoded_src, encoded_col, encoded_tab, col_tab_dic, tab_col_dic
+            self, encoded_src, encoded_col, encoded_tab, col_tab_dic
         )
         self.gold: List[Action] = gold
         self.loss = SemQL_Loss_New()
@@ -86,7 +84,7 @@ class TransformerStateGold(TransformerState):
         prev_col_idx = self.gold[idx - 1][1]
         possible_indices = self.col_tab_dic[prev_col_idx]
         impossible_indices = [
-            idx for idx in range(len(self.tab_col_dic)) if idx not in possible_indices
+            idx for idx in self.col_tab_dic[0] if idx not in possible_indices
         ]
         return impossible_indices
 
@@ -109,11 +107,10 @@ class TransformerStatePred(TransformerState):
         encoded_col,
         encoded_tab,
         col_tab_dic,
-        tab_col_dic,
         start_symbol: Symbol,
     ):
         TransformerState.__init__(
-            self, encoded_src, encoded_col, encoded_tab, col_tab_dic, tab_col_dic
+            self, encoded_src, encoded_col, encoded_tab, col_tab_dic
         )
         self.preds: List[Action] = []
         self.nonterminal_symbol_stack: List[Symbol] = [start_symbol]
@@ -150,7 +147,7 @@ class TransformerStatePred(TransformerState):
         prev_col_idx = self.preds[idx - 1][1]
         possible_indices = self.col_tab_dic[prev_col_idx]
         impossible_indices = [
-            idx for idx in range(len(self.tab_col_dic)) if idx not in possible_indices
+            idx for idx in self.col_tab_dic[0] if idx not in possible_indices
         ]
         return impossible_indices
 
@@ -162,7 +159,7 @@ class TransformerStatePred(TransformerState):
             action: Action = (current_symbol, pred_idx)
             new_nonterminal_symbols = ["T"]
         elif current_symbol == "T":
-            assert_dim([len(self.tab_col_dic)], prod)
+            assert_dim([len(self.col_tab_dic[0])], prod)
             action: Action = (current_symbol, pred_idx)
             new_nonterminal_symbols = []
 

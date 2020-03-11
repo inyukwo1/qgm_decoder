@@ -15,6 +15,7 @@ from src.dataset import Example
 from preprocess.rule import lf
 from preprocess.rule.semQL import *
 from decoder.qgm.utils import filter_datas
+import src.relation as relation
 
 
 wordnet_lemmatizer = WordNetLemmatizer()
@@ -377,6 +378,7 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed, is_col_set=True):
             qgm=process_dict["qgm"],
             # qgm_action=process_dict["rule_label"],
             qgm_action=rule_label,
+            relation=sql['relation'],
         )
 
         example.sql_json = copy.deepcopy(sql)
@@ -395,14 +397,12 @@ def epoch_train(
     sql_data,
     table_data,
     clip_grad,
-    model_name,
+    decoder_name,
     is_col_set=True,
     is_train=True,
+    optimize_freq=1,
 ):
-    if is_train:
-        model.train()
-    else:
-        model.eval()
+    model.train()
     # shuffle
     perm = np.random.permutation(len(sql_data))
     optimizer.zero_grad()
@@ -410,14 +410,14 @@ def epoch_train(
         bert_optimizer.zero_grad()
 
     total_loss = {}
-    for st in tqdm(range(0, len(sql_data), batch_size)):
+    for idx, st in enumerate(tqdm(range(0, len(sql_data), batch_size))):
         ed = st + batch_size if st + batch_size < len(perm) else len(perm)
         examples = to_batch_seq(
             sql_data, table_data, perm, st, ed, is_col_set=is_col_set
         )
 
         result = model.forward(examples)
-        if model_name == "lstm":
+        if decoder_name == "lstm":
             tmp = {key: [] for key in result[0].get_keys()}
             for losses in result:
                 for key, item in losses.get_dic().items():
@@ -430,7 +430,7 @@ def epoch_train(
                 total_loss = {key: [] for key in result[0].get_keys()}
             for key, item in tmp.items():
                 total_loss[key] += [float(item)]
-        elif model_name == "transformer":
+        elif decoder_name == "transformer":
             loss = result.loss_dic["sketch"] + result.loss_dic["detail"]
 
             # Save
@@ -439,26 +439,7 @@ def epoch_train(
             for key, item in result.loss_dic.items():
                 total_loss[key] += [float(item)]
 
-        elif model_name == "qgm":
-            losses, pred_boxes = result
-
-            # Combine losses
-            loss_list = []
-            for loss in losses:
-                loss_sum = sum([item for key, item in loss.items()])
-                loss_list += [loss_sum]
-
-            # Save loss
-            if not total_loss:
-                for key in losses[0].keys():
-                    total_loss[key] = []
-            for b_loss in losses:
-                for key, item in b_loss.items():
-                    total_loss[key] += [float(item)]
-
-            loss = torch.mean(torch.stack(loss_list))
-
-        elif model_name == "preprocess":
+        elif decoder_name == "semql":
             sketch_prob_var, lf_prob_var = result
             # Save loss
             if not total_loss:
@@ -475,16 +456,15 @@ def epoch_train(
 
         if is_train:
             loss.backward()
-
-        if clip_grad > 0.0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
-        if is_train:
-            optimizer.step()
-            if bert_optimizer:
-                bert_optimizer.step()
-            optimizer.zero_grad()
-            if bert_optimizer:
-                bert_optimizer.zero_grad()
+            if idx % optimize_freq == 0:
+                if clip_grad > 0.0:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
+                optimizer.step()
+                if bert_optimizer:
+                    bert_optimizer.step()
+                optimizer.zero_grad()
+                if bert_optimizer:
+                    bert_optimizer.zero_grad()
 
     # Average loss
     for key in total_loss.keys():
@@ -595,15 +575,18 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type):
     val_path = os.path.join(dataset_path, "dev.json")
     table_data = []
 
+    # Tables as dictionary
     with open(table_path) as f:
         table_data += json.load(f)
+    table_data = {table["db_id"]: table for table in table_data}
 
     # Load data
     train_data = load_data_new(train_path, is_toy, is_bert, query_type)
     val_data = load_data_new(val_path, is_toy, is_bert, query_type)
 
-    # Tables as dictionary
-    table_data = {table["db_id"]: table for table in table_data}
+    # Create relations
+    train_data = [relation.create_relation(item, table_data, True) for item in train_data]
+    val_data = [relation.create_relation(item, table_data, True) for item in val_data]
 
     # Show dataset length
     log.info("Total training set: {}".format(len(train_data)))

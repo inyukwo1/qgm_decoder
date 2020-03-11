@@ -1,0 +1,10 @@
+decoder_name: preprocess
+beam_size: 5
+att_vec_size: 300
+decode_max_time_step: 40
+column_pointer: true
+query_vec_to_action_diff_map: false
+readout: identity
+column_att: "affine"
+type_embed_size: 128
+action_embed_size: 128

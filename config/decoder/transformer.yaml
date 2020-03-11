@@ -1,0 +1,5 @@
+decoder_name: transformer
+layer_num: 3
+nhead: 6
+is_col_set: true
+use_mem_pointer: false

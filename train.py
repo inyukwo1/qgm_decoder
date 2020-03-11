@@ -6,7 +6,7 @@ import datetime
 
 import torch
 import torch.optim as optim
-from RAdam.radam import RAdam
+from radam import RAdam
 from torch.utils.tensorboard import SummaryWriter
 
 from src import utils
@@ -108,8 +108,9 @@ def train(cfg):
             train_data,
             table_data,
             cfg.clip_grad,
-            cfg.model_name,
+            cfg.decoder_name,
             is_col_set=cfg.is_col_set,
+            optimize_freq=cfg.optimize_freq,
         )
 
         dataset_name = cfg.dataset.name
@@ -127,7 +128,7 @@ def train(cfg):
                 cfg.batch_size,
                 train_data,
                 table_data,
-                cfg.model_name,
+                cfg.decoder_name,
                 cfg.is_col_set,
             )
 
@@ -139,16 +140,17 @@ def train(cfg):
                 val_data,
                 table_data,
                 cfg.clip_grad,
-                cfg.model_name,
+                cfg.decoder_name,
                 is_col_set=cfg.is_col_set,
                 is_train=False,
+                optimize_freq=cfg.optimize_freq,
             )
             val_acc = utils.epoch_acc(
                 model,
                 cfg.batch_size,
                 val_data,
                 table_data,
-                cfg.model_name,
+                cfg.decoder_name,
                 cfg.is_col_set,
             )
 
