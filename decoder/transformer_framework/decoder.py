@@ -242,7 +242,7 @@ class TransformerDecoderFramework(nn.Module):
                 #    prod = prod_promise.result
                 if prev_tensor_list:
                     idx = len(prev_tensor_list) - 1
-                    prod = prev_tensor_dict[-1].result
+                    prod = prev_tensor_list[-1].result
                     state.apply_loss(idx, prod)
             else:
                 assert isinstance(state, TransformerStatePred)
@@ -376,8 +376,8 @@ class TransformerDecoderFramework(nn.Module):
             history_actions: List[Action] = state.get_history_actions()
             prev_tensor_list = prev_tensor_dict["refine_prods"]
 
-            print("step_cnt:{} refine_cnt:{}".format(state.step_cnt, state.refine_step_cnt))
-            print("history_action: {}".format(history_actions))
+            #print("step_cnt:{} refine_cnt:{}".format(state.step_cnt, state.refine_step_cnt))
+            #print("history_action: {}".format(history_actions))
 
             # Find argmax for all prods
             pred_indices = [torch.argmax(item.result).item() for item in prev_tensor_list]
@@ -398,7 +398,7 @@ class TransformerDecoderFramework(nn.Module):
 
                     # Compare
                     if ori_action != new_action:
-                        print("Alter!! {} -> {}".format(ori_action, new_action))
+                        #print("Alter!! {} -> {}".format(ori_action, new_action))
                         # alter pred history, step cnt
                         state.step_cnt = idx+1
                         state.preds = state.preds[:idx] + [new_action]
