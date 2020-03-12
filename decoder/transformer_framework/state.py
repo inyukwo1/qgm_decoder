@@ -10,6 +10,7 @@ from rule.semql.semql_loss import SemQL_Loss_New
 class TransformerState(State):
     def __init__(self, encoded_src, encoded_col, encoded_tab, col_tab_dic):
         self.step_cnt = 0
+        self.refine_step_cnt = 0
         self.encoded_src = encoded_src
         self.encoded_col = encoded_col
         self.encoded_tab = encoded_tab
@@ -63,7 +64,7 @@ class TransformerStateGold(TransformerState):
 
     @classmethod
     def is_to_refine(cls, state) -> bool:
-        return state.step_cnt == len(state.gold)
+        return state.step_cnt == len(state.gold) and state.refine_step_cnt < len(state.gold)
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
@@ -118,7 +119,6 @@ class TransformerStatePred(TransformerState):
         )
         self.preds: List[Action] = []
         self.nonterminal_symbol_stack: List[Symbol] = [start_symbol]
-        self.refine_step_cnt = 0
 
     @classmethod
     def is_to_refine(cls, state) -> bool:

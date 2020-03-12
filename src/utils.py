@@ -562,12 +562,6 @@ def load_data_new(sql_path, use_small=False, is_bert=False, query_type="simple")
             and data["db_id"] != "soccer_1"
         ]
 
-    lens = []
-    for data in sql_data:
-        lens += [len(data["col"])]
-    print(lens)
-    print("max: ", max(lens))
-
     # Filter data with qgm that has nested query
     sql_data = filter_datas(sql_data, query_type)
 

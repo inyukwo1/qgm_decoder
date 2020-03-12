@@ -403,7 +403,7 @@ class TransformerDecoderFramework(nn.Module):
                         # roll back nonterminal
                         state.nonterminal_symbol_stack = roll_back_nonterminal_stack(state.preds)
                         break
-                state.refine_step_cnt = idx+1
+            state.refine_step_cnt = idx+1
 
         states = SequentialMonad(states)(
             WhileLogic.While(state_class.is_not_done)
