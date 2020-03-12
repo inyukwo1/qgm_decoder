@@ -10,10 +10,12 @@ from rule.semql.semql_loss import SemQL_Loss_New
 class LSTMState(State):
     def __init__(self, encoded_src, encoded_col, encoded_tab, col_tab_dic):
         self.step_cnt = 0
+        self.sketch_step_cnt = 0
         self.encoded_src = encoded_src
         self.encoded_col = encoded_col
         self.encoded_tab = encoded_tab
         self.col_tab_dic = col_tab_dic
+        self.preds = []
 
     @classmethod
     def is_not_done(cls, state) -> bool:
@@ -25,16 +27,7 @@ class LSTMState(State):
     def step(self):
         self.step_cnt += 1
 
-    def get_history_actions(self) -> List[Action]:
-        pass
-
-    def get_history_symbols(self) -> List[Symbol]:
-        pass
-
-    def get_current_symbol(self) -> Symbol:
-        pass
-
-    def impossible_table_indices(self, idx) -> List[int]:
+    def get_prev_action(self):
         pass
 
 
@@ -52,6 +45,9 @@ class LSTMStateGold(LSTMState):
     @classmethod
     def combine_loss(cls, states: List["LSTMStateGold"]) -> SemQL_Loss_New:
         pass
+
+    def get_prev_sketch(self):
+        return self.gold_sketch[self.sketch_step_cnt]
 
 
 class LSTMStatePred(LSTMState):

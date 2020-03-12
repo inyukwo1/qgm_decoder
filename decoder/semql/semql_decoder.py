@@ -107,7 +107,7 @@ class SemQL_Decoder(nn.Module):
             "Use Column Pointer: {}".format(True if self.use_column_pointer else False)
         )
 
-    def forward(self, batch, step=None):
+    def forward(self, batch):
         b_size = len(batch.src_sents)
         sketches = batch.semql_sketch
         src_encodings = batch.sen_encoding
@@ -204,15 +204,6 @@ class SemQL_Decoder(nn.Module):
 
             # get the Root possibility
             apply_rule_prob = torch.softmax(self.production_readout(att_t), dim=-1)
-
-            if t == step:
-                gold_action = sketches[0][t].production
-                gold_action_id = self.grammar.prod2id[gold_action]
-                pred_action_id = torch.argmax(apply_rule_prob[-1]).item()
-                pred_action = self.grammar.id2prod[pred_action_id]
-                pred_probs = apply_rule_prob[:, pred_action_id]
-                gold_probs = apply_rule_prob[:, gold_action_id]
-                return gold_action, pred_action, gold_probs, pred_probs
 
             for e_id, sketch in enumerate(sketches):
                 if t < len(sketch):
@@ -377,39 +368,6 @@ class SemQL_Decoder(nn.Module):
 
             table_weights = torch.softmax(table_weights, dim=-1)
 
-            if step == detail_t + batch.max_semql_sketch_num:
-                gold_action_t = tgt_actions[0][t]
-                if isinstance(gold_action_t, define_rule.C):
-                    gold_action_id = gold_action_t.id_c
-                    gold_action = "C({})".format(" ".join(tab_cols[0][gold_action_id]))
-                    pred_action_id = torch.argmax(column_attention_weights[-1]).item()
-                    pred_action = "C({})".format(" ".join(tab_cols[0][pred_action_id]))
-                    gold_probs = column_attention_weights[:, gold_action_id]
-                    pred_probs = column_attention_weights[:, pred_action_id]
-                    return gold_action, pred_action, gold_probs, pred_probs
-                elif isinstance(gold_action_t, define_rule.T):
-                    gold_action_id = gold_action_t.id_c
-                    gold_action = "T({})".format(
-                        " ".join(table_names[0][gold_action_id])
-                    )
-                    pred_action_id = torch.argmax(table_weights[-1]).item()
-                    pred_action = "T({})".format(
-                        " ".join(table_names[0][pred_action_id])
-                    )
-                    gold_probs = table_weights[:, gold_action_id]
-                    pred_probs = table_weights[:, pred_action_id]
-                    return gold_action, pred_action, gold_probs, pred_probs
-                elif isinstance(gold_action_t, define_rule.A):
-                    gold_action_id = self.grammar.prod2id[gold_action_t.production]
-                    gold_action = gold_action_t.production
-                    pred_action_id = torch.argmax(apply_rule_prob[-1]).item()
-                    pred_action = self.grammar.id2prod[pred_action_id]
-                    pred_probs = apply_rule_prob[:, pred_action_id]
-                    gold_probs = apply_rule_prob[:, gold_action_id]
-                    return gold_action, pred_action, gold_probs, pred_probs
-                else:
-                    pass
-
             for e_id, tgt_action in enumerate(tgt_actions):
                 if t < len(tgt_action):
                     action_t = tgt_action[t]
@@ -447,7 +405,6 @@ class SemQL_Decoder(nn.Module):
             ],
             dim=0,
         )
-        assert step is None
 
         total_loss = [
             -sketch_prob_var[idx] + -lf_prob_var[idx]

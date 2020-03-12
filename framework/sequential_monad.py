@@ -3,8 +3,6 @@ from abc import ABC
 from framework.promise import TensorPromise
 from framework.lazy_modules import LazyModule
 import torch
-import time
-from torch import nn
 
 
 class State(ABC):
