@@ -379,13 +379,10 @@ class TransformerDecoderFramework(nn.Module):
             #print("step_cnt:{} refine_cnt:{}".format(state.step_cnt, state.refine_step_cnt))
             #print("history_action: {}".format(history_actions))
 
-            # Find argmax for all prods
-            pred_indices = [torch.argmax(item.result).item() for item in prev_tensor_list]
-
             if isinstance(state, TransformerStateGold):
-                for idx, pred_idx in enumerate(pred_indices):
-                    prod = prev_tensor_list[idx].result
-                    state.apply_loss(idx, prod)
+                for idx, item in enumerate(prev_tensor_list):
+                    probs = item.result
+                    state.apply_loss(idx, probs)
             else:
                 for idx in range(state.refine_step_cnt, len(prev_tensor_list)):
                     ori_action = history_actions[idx]
@@ -411,7 +408,7 @@ class TransformerDecoderFramework(nn.Module):
         states = SequentialMonad(states)(
             WhileLogic.While(state_class.is_not_done)
             .Do(
-                LogicUnit.If(state_class.is_not_done)
+                LogicUnit.If(state_class.is_to_infer)
                 .Then(embed_history_actions)
                 .Then(embed_history_symbols)
                 .Then(combine_symbol_action_embeddings)
