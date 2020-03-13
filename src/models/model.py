@@ -10,6 +10,7 @@ from decoder.qgm.qgm_decoder import QGM_Decoder
 from decoder.lstm.decoder import LSTM_Decoder
 from decoder.transformer_framework.decoder import TransformerDecoderFramework
 from decoder.semql.semql_decoder import SemQL_Decoder
+from decoder.semql_framework.decoder import SemQLDecoderFramework
 
 from encoder.ra_transformer.encoder import RA_Transformer_Encoder
 from encoder.transformer.encoder import Transformer_Encoder
@@ -53,7 +54,7 @@ class IRNet(BasicModel):
         elif self.decoder_name == "qgm":
             self.decoder = QGM_Decoder(cfg)
         elif self.decoder_name == "semql":
-            self.decoder = SemQL_Decoder(cfg)
+            self.decoder = SemQLDecoderFramework(cfg)
         else:
             raise RuntimeError("Unsupported decoder name: {}".format(self.decoder_name))
 
@@ -219,9 +220,24 @@ class IRNet(BasicModel):
             )
             return losses, pred_boxes
         elif self.decoder_name == "semql":
-            raise RuntimeError("Not yet")
-            sketch_prob_var, lf_prob_var = self.decoder.forward(batch)
-            return sketch_prob_var, lf_prob_var
+            col_tab_dic = batch.col_table_dict
+            golds = [self.decoder.grammar.create_data(item) for item in batch.qgm]
+            tmp = []
+            for gold in golds:
+                tmp += [[
+                        self.decoder.grammar.str_to_action(item)
+                        for item in gold.split(" ")
+                        ]]
+            golds = tmp
+            losses = self.decoder(
+                src_encodings,
+                table_embedding,
+                schema_embedding,
+                col_tab_dic,
+                golds,
+            )
+
+            return losses
         else:
             raise RuntimeError("Unsupported Decoder Name")
 
@@ -396,11 +412,15 @@ class IRNet(BasicModel):
                 )
                 return pred_boxes
             elif self.decoder_name == "semql":
-                completed_beams, _ = self.decoder.parse(batch)
-                highest_prob_actions = (
-                    completed_beams[0].actions if completed_beams else []
+                col_tab_dic = batch.col_table_dict
+                pred = self.decoder(
+                    src_encodings,
+                    table_embedding,
+                    schema_embedding,
+                    col_tab_dic,
+                    golds=None,
                 )
-                return highest_prob_actions
+                return pred
             else:
                 raise RuntimeError("Unsupported decoder name")
 

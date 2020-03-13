@@ -45,18 +45,11 @@ class TransformerDecoderFramework(nn.Module):
         self.decoder_out_linear_layer = LazyLinear(dim, dim)
 
         # For refinement
-        if True:
-            self.refine_transformer = LazyTransformerDecoder(dim, nhead, layer_num)
-            self.refine_action_affine_layer = LazyLinear(dim, dim)
-            self.refine_symbol_affine_layer = LazyLinear(dim, dim)
-            self.refine_tgt_linear_layer = LazyLinear(dim * 3, dim)
-            self.refine_out_linear_layer = LazyLinear(dim, dim)
-        else:
-            self.refine_transformer = self.decoder_transformer
-            self.refine_action_affine_layer = self.action_affine_layer
-            self.refine_symbol_affine_layer = self.symbol_affine_layer
-            self.refine_tgt_linear_layer = self.tgt_linear_layer
-            self.refine_out_linear_layer = self.decoder_out_linear_layer
+        self.refine_transformer = LazyTransformerDecoder(dim, nhead, layer_num)
+        self.refine_action_affine_layer = LazyLinear(dim, dim)
+        self.refine_symbol_affine_layer = LazyLinear(dim, dim)
+        self.refine_tgt_linear_layer = LazyLinear(dim, dim)
+        self.refine_out_linear_layer = LazyLinear(dim, dim)
 
         self.action_similarity = LazyCalculateSimilarity(dim, dim)
         self.column_similarity = LazyCalculateSimilarity(dim, dim)
@@ -99,7 +92,7 @@ class TransformerDecoderFramework(nn.Module):
         col_lens,
         tab_lens,
         col_tab_dic,
-        golds,
+        golds=None,
     ):
         b_size = len(encoded_src)
         if golds:
@@ -158,7 +151,7 @@ class TransformerDecoderFramework(nn.Module):
             new_tensor_dict.update({"symbol_embedding": symbol_embeddings_promise})
             return new_tensor_dict
 
-        def combine_symbol_action_embeddings(
+        def combine_embeddings(
             state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
         ) -> Dict[str, TensorPromise]:
             action_embedding: torch.Tensor = prev_tensor_dict["action_embedding"].result
@@ -251,7 +244,6 @@ class TransformerDecoderFramework(nn.Module):
             state.step()
             return prev_tensor_dict
 
-
         # Functions for refinement stage
         def embed_history_actions_for_refine(state: TransformerState, prev_tensor_dict: Dict) -> Dict[str, TensorPromise]:
             history_actions: List[Action] = state.get_history_actions()
@@ -276,18 +268,14 @@ class TransformerDecoderFramework(nn.Module):
             new_tensor_dict.update({"symbol_embedding": symbol_embeddings_promise})
             return new_tensor_dict
 
-        def combine_symbol_action_embeddings_for_refine(
+        def combine_embeddings_for_refine(
             state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
         ) -> Dict[str, TensorPromise]:
-            action_embedding: torch.Tensor = prev_tensor_dict["action_embedding"].result
+            #action_embedding: torch.Tensor = prev_tensor_dict["action_embedding"].result
             symbol_embedding: torch.Tensor = prev_tensor_dict["symbol_embedding"].result
-            hidden_vectors: torch.Tensor = prev_tensor_dict["decoder_out"].result
-            if True:
-                combined_embedding = torch.cat(
-                    (action_embedding, symbol_embedding, hidden_vectors), dim=-1
-                )
-            else:
-                combined_embedding = torch.cat((action_embedding, symbol_embedding, hidden_vectors), dim=-1)
+            #hidden_vectors: torch.Tensor = prev_tensor_dict["decoder_out"].result
+            #combined_embedding = torch.cat((symbol_embedding, hidden_vectors), dim=-1)
+            combined_embedding = symbol_embedding
             combined_embedding_promise: TensorPromise = self.refine_tgt_linear_layer.forward_later(
                 combined_embedding
             )
@@ -376,13 +364,14 @@ class TransformerDecoderFramework(nn.Module):
             history_actions: List[Action] = state.get_history_actions()
             prev_tensor_list = prev_tensor_dict["refine_prods"]
 
-            #print("step_cnt:{} refine_cnt:{}".format(state.step_cnt, state.refine_step_cnt))
-            #print("history_action: {}".format(history_actions))
-
             if isinstance(state, TransformerStateGold):
+                # Loss for C T only?
+                symbols = state.get_history_symbols()
+                assert len(symbols) == len(prev_tensor_list)
                 for idx, item in enumerate(prev_tensor_list):
-                    probs = item.result
-                    state.apply_loss(idx, probs)
+                    if symbols[idx] in ["C", "T"]:
+                        probs = item.result
+                        state.apply_loss(idx, probs)
             else:
                 for idx in range(state.refine_step_cnt, len(prev_tensor_list)):
                     ori_action = history_actions[idx]
@@ -393,9 +382,8 @@ class TransformerDecoderFramework(nn.Module):
                     else:
                         new_action = SemQL.semql.aid_to_action[pred_idx]
 
-                    # Compare
-                    if ori_action != new_action:
-                        #print("Alter!! {} -> {}".format(ori_action, new_action))
+                    # Compare (change C T only)
+                    if ori_action != new_action and ori_action[0] in ["T", "C"]:
                         # alter pred history, step cnt
                         state.step_cnt = idx+1
                         state.preds = state.preds[:idx] + [new_action]
@@ -411,7 +399,7 @@ class TransformerDecoderFramework(nn.Module):
                 LogicUnit.If(state_class.is_to_infer)
                 .Then(embed_history_actions)
                 .Then(embed_history_symbols)
-                .Then(combine_symbol_action_embeddings)
+                .Then(combine_embeddings)
                 .Then(pass_decoder_transformer)
                 .Then(pass_decoder_out_linear)
                 .Then(calc_prod)
@@ -419,9 +407,9 @@ class TransformerDecoderFramework(nn.Module):
             )
             .Do(
                 LogicUnit.If(state_class.is_to_refine)
-                .Then(embed_history_actions_for_refine)
+                #.Then(embed_history_actions_for_refine)
                 .Then(embed_history_symbols_for_refine)
-                .Then(combine_symbol_action_embeddings_for_refine)
+                .Then(combine_embeddings_for_refine)
                 .Then(pass_refine_transformer)
                 .Then(pass_refine_out_linear)
                 .Then(calc_prod_for_refine)

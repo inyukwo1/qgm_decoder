@@ -440,17 +440,13 @@ def epoch_train(
                 total_loss[key] += [float(item)]
 
         elif decoder_name == "semql":
-            sketch_prob_var, lf_prob_var = result
-            # Save loss
-            if not total_loss:
-                total_loss["sketch"] = []
-                total_loss["detail"] = []
-            for sketch_loss in sketch_prob_var:
-                total_loss["sketch"] += [float(sketch_loss)]
-            for detail_loss in lf_prob_var:
-                total_loss["detail"] += [float(detail_loss)]
+            loss = result.loss_dic["sketch"] + result.loss_dic["detail"]
 
-            loss = torch.mean(sketch_prob_var) + torch.mean(lf_prob_var)
+            # Save
+            if not total_loss:
+                total_loss = {key: [] for key in result.get_keys()}
+            for key, item in result.loss_dic.items():
+                total_loss[key] += [float(item)]
         else:
             raise RuntimeError("Unsupported model")
 
@@ -526,10 +522,21 @@ def epoch_acc(
         elif model_name == "qgm":
             pred += model.parse(examples)
             gold += [example.qgm for example in examples]
-        elif model_name == "preprocess":
-            for example in examples:
-                pred += [model.parse([example])]
-                gold += [example.tgt_actions]
+        elif model_name == "semql":
+            pred += model.parse(examples)
+            tmp = [
+                model.decoder.grammar.create_data(example.qgm) for example in examples
+            ]
+            tmp2 = []
+            for item in tmp:
+                tmp2 += [
+                    [
+                        model.decoder.grammar.str_to_action(value)
+                        for value in item.split(" ")
+                    ]
+                ]
+            tmp = tmp2
+            gold += tmp
         else:
             raise RuntimeError("Unsupported model name")
 

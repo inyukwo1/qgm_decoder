@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 from typing import NewType, Tuple, Dict, List
 
@@ -142,7 +143,7 @@ class Grammar(nn.Module):
         return (symbol, id)
 
     # Get next action
-    def get_possible_aids(self, symbol):
+    def get_possible_aids(self, symbol) -> List[GlobalActionId]:
         if isinstance(symbol, int):
             symbol = self.sid_to_symbol[symbol]
         return [
@@ -150,14 +151,22 @@ class Grammar(nn.Module):
             for idx in range(len(self.actions[symbol]))
         ]
 
+    def action_to_emb(self, action: Action) -> torch.Tensor:
+        aid = self.action_to_aid[action]
+        return self.action_emb.weight[aid]
+
+    def symbol_to_emb(self, symbol: Symbol) -> torch.Tensor:
+        sid = self.symbol_to_sid[symbol]
+        return self.symbol_emb.weight[sid]
+
     # Parse and get nonterminals
-    def parse_nonterminal_symbols(self, actions: List[Action]):
+    def parse_nonterminal_symbols(self, actions: List[Action]) -> List[List[Symbol]]:
         nonterminals = []
         for action in actions:
             nonterminals += [self.parse_nonterminal_symbol(action)]
         return nonterminals
 
-    def parse_nonterminal_symbol(self, action: Action):
+    def parse_nonterminal_symbol(self, action: Action) -> List[Symbol]:
         symbol, id = action
         if symbol in ["T", "C"]:
             id = 0
@@ -183,11 +192,3 @@ class Grammar(nn.Module):
 
     def get_key_emb(self):
         return self.key_emb.weight.data.squeeze(0)
-
-
-if __name__ == "__main__":
-    grammar = Grammar(
-        "/home/hkkang/debugging/irnet_qgm_transformer/rule/preprocess/preprocess.manifesto"
-    )
-    stop = None
-    pass

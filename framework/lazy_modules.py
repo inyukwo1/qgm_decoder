@@ -80,6 +80,36 @@ class LazyLinear(nn.Module, LazyModule):
         ]
 
 
+class LazyLSTMCell(nn.Module, LazyModule):
+    def __init__(self, in_dim, out_dim):
+        super(LazyLSTMCell, self).__init__()
+        LazyModule.__init__(self)
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        self.module = nn.LSTMCell(in_dim, out_dim)
+
+    def assert_input(self, *inputs):
+        pass
+
+    def compute(self):
+        input_list = []
+        hidden_list = []
+        cell_list = []
+        for item in self.later_buffer:
+            input_list.append(item[0])
+            hidden_list.append(item[1][0])
+            cell_list.append(item[1][1])
+
+        # Stacked
+        stacked_input = torch.stack(input_list)
+        stacked_hidden = torch.stack(hidden_list)
+        stacked_cell = torch.stack(cell_list)
+
+        next_hid, next_cell = self.module(stacked_input, (stacked_hidden, stacked_cell))
+
+        self.done_buffer = [(hid, cell) for hid, cell in zip(next_hid, next_cell)]
+
+
 class LazyTransformerDecoder(nn.Module, LazyModule):
     def __init__(self, in_dim, nhead, layer_num):
         super(LazyTransformerDecoder, self).__init__()
@@ -173,3 +203,199 @@ class LazyCalculateSimilarity(nn.Module, LazyModule):
             weight_probs[idx, : len(query_list[idx])]
             for idx in range(len(weight_probs))
         ]
+
+
+class LazyAttention(nn.Module, LazyModule):
+    def __init__(self, in_dim, out_dim):
+        super(LazyAttention, self).__init__()
+        LazyModule.__init__(self)
+        self.layer = None
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+
+    def assert_input(self, *inputs):
+        pass
+
+    def compute(self):
+        pass
+
+
+class LazyLinearTanhDropout(nn.Module, LazyModule):
+    def __init__(self, in_dim, out_dim):
+        super(LazyLinearTanhDropout, self).__init__()
+        LazyModule.__init__(self)
+        self.layer = None
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+
+    def assert_input(self, *inputs):
+        [tensor] = inputs
+        assert isinstance(tensor, torch.Tensor)
+        if len(tensor.size()) == 1:
+            assert_dim([self.in_dim], tensor)
+        elif len(tensor.size()) == 1:
+            assert_dim([None, self.in_dim], tensor)
+
+    def compute(self):
+        tensor_list = [inputs[0] for inputs in self.later_buffer]
+        tensor_length = [len(item) for item in tensor_list]
+
+        stacked_tensors = torch.zeros(len(tensor_list), max(tensor_length), tensor_list[0].shape[-1]).cuda()
+        for idx, _tensor in enumerate(tensor_list):
+            stacked_tensors[idx][:len(_tensor)] = _tensor
+
+        computed_tensors = self.module(stacked_tensors)
+        computed_tensors = torch.tanh(computed_tensors)
+        computed_tensors = torch.dropout(computed_tensors)
+
+        # Split
+        self.done_buffer = [
+            computed_tensor[:length] for length, computed_tensor in zip(tensor_length, computed_tensors)
+        ]
+
+class LazyActionProb(nn.Module, LazyModule):
+    def __init__(self, in_dim, out_dim):
+        super(LazyActionProb, self).__init__()
+        LazyModule.__init__(self)
+        self.layer = None
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+
+    def assert_input(self, *inputs):
+        pass
+
+    def compute(self):
+        pass
+
+class LazyDotProductAttention(nn.Module, LazyModule):
+    def __init__(self, in_dim, out_dim):
+        super(LazyDotProductAttention, self).__init__()
+        LazyModule.__init__(self)
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        self.out_layer = torch.nn.Linear(in_dim, out_dim)
+        self.tanh = nn.Tanh()
+        self.dropout = nn.Dropout()
+
+    def assert_input(self, *inputs):
+        pass
+
+    def compute(self):
+        q_list: List[torch.Tensor] = []
+        k_list: List[torch.Tensor] = []
+        v_list: List[torch.Tensor] = []
+        for src, key, vec in self.later_buffer:
+            q_list.append(src)
+            k_list.append(key)
+            v_list.append(vec)
+        stacked_q, q_mask = stack_sequential_tensor_with_mask(q_list)
+        stacked_k = torch.stack(k_list)
+        stacked_v, v_mask = stack_sequential_tensor_with_mask(v_list)
+
+        # Combine
+        att_scores = torch.bmm(stacked_q, stacked_k.unsqueeze(2)).squeeze(2)
+        att_scores.data.masked_fill_(q_mask.bool(), -float("inf"))
+
+        att_probs = torch.softmax(att_scores, dim=-1)
+        att_vec = torch.bmm(att_probs.unsqueeze(1), stacked_v).squeeze(1)
+
+        # LinearTanhDropout
+        next_input = torch.cat([stacked_k, att_vec], dim=1)
+        next_input = self.out_layer(next_input)
+        next_input = self.tanh(next_input)
+        att_ctx = self.dropout(next_input)
+
+        self.done_buffer = [item for item in att_ctx]
+
+
+class LazyLinearLinear(nn.Module, LazyModule):
+    def __init__(self, in_dim, out_dim):
+        super(LazyLinearLinear, self).__init__()
+        LazyModule.__init__(self)
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        self.module = nn.Sequential(
+            nn.Linear(in_dim, in_dim),
+            nn.Linear(in_dim, out_dim),
+        )
+
+    def assert_input(self, *inputs):
+        pass
+
+    def compute(self):
+        input_tensors = [item[0] for item in self.later_buffer]
+        stacked_input = torch.stack(input_tensors)
+
+        output = self.module(stacked_input)
+
+        self.done_buffer = [item for item in output]
+
+
+class LazyPointerNet(nn.Module, LazyModule):
+    def __init__(self, in_dim, out_dim):
+        super(LazyPointerNet, self).__init__()
+        LazyModule.__init__(self)
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+
+        self.pass_linear = nn.Linear(in_dim, out_dim, bias=False)
+
+    def assert_input(self, *inputs):
+        pass
+
+    def compute(self):
+        query_list = [item[0] for item in self.later_buffer]
+        key_list = [item[1] for item in self.later_buffer]
+
+        stacked_query, query_mask = stack_sequential_tensor_with_mask(query_list)
+        stacked_key = torch.stack(key_list)
+
+        encoded_query = self.pass_linear(stacked_query)
+
+        # (batch_size, tgt_action_num, query_vec_size, 1)
+        weights = torch.bmm(encoded_query, stacked_key.unsqueeze(2)).squeeze(2)
+
+        weights.data.masked_fill_(query_mask.bool(), float("-inf"))
+        probs = torch.log_softmax(weights, dim=-1)
+
+        self.done_buffer = [item for item in probs]
+
+
+class LazyMemoryPointerNet(nn.Module, LazyModule):
+    def __init__(self, in_dim, out_dim):
+        super(LazyMemoryPointerNet, self).__init__()
+        LazyModule.__init__(self)
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        self.pass_gate = nn.Sequential(
+                            nn.Linear(in_dim, 1),
+                            nn.Sigmoid()
+                        )
+        self.col_linear = nn.Linear(in_dim, out_dim, bias=False)
+
+    def assert_input(self, *inputs):
+        pass
+
+    def compute(self):
+        encoded_col_list = [item[0] for item in self.later_buffer]
+        att_vec_list = [item[1] for item in self.later_buffer]
+        col_memory_mask = [item[2] for item in self.later_buffer]
+
+        stacked_col, col_mask = stack_sequential_tensor_with_mask(encoded_col_list)
+        stacked_att = torch.stack(att_vec_list)
+        stacked_mem_mask, _ = stack_sequential_tensor_with_mask(col_memory_mask)
+
+        # Create gate
+        gate = self.pass_gate(stacked_att)
+
+        encoded_col_stack = self.col_linear(stacked_col)
+
+        weights = torch.bmm(encoded_col_stack, stacked_att.unsqueeze(2)).squeeze(-1)
+
+        weights.data.masked_fill_(col_mask.bool(), float("-inf"))
+        one = weights * stacked_mem_mask * gate
+        two = weights * (1 - stacked_mem_mask) * (1 - gate)
+        total = one + two
+        probs = torch.log_softmax(total, dim=-1)
+
+        self.done_buffer = [item for item in probs]

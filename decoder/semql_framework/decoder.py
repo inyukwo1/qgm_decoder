@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
+from torch import Tensor
+from rule.grammar import Symbol, Action
 from rule.semql.semql import SemQL
-from encoder.irnet import nn_utils
-from encoder.irnet.pointer_net import PointerNet
+from framework.lazy_modules import LazyDotProductAttention, LazyLinearTanhDropout, LazyLSTMCell, LazyLinearLinear, LazyPointerNet, LazyMemoryPointerNet
 
 import logging
 log = logging.getLogger(__name__)
@@ -24,13 +25,6 @@ from framework.sequential_monad import (
     TensorPromiseOrTensor,
     TensorPromise,
 )
-from framework.lazy_modules import (
-    LazyLinear,
-    LazyDropout,
-    LazyLSTMCellDecoder,
-    LazyTransformerDecoder,
-    LazyCalculateSimilarity,
-)
 
 
 class SemQLDecoderFramework(nn.Module):
@@ -38,216 +32,273 @@ class SemQLDecoderFramework(nn.Module):
         super(SemQLDecoderFramework, self).__init__()
         self.cfg = cfg
         self.is_cuda = cfg.cuda != -1
-        self.grammar = SemQL.Grammar()
         self.use_column_pointer = cfg.column_pointer
-
         self.new_tensor = torch.cuda.FloatTensor if self.is_cuda else torch.FloatTensor
 
-        hidden_size = cfg.hidden_size
-        att_vec_size = cfg.att_vec_size
-        type_embed_size = cfg.type_embed_size
-        action_embed_size = cfg.action_embed_size
-        input_dim = action_embed_size + att_vec_size + type_embed_size
+        dim = cfg.hidden_size
+        self.dim = dim
+        self.decode_max_time_step = 50
 
-        self.decode_max_time_step = 40
-        self.action_embed_size = action_embed_size
-        self.type_embed_size = type_embed_size
+        self.grammar = SemQL(dim)
+        self.col_symbol_id = self.grammar.symbol_to_sid["C"]
+        self.tab_symbol_id = self.grammar.symbol_to_sid["T"]
 
-        # Decoder Layers
-        self.encoder_Lstm = nn.LSTM(self.embed_size, hidden_size // 2, bidirectional=True, batch_first=True)
-        self.decoder_cell_init = LazyLinear(hidden_size, hidden_size)
-        self.lf_decoder_lstm = nn.LSTMCell(input_dim, hidden_size)
-        self.sketch_decoder_lstm = nn.LSTMCell(input_dim, hidden_size)
+        # Further encode
+        self.src_lstm = nn.LSTM(dim, dim // 2, bidirectional=True, batch_first=True)
+        self.aff_sketch_linear = nn.Linear(dim, dim)
+        self.aff_detail_linear = nn.Linear(dim, dim)
+        self.gate_prob_linear = nn.Linear(dim, 1)
 
-        self.att_sketch_linear = LazyLinear(hidden_size, hidden_size, bias=False)
-        self.att_lf_linear = LazyLinear(hidden_size, hidden_size, bias=False)
-        self.sketch_att_vec_linear = LazyLinear(
-            hidden_size + hidden_size, att_vec_size, bias=False
-        )
-        self.lf_att_vec_linear = LazyLinear(
-            hidden_size + hidden_size, att_vec_size, bias=False
-        )
-        self.prob_att = LazyLinear(att_vec_size, 1)
-        self.prob_len = LazyLinear(1, 1)
-        self.q_att = LazyLinear(hidden_size, self.embed_size)
-        self.column_rnn_input = LazyLinear(
-            self.embed_size, action_embed_size, bias=False
-        )
-        self.table_rnn_input = LazyLinear(self.embed_size, action_embed_size, bias=False)
-        self.dropout = LazyDropout(cfg.dropout)
-        self.query_vec_to_action_embed = LazyLinear(
-            att_vec_size, action_embed_size, bias=cfg.readout == "non_linear",
-        )
-
-        # Embeddings
-        self.production_embed = nn.Embedding(
-            len(self.grammar.prod2id), action_embed_size
-        )
-        self.type_embed = nn.Embedding(len(self.grammar.type2id), type_embed_size)
-        self.production_readout_b = nn.Parameter(
-            torch.FloatTensor(len(self.grammar.prod2id)).zero_()
-        )
-        self.N_embed = nn.Embedding(
-            len(SemQL.N._init_grammar()), action_embed_size
-        )
-        # initial the embedding layers
-        nn.init.xavier_normal_(self.production_embed.weight.data)
-        nn.init.xavier_normal_(self.type_embed.weight.data)
-        nn.init.xavier_normal_(self.N_embed.weight.data)
-
-        self.read_out_act = (
-            torch.tanh if cfg.readout == "non_linear" else nn_utils.identity
-        )
-
-        self.production_readout = lambda q: torch.nn.functional.linear(
-            self.read_out_act(self.query_vec_to_action_embed(q)),
-            self.production_embed.weight,
-            self.production_readout_b,
-        )
-
-        self.column_pointer_net = PointerNet(
-            hidden_size, self.embed_size, attention_type=cfg.column_att
-        )
-
-        self.table_pointer_net = PointerNet(
-            hidden_size, self.embed_size, attention_type=cfg.column_att
-        )
+        self.sketch_lstm_cell = LazyLSTMCell(dim*3, dim)
+        self.detail_lstm_cell = LazyLSTMCell(dim*3, dim)
 
         # New
-        self.dot_product_attention = LazyDotProductAttention(dim, dim)
-        self.attention_linear = None # lazy and linear + tanh + dropout
-        self.decoder_init_linear = None # lazy and linear + tanh
-        self.get_action_prob = None # Lazy and linear + softmax
+        self.column_pointer_net= LazyMemoryPointerNet(dim, dim)
+        self.table_pointer_net = LazyPointerNet(dim, dim)
+        self.dot_product_attention = LazyDotProductAttention(dim*2, dim)
+        self.action_linear_layer = LazyLinearLinear(dim, len(self.grammar.aid_to_action))
 
     def one_dim_zero_tensor(self):
         return torch.zeros(self.dim).cuda()
 
-    def forward(self, encoded_src, encoded_col, encoded_tab, col_tab_dic, golds):
+    def filter_sketch(self, actions):
+        return [action for action in actions if action[0] not in ["T", "C", "A"]]
+
+    def calc_src_state(self, encoded_src):
+        dim = encoded_src.shape[-1]
+        # _, (_, h_0) = self.lstm(encoded_src)
+        # h_0 = self.decoder_cell_init(enc_last_cell)
+        # h_0 = torch.tanh(h_0)
+        return [(torch.zeros(dim).cuda(), torch.zeros(dim).cuda()) for _ in range(len(encoded_src))]
+
+    def action_to_emb(self, state: LSTMState, action: Action) -> torch.Tensor:
+        if action[0] == "C":
+            col_idx = action[1]
+            return state.encoded_col[col_idx]
+        elif action[0] == "T":
+            tab_idx = action[1]
+            return state.encoded_tab[tab_idx]
+        else:
+            return self.grammar.action_to_emb(action)
+
+    def forward(self, encoded_src, encoded_col, encoded_tab, col_tab_dic, golds=None):
         b_size = len(encoded_src)
+
+        # Further encode
+        dec_init_state = self.calc_src_state(encoded_src)
+        aff_sketch_src = self.aff_sketch_linear(encoded_src)
+        aff_detail_src = self.aff_detail_linear(encoded_src)
+
         if golds:
             # Create sketch gold
             state_class = LSTMStateGold
-            states = [LSTMStateGold(encoded_src[b_idx],
+            states = [LSTMStateGold(aff_sketch_src[b_idx],
+                                    aff_detail_src[b_idx],
+                                    encoded_src[b_idx],
                                     encoded_col[b_idx],
                                     encoded_tab[b_idx],
+                                    dec_init_state[b_idx],
                                     col_tab_dic[b_idx],
                                     golds[b_idx],
+                                    self.filter_sketch(golds[b_idx]),
                                     )
                       for b_idx in range(b_size)
                       ]
         else:
             state_class = LSTMStatePred
             states = [
-                LSTMStatePred(encoded_src[b_idx],
-                                    encoded_col[b_idx],
-                                    encoded_tab[b_idx],
-                                    col_tab_dic[b_idx],
-                                    self.grammar.start_symbol,
+                LSTMStatePred(aff_sketch_src[b_idx],
+                                aff_detail_src[b_idx],
+                                encoded_src[b_idx],
+                                encoded_col[b_idx],
+                                encoded_tab[b_idx],
+                                dec_init_state[b_idx],
+                                col_tab_dic[b_idx],
+                                self.grammar.start_symbol,
                               )
                 for b_idx in range(b_size)
             ]
 
-        def embed_action(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromise]) -> Dict:
+        def embed_sketch_action(state: LSTMState, _) -> Dict:
             action = state.get_prev_sketch()
-            action_emb = self.grammar.action_emb[action]
+            action_emb = self.action_to_emb(state, action) if action else self.one_dim_zero_tensor()
             prev_tensor_dict = {"action_emb": action_emb}
             return prev_tensor_dict
 
-        def embed_symbol(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromise]) -> Dict:
-            symbol = state.get_current_symbol()
-            symbol_emb = self.grammar.symbol_emb[symbol]
+        def embed_sketch_symbol(state: LSTMState, prev_tensor_dict: Dict[str, Tensor]) -> Dict:
+            action = state.get_prev_sketch()
+            symbol_emb = self.grammar.symbol_to_emb(action[0]) if action else self.one_dim_zero_tensor()
             prev_tensor_dict.update({"symbol_emb": symbol_emb})
             return prev_tensor_dict
 
-        def pass_sketch_lstm(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromise]) -> Dict:
-            action_emb = prev_tensor_dict["action_emb"].result
-            symbol_emb = prev_tensor_dict["symbol_emb"].result
-            attn_emb = state.get_attn_emb()
-            combined_input = torch.stack([action_emb, symbol_emb, attn_emb])
+        def pass_sketch_lstm_cell(state: LSTMState, prev_tensor_dict: Dict[str, Tensor]) -> Dict:
+            action_emb = prev_tensor_dict["action_emb"]
+            symbol_emb = prev_tensor_dict["symbol_emb"]
+            attn_emb = state.get_att_emb()
+            combined_input = torch.cat([action_emb, symbol_emb, attn_emb], dim=-1)
 
-            lstm_state = state.get_lstm_state()
-            next_h_state, next_cell_state = self.sketch_lstm(combined_input, lstm_state)
+            lstm_state = state.get_sketch_state()
+            next_lstm_state = self.sketch_lstm_cell.forward_later(combined_input, lstm_state)
 
-            prev_tensor_dict.update({"new_lstm_state": (next_h_state, next_cell_state)})
+            prev_tensor_dict.update({"new_lstm_state": next_lstm_state})
             return prev_tensor_dict
 
-        def update_sketch_lstm(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromise]) -> Dict:
+        def update_sketch_lstm_state(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromiseOrTensor]) -> Dict:
             new_lstm_state = prev_tensor_dict["new_lstm_state"].result
-            state.update_lstm_state(new_lstm_state)
+            state.update_sketch_state(new_lstm_state)
             return prev_tensor_dict
 
-        def pass_sketch_att_src(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromise]) -> Dict:
-            h_state, _ = state.get_lstm_state()
+        def pass_sketch_att_src(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromiseOrTensor]) -> Dict:
+            h_state, _ = state.get_sketch_state()
             src_encodings = state.get_src_encodings()
-            affined_src_encodings = state.get_affined_src_encodings()
-            att_out, att_weights = self.dot_product_attention(affined_src_encodings, h_state,
-                                                              src_encodings)  # dot product attention + linear + tanh + dropout
-            prev_tensor_dict.update({"att_out": att_out, "att_weights": att_weights})
+            aff_sketch_src = state.get_affine_sketch_src()
+            att_out = self.dot_product_attention.forward_later(aff_sketch_src, h_state, src_encodings)  # dot product attention + linear + tanh + dropout
+            prev_tensor_dict.update({"att_out": att_out})
             return prev_tensor_dict
 
-        def update_sketch_att_src(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromise]) -> Dict:
+        def update_sketch_att_src(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromiseOrTensor]) -> Dict:
             att_out = prev_tensor_dict["att_out"].result
-            att_weights = prev_tensor_dict["att_weights"].result
-            state.update_att_src(att_out, att_weights)
+            state.update_att_emb(att_out)
             return prev_tensor_dict
 
-        def calc_action_prob(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromise]) -> Dict:
-            att_out = prev_tensor_dict["att_out"].result
-            action_mask = state.get_mask()
-            action_prob = self.action_linear_layer(att_out, action_mask)  # linear layer + linear layer
+        def calc_sketch_prob(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromiseOrTensor]) -> Dict:
+            # Get current symbol
+            cur_symbol = state.get_current_symbol()
+            action_ids = self.grammar.get_possible_aids(cur_symbol)
+
+            # Calc mask
+            action_mask = torch.ones(len(self.grammar.action_to_aid))
+            action_mask[action_ids] = 0
+
+            att_emb = state.get_att_emb()
+            action_prob = self.action_linear_layer.forward_later(att_emb, action_mask)  # linear layer + linear layer
             prev_tensor_dict.update({"action_prob": action_prob})
             return prev_tensor_dict
 
-        def apply_sketch(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromise]) -> Dict:
+        def apply_sketch(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromiseOrTensor]) -> Dict:
             action_prob = prev_tensor_dict["action_prob"].result
             if isinstance(state, LSTMStateGold):
-                gold_action_id = state.get_gold_action_id()
-                state.apply_loss(action_prob[gold_action_id])
+                state.apply_sketch_loss(action_prob)
             else:
                 pred_action_id = torch.argmax(action_prob).item()
-                action = self.grammar.action_id_to_action(pred_action_id)
-                state.save_pred(action)
+                action = self.grammar.aid_to_action[pred_action_id]
+                nonterminal_symbols = self.grammar.parse_nonterminal_symbol(action)
+                state.apply_pred(action, nonterminal_symbols)
             state.step_sketch()
             return {}
 
-        def pass_detail_lstm(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromise]) -> Dict:
-            pass
+        def embed_detail_action(state: LSTMState, _) -> Dict:
+            action = state.get_prev_action()
+            action_emb = self.action_to_emb(state, action) if action else self.one_dim_zero_tensor()
+            prev_tensor_dict = {"action_emb": action_emb}
+            return prev_tensor_dict
 
-        def update_detail_lstm(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromise]) -> Dict:
-            pass
+        def embed_detail_symbol(state: LSTMState, prev_tensor_dict: Dict[str, Tensor]) -> Dict:
+            action = state.get_prev_action()
+            symbol_emb = self.grammar.symbol_to_emb(action[0]) if action else self.one_dim_zero_tensor()
+            prev_tensor_dict.update({"symbol_emb": symbol_emb})
+            return prev_tensor_dict
 
-        def pass_detail_att_src(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromise]) -> Dict:
-            pass
+        def pass_detail_lstm_cell(state: LSTMState, prev_tensor_dict: Dict[str, Tensor]) -> Dict:
+            action_emb = prev_tensor_dict["action_emb"]
+            symbol_emb = prev_tensor_dict["symbol_emb"]
+            attn_emb = state.get_att_emb()
+            combined_input = torch.cat([action_emb, symbol_emb, attn_emb], dim=-1)
 
-        def update_detail_att_src(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromise]) -> Dict:
-            pass
+            lstm_state = state.get_detail_state()
+            next_state = self.detail_lstm_cell.forward_later(combined_input, lstm_state)
 
-        def calc_prob(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromise]) -> Dict:
-            pass
+            prev_tensor_dict.update({"new_lstm_state": next_state})
+            return prev_tensor_dict
 
-        def apply_detail(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromise]) -> Dict:
-            pass
+        def update_detail_lstm_state(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromiseOrTensor]) -> Dict:
+            new_lstm_state= prev_tensor_dict["new_lstm_state"].result
+            state.update_detail_state(new_lstm_state)
+            return prev_tensor_dict
+
+        def pass_detail_att_src(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromiseOrTensor]) -> Dict:
+            h_state, _ = state.get_detail_state()
+            src_encodings = state.get_src_encodings()
+            aff_detail_src = state.get_affine_detail_src()
+            att_out = self.dot_product_attention.forward_later(aff_detail_src, h_state, src_encodings)
+
+            prev_tensor_dict.update({"att_out": att_out})
+            return prev_tensor_dict
+
+        def update_detail_att_src(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromiseOrTensor]) -> Dict:
+            att_out = prev_tensor_dict["att_out"].result
+            state.update_att_emb(att_out)
+            return prev_tensor_dict
+
+        def calc_detail_prob(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromiseOrTensor]) -> Dict:
+            cur_symbol = state.get_current_symbol()
+
+            if cur_symbol == "C":
+                att_emb = state.get_att_emb()
+                encoded_col = state.get_col_encodings()
+
+                if self.use_column_pointer:
+                    # Create column appear mask
+                    mem_col_ids = [action[1] for action in state.get_action_history() if action[0] == "C"]
+                    col_appear_mask = torch.zeros(encoded_col.shape[0]).cuda()
+                    col_appear_mask[mem_col_ids] = 1
+                    col_probs = self.column_pointer_net.forward_later(encoded_col, att_emb, col_appear_mask)
+                else:
+                    col_probs = self.pointer_net(encoded_col, att_emb)
+
+                prev_tensor_dict.update({"prob": col_probs})
+
+            elif cur_symbol == "T":
+                prev_action = state.get_prev_action()
+                _, column_id = prev_action
+                possible_table_ids = state.col_tab_dic[column_id]
+                masked_encoded_tab = torch.zeros_like(state.encoded_tab)
+                masked_encoded_tab[possible_table_ids] = state.encoded_tab[possible_table_ids]
+                att_emb = state.get_att_emb()
+                tab_probs = self.table_pointer_net.forward_later(masked_encoded_tab, att_emb)
+                prev_tensor_dict.update({"prob": tab_probs})
+            else:
+                action_ids = self.grammar.get_possible_aids(cur_symbol)
+                action_mask = torch.ones(len(self.grammar.action_to_aid))
+                action_mask[action_ids] = 0
+                att_emb = state.get_att_emb()
+                action_probs = self.action_linear_layer.forward_later(att_emb, action_mask)
+                prev_tensor_dict.update({"prob": action_probs})
+
+            return prev_tensor_dict
+
+        def apply_detail(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromiseOrTensor]) -> Dict:
+            prob = prev_tensor_dict["prob"].result
+            if isinstance(state, LSTMStateGold):
+                state.apply_detail_loss(prob)
+            else:
+                cur_symbol = state.get_current_symbol()
+                if cur_symbol in ["A", "C", "T"]:
+                    pred_id = torch.argmax(prob).item()
+                    state.edit_pred((cur_symbol, pred_id))
+            state.step()
+            return {}
 
         states = SequentialMonad(states)(
-            WhileLogic.While(state_class.detail_not_done).Do(
+            WhileLogic.While(state_class.is_not_done).Do(
                 LogicUnit.If(state_class.sketch_not_done)
-                 .Then(embed_action)
-                 .Then(embed_symbol)
-                 .Then(pass_sketch_lstm)
-                 .Then(update_sketch_lstm)
+                 .Then(embed_sketch_action)
+                 .Then(embed_sketch_symbol)
+                 .Then(pass_sketch_lstm_cell)
+                 .Then(update_sketch_lstm_state)
                  .Then(pass_sketch_att_src)
                  .Then(update_sketch_att_src)
-                 .Then(calc_action_prob)
+                 .Then(calc_sketch_prob)
                  .Then(apply_sketch)
             ).Do(
-                LogicUnit.If(state_class.sketch_done_detail_not_done)
-                .Then(embed_action)
-                .Then(embed_symbol)
-                .Then(pass_detail_lstm)
-                .Then(update_detail_lstm)
+                LogicUnit.If(state_class.detail_not_done)
+                .Then(embed_detail_action)
+                .Then(embed_detail_symbol)
+                .Then(pass_detail_lstm_cell)
+                .Then(update_detail_lstm_state)
                 .Then(pass_detail_att_src)
                 .Then(update_detail_att_src)
-                .Then(calc_prob)
+                .Then(calc_detail_prob)
                 .Then(apply_detail)
             )
         ).states
