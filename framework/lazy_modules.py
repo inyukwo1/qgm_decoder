@@ -9,6 +9,7 @@ from src.transformer_decoder import (
 )
 from framework.sequential_monad import TensorPromise
 from framework.utils import assert_dim, stack_sequential_tensor_with_mask
+from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
 
 class LazyModule(ABC):
@@ -108,6 +109,46 @@ class LazyLSTMCell(nn.Module, LazyModule):
         next_hid, next_cell = self.module(stacked_input, (stacked_hidden, stacked_cell))
 
         self.done_buffer = [(hid, cell) for hid, cell in zip(next_hid, next_cell)]
+
+
+class LazyLSTM(nn.Module, LazyModule):
+    def __init__(self, in_dim, out_dim, batch_first=True, bidirection=True):
+        super(LazyLSTM, self).__init__()
+        LazyModule.__init__(self)
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        self.module = nn.LSTM(in_dim, out_dim, batch_first=batch_first, bidirectional=bidirection)
+
+    def assert_intput(self, *inputs):
+        pass
+
+    def compute(self):
+        input_list = [item[0] for item in self.later_buffer]
+
+        # Stack
+        stacked_input, input_mask = stack_sequential_tensor_with_mask(input_list)
+
+        # Sort
+        input_len = [len(item) for item in input_list]
+        sorted_len, sorted_indices = torch.tensor(input_len).sort(0, descending=True)
+        sorted_data = stacked_input
+
+        # Pass
+        packed_data = pack_padded_sequence(sorted_data, sorted_len, batch_first=True)
+        packed_output, (hn, cn) = self.module(packed_data)
+        packed_output, _ = pad_packed_sequence(packed_output, batch_first=True)
+        last_state = torch.cat([hn[0], hn[1]], dim=-1)
+        last_cell = torch.cat([cn[0], cn[1]], dim=-1)
+
+        # Unsort
+        new_indices = list(range(len(input_len)))
+        new_indices.sort(key=lambda k: sorted_indices[k])
+        encoded_data = packed_output[new_indices]
+        last_state = last_state[new_indices]
+        last_cell = last_cell[new_indices]
+
+        # spread inputs
+        self.done_buffer = [(item1[:length], (item2, item3)) for length, item1, item2, item3 in zip(input_len, encoded_data, last_state, last_cell)]
 
 
 class LazyTransformerDecoder(nn.Module, LazyModule):
@@ -324,11 +365,16 @@ class LazyLinearLinear(nn.Module, LazyModule):
 
     def compute(self):
         input_tensors = [item[0] for item in self.later_buffer]
+        input_mask = [item[1] for item in self.later_buffer]
+
         stacked_input = torch.stack(input_tensors)
+        stacked_mask = torch.stack(input_mask)
 
-        output = self.module(stacked_input)
+        scores = self.module(stacked_input)
+        scores.data.masked_fill_(stacked_mask.bool(), float("-inf"))
+        probs = torch.softmax(scores, dim=-1)
 
-        self.done_buffer = [item for item in output]
+        self.done_buffer = [item for item in probs]
 
 
 class LazyPointerNet(nn.Module, LazyModule):
@@ -391,11 +437,11 @@ class LazyMemoryPointerNet(nn.Module, LazyModule):
         encoded_col_stack = self.col_linear(stacked_col)
 
         weights = torch.bmm(encoded_col_stack, stacked_att.unsqueeze(2)).squeeze(-1)
-
-        weights.data.masked_fill_(col_mask.bool(), float("-inf"))
         one = weights * stacked_mem_mask * gate
         two = weights * (1 - stacked_mem_mask) * (1 - gate)
         total = one + two
+
+        total.data.masked_fill_(col_mask.bool(), float("-inf"))
         probs = torch.log_softmax(total, dim=-1)
 
         self.done_buffer = [item for item in probs]

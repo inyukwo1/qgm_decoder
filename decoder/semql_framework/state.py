@@ -20,7 +20,9 @@ class LSTMState(State):
         self.encoded_tab = encoded_tab
         self.col_tab_dic = col_tab_dic
 
-        self.att_emb = torch.zeros(encoded_src.shape[-1]).cuda()
+        self.detail_att_emb = torch.zeros(encoded_src.shape[-1]).cuda()
+        self.sketch_att_emb = torch.zeros(encoded_src.shape[-1]).cuda()
+
         self.sketch_state = init_state
         self.detail_state = init_state
 
@@ -58,7 +60,7 @@ class LSTMState(State):
         pass
 
     def get_att_emb(self):
-        return self.att_emb
+        return self.sketch_att_emb if self.sketch_not_done(self) else self.detail_att_emb
 
     def get_sketch_state(self):
         return self.sketch_state
@@ -72,11 +74,12 @@ class LSTMState(State):
     def get_col_encodings(self):
         return self.encoded_col
 
-    def get_affine_sketch_src(self):
-        return self.aff_sketch_src
+    def get_affine_src(self):
+        if self.sketch_not_done(self):
+            return self.aff_sketch_src
+        else:
+            return self.aff_detail_src
 
-    def get_affine_detail_src(self):
-        return self.aff_detail_src
 
     # Update
     def update_sketch_state(self, new_state: Tuple[torch.Tensor, torch.Tensor]):
@@ -86,7 +89,10 @@ class LSTMState(State):
         self.detail_state = new_state
 
     def update_att_emb(self, src_attention_vector: torch.Tensor):
-        self.att_emb = src_attention_vector
+        if self.sketch_not_done(self):
+            self.sketch_att_emb = src_attention_vector
+        else:
+            self.detail_att_emb = src_attention_vector
 
     def _apply_loss(self, golds, step_cnt, prod):
         gold_action = golds[step_cnt]
@@ -180,17 +186,18 @@ class LSTMStatePred(LSTMState):
         self.preds_sketch += [action]
 
     def apply_pred(self, action: Action, nonterminal_symbols: List[Symbol]):
-        if action[0] not in ["A", "C", "T"]:
-            self.preds_sketch += [action]
-
-        # Filter out details
-        nonterminal_symbols = [item for item in nonterminal_symbols if item not in ["A", "C", "T"]]
+        assert action[0] not in ["A", "C", "T"], "Weird value: {}".format(action)
+        self.preds_sketch += [action]
+        self.preds += [action]
 
         # Pop one and append nonterminal
         self.nonterminal_symbol_stack.pop(0)
         self.nonterminal_symbol_stack = nonterminal_symbols + self.nonterminal_symbol_stack
 
-        self.preds += [action]
+        # Filter out details
+        while self.nonterminal_symbol_stack and self.nonterminal_symbol_stack[0] == "A":
+            self.nonterminal_symbol_stack.pop(0)
+            self.preds += [("A", 0), ("C", 0), ("T", 0)]
 
     def edit_pred(self, action: Action):
         assert self.preds[self.step_cnt][0] == action[0], "Different! {} {} ".format(self.preds[self.step_cnt], action)

@@ -16,9 +16,9 @@ from encoder.irnet.encoder import IRNetLSTMEncoder
 import src.relation as relation
 
 
-class EncoderDecoderWrapper(nn.Module):
+class EncoderDecoderModel(nn.Module):
     def __init__(self, cfg):
-        super(EncoderDecoderWrapper, self).__init__()
+        super(EncoderDecoderModel, self).__init__()
         self.cfg = cfg
         self.is_bert = cfg.is_bert
         self.is_cuda = cfg.cuda != -1

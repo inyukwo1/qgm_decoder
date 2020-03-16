@@ -8,7 +8,7 @@ from typing import Dict, List
 from encoder.irnet.state import LSTMEncoderState
 from src import utils
 from framework.utils import assert_dim
-#from framework.lazy_modules import LazyLinear, LazyBiLSTM
+from framework.lazy_modules import LazyLinear, LazyLSTM
 from framework.sequential_monad import TensorPromiseOrTensor, SequentialMonad, LogicUnit
 
 
@@ -17,7 +17,6 @@ class IRNetLSTMEncoder(nn.Module):
         super(IRNetLSTMEncoder, self).__init__()
         self.cfg = cfg
         self.is_cuda = cfg.cuda != -1
-        self.decoder_name = cfg.model_name
         self.embed_size = 300
         self._import_word_emb()
 
@@ -26,7 +25,7 @@ class IRNetLSTMEncoder(nn.Module):
         self.col_type_encoder = LazyLinear(9, hidden_size)
         self.tab_type_encoder = LazyLinear(5, hidden_size)
 
-        self.encoder_lstm = LazyBiLSTM(self.embed_size, hidden_size)
+        self.encoder_lstm = LazyLSTM(self.embed_size, hidden_size // 2, batch_first=True, bidirection=True)
 
         self.dropout = nn.Dropout(cfg.dropout)
 

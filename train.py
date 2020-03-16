@@ -10,7 +10,7 @@ from radam import RAdam
 from torch.utils.tensorboard import SummaryWriter
 
 from src import utils
-from src.models.model import IRNet
+from models.wrapper_model import EncoderDecoderModel
 #from models.LSTMEncoderQGMTransformerDecoder import LSTMEncoderQGMTransformerDecoder
 
 log = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ def train(cfg):
     # Set model
     if cfg.cuda != -1:
         torch.cuda.set_device(cfg.cuda)
-    model = IRNet(cfg)
+    model = EncoderDecoderModel(cfg)
     if cfg.cuda != -1:
         model.cuda()
 

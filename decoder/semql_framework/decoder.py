@@ -45,6 +45,7 @@ class SemQLDecoderFramework(nn.Module):
 
         # Further encode
         self.src_lstm = nn.LSTM(dim, dim // 2, bidirectional=True, batch_first=True)
+        self.dec_cell_init = nn.Linear(dim, dim)
         self.aff_sketch_linear = nn.Linear(dim, dim)
         self.aff_detail_linear = nn.Linear(dim, dim)
         self.gate_prob_linear = nn.Linear(dim, 1)
@@ -64,12 +65,10 @@ class SemQLDecoderFramework(nn.Module):
     def filter_sketch(self, actions):
         return [action for action in actions if action[0] not in ["T", "C", "A"]]
 
-    def calc_src_state(self, encoded_src):
-        dim = encoded_src.shape[-1]
-        # _, (_, h_0) = self.lstm(encoded_src)
-        # h_0 = self.decoder_cell_init(enc_last_cell)
-        # h_0 = torch.tanh(h_0)
-        return [(torch.zeros(dim).cuda(), torch.zeros(dim).cuda()) for _ in range(len(encoded_src))]
+    def calc_init_state(self, enc_last_cell):
+        h_0 = self.dec_cell_init(enc_last_cell)
+        h_0 = torch.tanh(h_0)
+        return [(item1, item2) for item1, item2 in zip(h_0, torch.zeros_like(h_0))]
 
     def action_to_emb(self, state: LSTMState, action: Action) -> torch.Tensor:
         if action[0] == "C":
@@ -81,13 +80,25 @@ class SemQLDecoderFramework(nn.Module):
         else:
             return self.grammar.action_to_emb(action)
 
-    def forward(self, encoded_src, encoded_col, encoded_tab, col_tab_dic, golds=None):
+    def further_encode(self, inputs, module):
+        data_len = [len(item) for item in inputs]
+        assert len(inputs[0].shape) == 2, "shape: {}".format(inputs[0].shape)
+        stacked_input = torch.zeros(len(inputs), max(data_len), inputs[0].shape[1]).cuda()
+        for idx, length in enumerate(data_len):
+            stacked_input[idx][:length] = inputs[idx]
+
+        encoded_out = module(stacked_input)
+
+        return [item[:length] for length, item in zip(data_len, encoded_out)]
+
+
+    def forward(self, enc_last_cell, encoded_src, encoded_col, encoded_tab, col_tab_dic, golds=None):
         b_size = len(encoded_src)
 
         # Further encode
-        dec_init_state = self.calc_src_state(encoded_src)
-        aff_sketch_src = self.aff_sketch_linear(encoded_src)
-        aff_detail_src = self.aff_detail_linear(encoded_src)
+        dec_init_state = self.calc_init_state(enc_last_cell)
+        aff_sketch_src = self.further_encode(encoded_src, self.aff_sketch_linear)
+        aff_detail_src = self.further_encode(encoded_src, self.aff_detail_linear)
 
         if golds:
             # Create sketch gold
@@ -151,7 +162,7 @@ class SemQLDecoderFramework(nn.Module):
         def pass_sketch_att_src(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromiseOrTensor]) -> Dict:
             h_state, _ = state.get_sketch_state()
             src_encodings = state.get_src_encodings()
-            aff_sketch_src = state.get_affine_sketch_src()
+            aff_sketch_src = state.get_affine_src()
             att_out = self.dot_product_attention.forward_later(aff_sketch_src, h_state, src_encodings)  # dot product attention + linear + tanh + dropout
             prev_tensor_dict.update({"att_out": att_out})
             return prev_tensor_dict
@@ -167,7 +178,7 @@ class SemQLDecoderFramework(nn.Module):
             action_ids = self.grammar.get_possible_aids(cur_symbol)
 
             # Calc mask
-            action_mask = torch.ones(len(self.grammar.action_to_aid))
+            action_mask = torch.ones(len(self.grammar.action_to_aid)).cuda()
             action_mask[action_ids] = 0
 
             att_emb = state.get_att_emb()
@@ -185,6 +196,12 @@ class SemQLDecoderFramework(nn.Module):
                 nonterminal_symbols = self.grammar.parse_nonterminal_symbol(action)
                 state.apply_pred(action, nonterminal_symbols)
             state.step_sketch()
+            # print("sketch_step_cnt:{} step_cnt:{}".format(state.sketch_step_cnt, state.step_cnt))
+            # if isinstance(state, LSTMStateGold):
+            #     print("\tgold: {}".format(state.gold))
+            # if isinstance(state, LSTMStatePred):
+            #     print("\tpred_sketch: {}".format(state.preds_sketch))
+            #     print("\tpred: {}".format(state.preds))
             return {}
 
         def embed_detail_action(state: LSTMState, _) -> Dict:
@@ -219,7 +236,7 @@ class SemQLDecoderFramework(nn.Module):
         def pass_detail_att_src(state: LSTMState, prev_tensor_dict: Dict[str, TensorPromiseOrTensor]) -> Dict:
             h_state, _ = state.get_detail_state()
             src_encodings = state.get_src_encodings()
-            aff_detail_src = state.get_affine_detail_src()
+            aff_detail_src = state.get_affine_src()
             att_out = self.dot_product_attention.forward_later(aff_detail_src, h_state, src_encodings)
 
             prev_tensor_dict.update({"att_out": att_out})
@@ -259,7 +276,7 @@ class SemQLDecoderFramework(nn.Module):
                 prev_tensor_dict.update({"prob": tab_probs})
             else:
                 action_ids = self.grammar.get_possible_aids(cur_symbol)
-                action_mask = torch.ones(len(self.grammar.action_to_aid))
+                action_mask = torch.ones(len(self.grammar.action_to_aid)).cuda()
                 action_mask[action_ids] = 0
                 att_emb = state.get_att_emb()
                 action_probs = self.action_linear_layer.forward_later(att_emb, action_mask)
@@ -274,9 +291,15 @@ class SemQLDecoderFramework(nn.Module):
             else:
                 cur_symbol = state.get_current_symbol()
                 if cur_symbol in ["A", "C", "T"]:
-                    pred_id = torch.argmax(prob).item()
-                    state.edit_pred((cur_symbol, pred_id))
+                    pred_action_id = torch.argmax(prob).item()
+                    if cur_symbol == "A":
+                        pred_action = self.grammar.aid_to_action[pred_action_id]
+                        assert cur_symbol == pred_action[0], "{} {}".format(cur_symbol, pred_action)
+                    else:
+                        pred_action = (cur_symbol, pred_action_id)
+                    state.edit_pred(pred_action)
             state.step()
+
             return {}
 
         states = SequentialMonad(states)(
