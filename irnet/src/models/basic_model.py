@@ -54,6 +54,13 @@ class BasicModel(nn.Module):
             last_state, last_cell: Variable(batch_size, hidden_size)
         """
         src_token_embed = self.gen_x_batch(src_sents_var)
+        return self.encode_using_embedding(
+            src_token_embed, src_sents_len, q_onehot_project
+        )
+
+    def encode_using_embedding(
+        self, src_token_embed, src_sents_len, q_onehot_project=None
+    ):
 
         if q_onehot_project is not None:
             src_token_embed = torch.cat([src_token_embed, q_onehot_project], dim=-1)

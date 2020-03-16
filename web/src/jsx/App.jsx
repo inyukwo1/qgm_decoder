@@ -14,11 +14,11 @@ import SpeechRecognition from 'react-speech-recognition';
 import queryAnalysis from './AnalysisCommunicator';
 
 class App extends React.Component {
-  componentDidMount () {
-    this.BotUICommunicator = new BotUICommunicator ();
-    this.BotUICommunicator.registerBotUI (this.botui);
-    this.BotUICommunicator.registerCallback (this.refreshStatusbar);
-    this.BotUICommunicator.sequentialHumanBotMessage (
+  componentDidMount() {
+    this.BotUICommunicator = new BotUICommunicator();
+    this.BotUICommunicator.registerBotUI(this.botui);
+    this.BotUICommunicator.registerCallback(this.refreshStatusbar);
+    this.BotUICommunicator.sequentialHumanBotMessage(
       [],
       [
         'Welcome to EGA: Explore-Gather-Analyze Tool for NL to SQL!',
@@ -27,16 +27,16 @@ class App extends React.Component {
     );
   }
 
-  componentDidUpdate () {
-    const iframes = Array.from (document.getElementsByTagName ('iframe'));
+  componentDidUpdate() {
+    const iframes = Array.from(document.getElementsByTagName('iframe'));
 
-    iframes.forEach (iframe => {
+    iframes.forEach(iframe => {
       iframe.style.height =
         iframe.contentWindow.document.body.offsetHeight + 'px';
     });
   }
 
-  componentWillMount () {
+  componentWillMount() {
     const {recognition} = this.props;
     recognition.lang = 'en-US';
   }
@@ -59,27 +59,27 @@ class App extends React.Component {
       resetTranscript,
       transcript,
     } = this.props;
-    this.setState ({clicked_mic: clicked});
+    this.setState({clicked_mic: clicked});
 
     if (clicked) {
-      resetTranscript ();
-      startListening ();
+      resetTranscript();
+      startListening();
     } else {
-      stopListening ();
-      this.setState ({original_nlq: transcript});
+      stopListening();
+      this.setState({original_nlq: transcript});
     }
   };
 
   handleReset = () => {
-    this.botui.message.removeAll ();
+    this.botui.message.removeAll();
   };
 
   handleDBChange = val => {
-    const e = db_ids.find (o => o.value === val);
-    this.setState ({
+    const e = db_ids.find(o => o.value === val);
+    this.setState({
       db_id: e.value,
     });
-    this.BotUICommunicator.sequentialHumanBotMessage (
+    this.BotUICommunicator.sequentialHumanBotMessage(
       [e.label],
       [
         'Selecting ' + e.value + '...',
@@ -90,26 +90,26 @@ class App extends React.Component {
   };
 
   handleModelChange = val => {
-    this.setState ({
+    this.setState({
       model: val,
     });
   };
 
   _messageInvisible = () => {
-    const msgs = Array.from (document.getElementsByClassName ('botui-message'));
-    msgs.forEach (msg => {
+    const msgs = Array.from(document.getElementsByClassName('botui-message'));
+    msgs.forEach(msg => {
       msg.style.visibility = 'hidden';
     });
-    const statusbar = document.getElementsByClassName ('statusbar');
+    const statusbar = document.getElementsByClassName('statusbar');
     statusbar[0].style.visibility = 'hidden';
   };
 
   _messageVisible = () => {
-    const msgs = Array.from (document.getElementsByClassName ('botui-message'));
-    msgs.forEach (msg => {
+    const msgs = Array.from(document.getElementsByClassName('botui-message'));
+    msgs.forEach(msg => {
       msg.style.visibility = 'visible';
     });
-    const statusbar = document.getElementsByClassName ('statusbar');
+    const statusbar = document.getElementsByClassName('statusbar');
     statusbar[0].style.visibility = 'visible';
     // document.getElementsByClassName ('bwTeTR')[0].innerText = 'IMDB';
     // document.getElementsByClassName ('kGtLwg')[0].innerText = 'IRNet';
@@ -117,14 +117,14 @@ class App extends React.Component {
 
   handleFileChange = val => {
     if (val === 'load') {
-      this._messageInvisible ();
-      this.setState ({
+      this._messageInvisible();
+      this.setState({
         db_id: '',
         model: '',
       });
     } else {
-      this._messageVisible ();
-      this.setState ({
+      this._messageVisible();
+      this.setState({
         file: val,
         db_id: 'imdb',
         model: 'irnet',
@@ -133,14 +133,14 @@ class App extends React.Component {
   };
 
   handleNLQChange = e => {
-    this.setState ({
+    this.setState({
       original_nlq: e.target.value,
     });
   };
 
   refreshStatusbar = () => {
-    this.botui.message.getMessageLengthCorrectPair ().then (len_msg_pair => {
-      this.botui.setState ({
+    this.botui.message.getMessageLengthCorrectPair().then(len_msg_pair => {
+      this.botui.setState({
         len_msg_pairs: len_msg_pair,
       });
     });
@@ -148,31 +148,31 @@ class App extends React.Component {
 
   handleRunClicked = e => {
     if (this.state.db_id === '') {
-      this.BotUICommunicator.oneBotMessage (
+      this.BotUICommunicator.oneBotMessage(
         '<b>Please specify a database first.</b>'
       );
       return;
     }
     if (this.state.clicked_mic) {
-      this.BotUICommunicator.oneBotMessage (
+      this.BotUICommunicator.oneBotMessage(
         '<b>Please turn off the mic before running.</b>'
       );
       return;
     }
     if (this.state.model === '') {
-      this.BotUICommunicator.oneBotMessage ('<b>Please specify a model.</b>');
+      this.BotUICommunicator.oneBotMessage('<b>Please specify a model.</b>');
       return;
     }
-    if (!this.TopInterfaces.exploreMode ()) {
+    if (!this.TopInterfaces.exploreMode()) {
       const gold_sql = this.state.original_nlq;
       const db_id = this.state.db_id;
       const model = this.state.model;
       const pred_sql = this.state.analyze_sql;
       const analyze_nlq = this.state.analyze_nlq;
-      this.BotUICommunicator.analyzeMessage (
+      this.BotUICommunicator.analyzeMessage(
         gold_sql,
         pred_sql,
-        queryAnalysis (
+        queryAnalysis(
           db_id,
           model,
           pred_sql,
@@ -181,60 +181,65 @@ class App extends React.Component {
           'http://141.223.199.148:4001/service'
         )
       );
-      this._initInput ();
+      this._initInput();
       return;
     }
     const nlq = this.state.original_nlq;
     const db_id = this.state.db_id;
     const model = this.state.model;
-    this.BotUICommunicator.exploreMessage (
+    this.BotUICommunicator.exploreMessage(
       nlq,
-      queryTextToSQL (db_id, model, nlq, 'http://141.223.199.148:4001/service')
+      queryTextToSQL(db_id, model, nlq, 'http://141.223.199.148:4001/service')
     );
-    this._initInput ();
+    this._initInput();
   };
 
   _initInput = () => {
-    this.setState ({
+    this.setState({
       original_nlq: '',
     });
   };
 
   incorrectClickAnalyzeCallback = (next_index, pred_sql, nlq) => {
-    this.BotUICommunicator
-      .oneBotInsertMessage (next_index + 1, 'What is a correct query?', 100)
-      .then (index => {
-        this.BotUICommunicator.readyAnalyze (index);
-        this.setState ({
-          analyze_sql: pred_sql.replace (/<br \/>/gi, ''),
+    this.BotUICommunicator.OneBotInsertCheckboxTable(next_index + 1)
+      .then(index =>
+        this.BotUICommunicator.oneBotInsertMessage(
+          index,
+          'What is a correct query?',
+          100
+        )
+      )
+      .then(index => {
+        this.BotUICommunicator.readyAnalyze(index);
+        this.setState({
+          analyze_sql: pred_sql.replace(/<br \/>/gi, ''),
           analyze_nlq: nlq,
         });
       });
   };
 
   switchExploreAnalyze = e => {
-    if (this.TopInterfaces.exploreMode ()) {
-      this.botui.message.enableIncorrectClick (
+    if (this.TopInterfaces.exploreMode()) {
+      this.botui.message.enableIncorrectClick(
         this.incorrectClickAnalyzeCallback
       );
-      this.setState ({
+      this.setState({
         mode: 'Analyze',
       });
     } else {
-      this.botui.message.disableIncorrectClick ();
-      this.setState ({
+      this.botui.message.disableIncorrectClick();
+      this.setState({
         mode: 'Explore',
       });
     }
   };
 
-  render () {
+  render() {
     if (!this.props.browserSupportsSpeechRecognition) {
       return null;
     }
-    const root_classname = this.state.mode === 'Explore'
-      ? 'App-explore'
-      : 'App-analyze';
+    const root_classname =
+      this.state.mode === 'Explore' ? 'App-explore' : 'App-analyze';
     return (
       <div className={root_classname}>
         <div className="AppMain">
@@ -280,4 +285,4 @@ const options = {
 };
 App.propTypes = propTypes;
 
-export default SpeechRecognition (options) (App);
+export default SpeechRecognition(options)(App);

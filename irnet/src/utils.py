@@ -239,7 +239,7 @@ def is_valid(rule_label, col_table_dict, sql):
     return flag is False
 
 
-def to_batch_seq(sql_data, table_data, idxes, st, ed, is_train=True):
+def to_batch_seq(sql_data, table_data, idxes, st, ed, is_train=True, table=None):
     """
 
     :return:
@@ -248,7 +248,8 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed, is_train=True):
 
     for i in range(st, ed):
         sql = sql_data[idxes[i]]
-        table = table_data[sql["db_id"]]
+        if table is None:
+            table = table_data[sql["db_id"]]
 
         process_dict = process(sql, table)
 

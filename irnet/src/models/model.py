@@ -113,7 +113,9 @@ class IRNet(BasicModel):
             args.col_embed_size, args.action_embed_size, bias=False
         )
 
-        self.iden = nn.Identity()
+        self.src_iden = nn.Identity()
+        self.col_iden = nn.Identity()
+        self.tab_iden = nn.Identity()
 
         self.dropout = nn.Dropout(args.dropout)
 
@@ -131,18 +133,26 @@ class IRNet(BasicModel):
         nn.init.xavier_normal_(self.N_embed.weight.data)
         print("Use Column Pointer: ", True if self.use_column_pointer else False)
 
-    def forward(self, examples, src_encodings=None, last_state=None, last_cell=None):
+    def forward(
+        self, examples, src_embedding=None, table_embedding=None, schema_embedding=None
+    ):
         args = self.args
         # now should implement the examples
         batch = Batch(examples, self.grammar, cuda=self.args.cuda)
 
         table_appear_mask = batch.table_appear_mask
-        if src_encodings is None:
-            src_encodings, (last_state, last_cell) = self.encode(
-                batch.src_sents, batch.src_sents_len, None
-            )
 
-        src_encodings = self.iden(src_encodings)
+        if src_embedding is None:
+            table_embedding = self.gen_x_batch(batch.table_sents)
+            src_embedding = self.gen_x_batch(batch.src_sents)
+            schema_embedding = self.gen_x_batch(batch.table_names)
+        src_embedding = self.src_iden(src_embedding)
+        table_embedding = self.col_iden(table_embedding)
+        schema_embedding = self.tab_iden(schema_embedding)
+
+        src_encodings, (last_state, last_cell) = self.encode_using_embedding(
+            src_embedding, batch.src_sents_len, None
+        )
 
         src_encodings = self.dropout(src_encodings)
 
@@ -251,10 +261,6 @@ class IRNet(BasicModel):
             ],
             dim=0,
         )
-
-        table_embedding = self.gen_x_batch(batch.table_sents)
-        src_embedding = self.gen_x_batch(batch.src_sents)
-        schema_embedding = self.gen_x_batch(batch.table_names)
 
         # get emb differ
         embedding_differ = self.embedding_cosine(

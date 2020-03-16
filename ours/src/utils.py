@@ -19,7 +19,7 @@ from tqdm import tqdm
 
 from ours.src.dataset import Example
 from ours.src.rule import lf
-from ours.src.rule.semQL import C
+from ours.src.rule.semQL import *
 
 wordnet_lemmatizer = WordNetLemmatizer()
 
@@ -293,16 +293,18 @@ def is_valid(rule_label, col_table_dict, sql):
     return flag is False
 
 
-def to_batch_seq(sql_data, table_data, idxes, st, ed, is_train=True):
+def to_batch_seq(sql_data, table_data, idxes, st, ed, is_train=True, table=None):
     """
 
     :return:
     """
     examples = []
+    table_provided = table is not None
 
     for i in range(st, ed):
         sql = sql_data[idxes[i]]
-        table = table_data[sql["db_id"]]
+        if not table_provided:
+            table = table_data[sql["db_id"]]
 
         process_dict = process(sql, table)
 
@@ -456,10 +458,12 @@ def epoch_acc(model, batch_size, sql_data, table_data, beam_size=3):
                 results_all = model.parse(example, beam_size=beam_size)
                 results = results_all[0]
                 list_preds = []
-
-                pred = " ".join([str(x) for x in results[0].actions])
-                for x in results:
-                    list_preds.append(" ".join(str(x.actions)))
+                if len(results) > 0:
+                    pred = " ".join([str(x) for x in results[0].actions])
+                    for x in results:
+                        list_preds.append(" ".join(str(x.actions)))
+                else:
+                    pred = ""
             except Exception as e:
                 print("Epoch Acc: ", e)
                 assert False
@@ -577,4 +581,5 @@ def init_log_checkpoint_path(args):
     save_path = os.path.join("..", os.path.curdir, "saved_model", dir_name)
     if os.path.exists(save_path) is False:
         os.makedirs(save_path)
+    print(save_path)
     return save_path

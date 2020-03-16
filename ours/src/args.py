@@ -52,7 +52,7 @@ def init_arg_parser():
         "--lstm", choices=["lstm", "lstm_with_dropout", "parent_feed"], default="lstm"
     )
 
-    arg_parser.add_argument("--bert", type=int, default=5)
+    arg_parser.add_argument("--bert", type=int, default=0)
     arg_parser.add_argument(
         "--load_model", default=None, type=str, help="load a pre-trained model"
     )
@@ -123,9 +123,9 @@ def init_arg_parser():
         "--max_epoch", default=-1, type=int, help="maximum number of training epoches"
     )
     arg_parser.add_argument("--optimizer", default="Adam", type=str, help="optimizer")
-    arg_parser.add_argument("--lr", default=1e-5, type=float, help="learning rate")
+    arg_parser.add_argument("--lr", default=1e-4, type=float, help="learning rate")
     arg_parser.add_argument(
-        "--bert_lr", default=1e-6, type=float, help="bert learning rate"
+        "--bert_lr", default=1e-5, type=float, help="bert learning rate"
     )
 
     arg_parser.add_argument("--dataset", default="./data/spider", type=str)

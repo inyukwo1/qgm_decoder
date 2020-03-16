@@ -24,7 +24,7 @@ from transformers import *
 # for 8 transformer architectures and 30 pretrained weights.
 #          Model          | Tokenizer          | Pretrained weights shortcut
 MODELS = [
-    (BertModel, BertTokenizer, "bert-large-uncased", 1024),
+    (BertModel, BertTokenizer, "bert-base-uncased", 768),
     (OpenAIGPTModel, OpenAIGPTTokenizer, "openai-gpt"),
     (GPT2Model, GPT2Tokenizer, "gpt2"),
     (CTRLModel, CTRLTokenizer, "ctrl"),
@@ -137,6 +137,8 @@ class IRNet(BasicModel):
             args.col_embed_size, args.action_embed_size, bias=False
         )
 
+        self.iden = nn.Identity()
+
         self.dropout = nn.Dropout(args.dropout)
 
         self.column_pointer_net = PointerNet(
@@ -169,59 +171,22 @@ class IRNet(BasicModel):
         nn.init.xavier_normal_(self.N_embed.weight.data)
         print("Use Column Pointer: ", True if self.use_column_pointer else False)
 
-    def forward(self, examples):
+    def forward(
+        self,
+        examples,
+        input_embeds=None,
+        word_start_end_batch=None,
+        col_start_end_batch=None,
+        tab_start_end_batch=None,
+    ):
         args = self.args
         # now should implement the examples
         batch = Batch(examples, self.grammar, cuda=self.args.cuda)
 
         table_appear_mask = batch.table_appear_mask
 
-        if args.bert == -1:
-            src_encodings, (last_state, last_cell) = self.encode(
-                batch.src_sents, batch.src_sents_len, None
-            )
-
-            src_encodings = self.dropout(src_encodings)
-
-            table_embedding = self.gen_x_batch(batch.table_sents)
-            src_embedding = self.gen_x_batch(batch.src_sents)
-            schema_embedding = self.gen_x_batch(batch.table_names)
-            # get emb differ
-            embedding_differ = self.embedding_cosine(
-                src_embedding=src_embedding,
-                table_embedding=table_embedding,
-                table_unk_mask=batch.table_unk_mask,
-            )
-
-            schema_differ = self.embedding_cosine(
-                src_embedding=src_embedding,
-                table_embedding=schema_embedding,
-                table_unk_mask=batch.schema_token_mask,
-            )
-
-            tab_ctx = (src_encodings.unsqueeze(1) * embedding_differ.unsqueeze(3)).sum(
-                2
-            )
-            schema_ctx = (src_encodings.unsqueeze(1) * schema_differ.unsqueeze(3)).sum(
-                2
-            )
-
-            table_embedding = table_embedding + tab_ctx
-
-            schema_embedding = schema_embedding + schema_ctx
-
-            col_type = self.input_type(batch.col_hot_type)
-
-            col_type_var = self.col_type(col_type)
-
-            tab_type = self.input_type(batch.tab_hot_type)
-
-            tab_type_var = self.tab_type(tab_type)
-
-            table_embedding = table_embedding + col_type_var
-
-            schema_embedding = schema_embedding + tab_type_var
-        else:
+        assert args.bert != -1
+        if input_embeds is None:
             (
                 src_encodings,
                 table_embedding,
@@ -230,6 +195,26 @@ class IRNet(BasicModel):
             ) = self.transformer_encode(batch)
             if src_encodings is None:
                 return None, None
+        else:
+            # input_embeds = self.iden(input_embeds)
+            (
+                src_encodings,
+                table_embedding,
+                schema_embedding,
+                last_cell,
+            ) = self.transformer_encode_using_embedding(
+                input_embeds,
+                word_start_end_batch,
+                col_start_end_batch,
+                tab_start_end_batch,
+            )
+            if src_encodings is None:
+                return None, None
+
+        # col_types = [col_hot_type for col_hot_type in batch.col_hot_type]
+        # col_type = self.input_type(col_types)
+        # col_type_var = self.col_type(col_type)
+        # table_embedding = table_embedding + col_type_var
 
         utterance_encodings_sketch_linear = self.att_sketch_linear(src_encodings)
         utterance_encodings_lf_linear = self.att_lf_linear(src_encodings)
@@ -510,7 +495,144 @@ class IRNet(BasicModel):
 
         return [sketch_prob_var, lf_prob_var]
 
+    #
+    # def transformer_encode(self, batch: Batch):
+    #     B = len(batch)
+    #     sentences = batch.src_sents
+    #     col_sets = batch.table_sents
+    #     table_sets = batch.table_names_iter
+    #
+    #     questions = []
+    #     question_lens = []
+    #     word_start_end_batch = []
+    #     col_start_end_batch = []
+    #     tab_start_end_batch = []
+    #     col_types = []
+    #     for b in range(B):
+    #         word_start_ends = []
+    #         question = "[CLS]"
+    #         # question = "<cls>"
+    #         for word in sentences[b]:
+    #             start = len(self.tokenizer.tokenize(question))
+    #             for one_word in word:
+    #                 question += " " + one_word
+    #             end = len(self.tokenizer.tokenize(question))
+    #             word_start_ends.append((start, end))
+    #         col_start_ends = []
+    #         for cols in col_sets[b]:
+    #             start = len(self.tokenizer.tokenize(question))
+    #             question += " [SEP]"
+    #             # question += " <sep>"
+    #             for one_word in cols:
+    #                 question += " " + one_word
+    #             end = len(self.tokenizer.tokenize(question))
+    #             col_start_ends.append((start, end))
+    #         tab_start_ends = []
+    #         for tabs in table_sets[b]:
+    #             start = len(self.tokenizer.tokenize(question))
+    #             question += " [SEP]"
+    #             # question += "<sep>"
+    #             for one_word in tabs:
+    #                 question += " " + one_word
+    #             end = len(self.tokenizer.tokenize(question))
+    #             tab_start_ends.append((start, end))
+    #         if end >= self.tokenizer.max_len:
+    #             print("xxxxxxxxxx")
+    #             continue
+    #         col_types.append(batch.col_hot_type[b])
+    #         question_lens.append(end)
+    #         questions.append(question)
+    #         word_start_end_batch.append(word_start_ends)
+    #         col_start_end_batch.append(col_start_ends)
+    #         tab_start_end_batch.append(tab_start_ends)
+    #     if not questions:
+    #         return None, None, None
+    #     for idx, question_len in enumerate(question_lens):
+    #         questions[idx] = questions[idx] + (" " + self.tokenizer.pad_token) * (
+    #             max(question_lens) - question_len
+    #         )
+    #     encoded_questions = [
+    #         self.tokenizer.encode(question, add_special_tokens=False)
+    #         for question in questions
+    #     ]
+    #     encoded_questions = torch.tensor(encoded_questions)
+    #     if torch.cuda.is_available():
+    #         encoded_questions = encoded_questions.cuda()
+    #     embedding = self.transformer_encoder(encoded_questions)[0]
+    #     src_encodings = []
+    #     table_embedding = []
+    #     schema_embedding = []
+    #     for b in range(len(questions)):
+    #         one_q_encodings = []
+    #         for st, ed in word_start_end_batch[b]:
+    #             sum_tensor = torch.zeros_like(embedding[b][st])
+    #             for i in range(st, ed):
+    #                 sum_tensor = sum_tensor + embedding[b][i]
+    #             sum_tensor = sum_tensor / (ed - st)
+    #             one_q_encodings.append(sum_tensor)
+    #         src_encodings.append(one_q_encodings)
+    #         one_col_encodings = []
+    #         for st, ed in col_start_end_batch[b]:
+    #             inputs = embedding[b, st:ed].unsqueeze(0)
+    #             lstm_out = self.col_lstm(inputs)[0].view(
+    #                 ed - st, 2, self.transformer_dim // 2
+    #             )
+    #             col_encoding = torch.cat((lstm_out[-1, 0], lstm_out[0, 1]))
+    #             one_col_encodings.append(col_encoding)
+    #         table_embedding.append(one_col_encodings)
+    #         one_tab_encodings = []
+    #         for st, ed in tab_start_end_batch[b]:
+    #             inputs = embedding[b, st:ed].unsqueeze(0)
+    #             lstm_out = self.tab_lstm(inputs)[0].view(
+    #                 ed - st, 2, self.transformer_dim // 2
+    #             )
+    #             tab_encoding = torch.cat((lstm_out[-1, 0], lstm_out[0, 1]))
+    #             one_tab_encodings.append(tab_encoding)
+    #         schema_embedding.append(one_tab_encodings)
+    #     max_src_len = max([len(one_q_encodings) for one_q_encodings in src_encodings])
+    #     max_col_len = max(
+    #         [len(one_col_encodings) for one_col_encodings in table_embedding]
+    #     )
+    #     max_tab_len = max(
+    #         [len(one_tab_encodings) for one_tab_encodings in schema_embedding]
+    #     )
+    #     for b in range(len(questions)):
+    #         src_encodings[b] += [torch.zeros_like(src_encodings[b][0])] * (
+    #             max_src_len - len(src_encodings[b])
+    #         )
+    #         src_encodings[b] = torch.stack(src_encodings[b])
+    #         table_embedding[b] += [torch.zeros_like(table_embedding[b][0])] * (
+    #             max_col_len - len(table_embedding[b])
+    #         )
+    #         table_embedding[b] = torch.stack(table_embedding[b])
+    #         schema_embedding[b] += [torch.zeros_like(schema_embedding[b][0])] * (
+    #             max_tab_len - len(schema_embedding[b])
+    #         )
+    #         schema_embedding[b] = torch.stack(schema_embedding[b])
+    #     src_encodings = torch.stack(src_encodings)
+    #     table_embedding = torch.stack(table_embedding)
+    #     schema_embedding = torch.stack(schema_embedding)
+    #
+    #     col_type = self.input_type(col_types)
+    #     col_type_var = self.col_type(col_type)
+    #     table_embedding = table_embedding + col_type_var
+    #
+    #     return src_encodings, table_embedding, schema_embedding, embedding[:, 0, :]
+
     def transformer_encode(self, batch: Batch):
+        (
+            embedding,
+            # encoded_ref,
+            word_start_end_batch,
+            col_start_end_batch,
+            tab_start_end_batch,
+            _,
+        ) = self.transformer_embed(batch)
+        return self.transformer_encode_using_embedding(
+            embedding, word_start_end_batch, col_start_end_batch, tab_start_end_batch
+        )
+
+    def transformer_embed(self, batch):
         B = len(batch)
         sentences = batch.src_sents
         col_sets = batch.table_sents
@@ -521,41 +643,48 @@ class IRNet(BasicModel):
         word_start_end_batch = []
         col_start_end_batch = []
         tab_start_end_batch = []
-        col_types = []
+        ref_encoding_batch = []
         for b in range(B):
             word_start_ends = []
-            # question = "[CLS]"
-            question = "<cls>"
+            ref_encoding = []
+            question = "[CLS]"
+            # question = "<cls>"
+            ref_encoding += [self.tokenizer.cls_token_id]
             for word in sentences[b]:
                 start = len(self.tokenizer.tokenize(question))
                 for one_word in word:
                     question += " " + one_word
                 end = len(self.tokenizer.tokenize(question))
                 word_start_ends.append((start, end))
+                ref_encoding += [self.tokenizer.pad_token_id] * (end - start)
             col_start_ends = []
             for cols in col_sets[b]:
                 start = len(self.tokenizer.tokenize(question))
-                # question += " [SEP]"
-                question += " <sep>"
+                question += " [SEP]"
+                ref_encoding += [self.tokenizer.sep_token_id]
+                # question += " <sep>"
                 for one_word in cols:
                     question += " " + one_word
                 end = len(self.tokenizer.tokenize(question))
                 col_start_ends.append((start, end))
+                ref_encoding += [self.tokenizer.pad_token_id] * (end - start - 1)
             tab_start_ends = []
             for tabs in table_sets[b]:
                 start = len(self.tokenizer.tokenize(question))
-                # question += " [SEP]"
-                question += "<sep>"
+                question += " [SEP]"
+                ref_encoding += [self.tokenizer.sep_token_id]
+                # question += "<sep>"
                 for one_word in tabs:
                     question += " " + one_word
                 end = len(self.tokenizer.tokenize(question))
                 tab_start_ends.append((start, end))
+                ref_encoding += [self.tokenizer.pad_token_id] * (end - start - 1)
             if end >= self.tokenizer.max_len:
                 print("xxxxxxxxxx")
                 continue
-            col_types.append(batch.col_hot_type[b])
             question_lens.append(end)
             questions.append(question)
+            ref_encoding_batch.append(ref_encoding)
             word_start_end_batch.append(word_start_ends)
             col_start_end_batch.append(col_start_ends)
             tab_start_end_batch.append(tab_start_ends)
@@ -565,19 +694,45 @@ class IRNet(BasicModel):
             questions[idx] = questions[idx] + (" " + self.tokenizer.pad_token) * (
                 max(question_lens) - question_len
             )
+        tokenized_questions = [
+            self.tokenizer.tokenize(question) for question in questions
+        ]
         encoded_questions = [
             self.tokenizer.encode(question, add_special_tokens=False)
             for question in questions
         ]
-        encoded_questions = torch.tensor(encoded_questions)
+        encoded_questions = torch.LongTensor(encoded_questions)
         if torch.cuda.is_available():
             encoded_questions = encoded_questions.cuda()
-        embedding = self.transformer_encoder(encoded_questions)[0]
+        embedding = bert_embed(self.transformer_encoder, encoded_questions)
+        encoded_ref = torch.LongTensor(ref_encoding_batch).cuda()
+        # embedding = self.transformer_encoder.word_embedding(encoded_questions)
+        return (
+            embedding,
+            # encoded_ref,
+            word_start_end_batch,
+            col_start_end_batch,
+            tab_start_end_batch,
+            tokenized_questions,
+        )
+
+    def transformer_encode_using_embedding(
+        self,
+        embedding=None,
+        word_start_end_batch=None,
+        col_start_end_batch=None,
+        tab_start_end_batch=None,
+    ):
+        embedding = bert_encode(self.transformer_encoder, embedding)[0]
+        # embedding = self.transformer_encoder(inputs_embeds=input_embeds)[0].transpose(
+        #     0, 1
+        # )
         src_encodings = []
         table_embedding = []
         schema_embedding = []
-        for b in range(len(questions)):
+        for b in range(len(embedding)):
             one_q_encodings = []
+
             for st, ed in word_start_end_batch[b]:
                 sum_tensor = torch.zeros_like(embedding[b][st])
                 for i in range(st, ed):
@@ -610,7 +765,7 @@ class IRNet(BasicModel):
         max_tab_len = max(
             [len(one_tab_encodings) for one_tab_encodings in schema_embedding]
         )
-        for b in range(len(questions)):
+        for b in range(len(embedding)):
             src_encodings[b] += [torch.zeros_like(src_encodings[b][0])] * (
                 max_src_len - len(src_encodings[b])
             )
@@ -626,10 +781,6 @@ class IRNet(BasicModel):
         src_encodings = torch.stack(src_encodings)
         table_embedding = torch.stack(table_embedding)
         schema_embedding = torch.stack(schema_embedding)
-
-        col_type = self.input_type(col_types)
-        col_type_var = self.col_type(col_type)
-        table_embedding = table_embedding + col_type_var
 
         return src_encodings, table_embedding, schema_embedding, embedding[:, 0, :]
 
@@ -1176,3 +1327,196 @@ class IRNet(BasicModel):
         h_0 = F.tanh(h_0)
 
         return h_0, Variable(self.new_tensor(h_0.size()).zero_())
+
+
+# HACK!!!!
+def bert_forward(bert, input_ids):
+    """ Forward pass on the Model.
+
+    The model can behave as an encoder (with only self-attention) as well
+    as a decoder, in which case a layer of cross-attention is added between
+    the self-attention layers, following the architecture described in `Attention is all you need`_ by Ashish Vaswani,
+    Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
+
+    To behave as an decoder the model needs to be initialized with the
+    `is_decoder` argument of the configuration set to `True`; an
+    `encoder_hidden_states` is expected as an input to the forward pass.
+
+    .. _`Attention is all you need`:
+        https://arxiv.org/abs/1706.03762
+
+    """
+    if input_ids is not None:
+        input_shape = input_ids.size()
+    else:
+        raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+    device = input_ids.device
+
+    attention_mask = torch.ones(input_shape, device=device)
+    encoder_attention_mask = torch.ones(input_shape, device=device)
+    token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+
+    # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+    # ourselves in which case we just need to make it broadcastable to all heads.
+    if attention_mask.dim() == 3:
+        extended_attention_mask = attention_mask[:, None, :, :]
+
+    # Provided a padding mask of dimensions [batch_size, seq_length]
+    # - if the model is a decoder, apply a causal mask in addition to the padding mask
+    # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
+    if attention_mask.dim() == 2:
+        if bert.config.is_decoder:
+            batch_size, seq_length = input_shape
+            seq_ids = torch.arange(seq_length, device=device)
+            causal_mask = (
+                seq_ids[None, None, :].repeat(batch_size, seq_length, 1)
+                <= seq_ids[None, :, None]
+            )
+            extended_attention_mask = (
+                causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
+            )
+        else:
+            extended_attention_mask = attention_mask[:, None, None, :]
+
+    # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+    # masked positions, this operation will create a tensor which is 0.0 for
+    # positions we want to attend and -10000.0 for masked positions.
+    # Since we are adding it to the raw scores before the softmax, this is
+    # effectively the same as removing these entirely.
+    extended_attention_mask = extended_attention_mask.to(
+        dtype=next(bert.parameters()).dtype
+    )  # fp16 compatibility
+    extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+
+    # If a 2D ou 3D attention mask is provided for the cross-attention
+    # we need to make broadcastabe to [batch_size, num_heads, seq_length, seq_length]
+    if encoder_attention_mask.dim() == 3:
+        encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
+    if encoder_attention_mask.dim() == 2:
+        encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
+
+    encoder_extended_attention_mask = encoder_extended_attention_mask.to(
+        dtype=next(bert.parameters()).dtype
+    )  # fp16 compatibility
+    encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -10000.0
+
+    # Prepare head mask if needed
+    # 1.0 in head_mask indicate we keep the head
+    # attention_probs has shape bsz x n_heads x N x N
+    # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
+    # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+    head_mask = [None] * bert.config.num_hidden_layers
+
+    embedding_output = bert.embeddings(
+        input_ids=input_ids,
+        position_ids=None,
+        token_type_ids=token_type_ids,
+        inputs_embeds=None,
+    )
+    encoder_outputs = bert.encoder(
+        embedding_output,
+        attention_mask=extended_attention_mask,
+        head_mask=head_mask,
+        encoder_hidden_states=None,
+        encoder_attention_mask=encoder_extended_attention_mask,
+    )
+    sequence_output = encoder_outputs[0]
+    pooled_output = bert.pooler(sequence_output)
+
+    outputs = (sequence_output, pooled_output,) + encoder_outputs[
+        1:
+    ]  # add hidden_states and attentions if they are here
+    return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
+
+
+def bert_embed(bert, input_ids):
+    if input_ids is not None:
+        input_shape = input_ids.size()
+    else:
+        raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+    device = input_ids.device
+
+    token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+
+    embedding_output = bert.embeddings(
+        input_ids=input_ids,
+        position_ids=None,
+        token_type_ids=token_type_ids,
+        inputs_embeds=None,
+    )
+    return embedding_output
+
+
+def bert_encode(bert, embedding_output):
+    input_shape = embedding_output.size()[:-1]
+    device = embedding_output.device
+
+    attention_mask = torch.ones(input_shape, device=device)
+    encoder_attention_mask = torch.ones(input_shape, device=device)
+
+    # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+    # ourselves in which case we just need to make it broadcastable to all heads.
+    if attention_mask.dim() == 3:
+        extended_attention_mask = attention_mask[:, None, :, :]
+
+    # Provided a padding mask of dimensions [batch_size, seq_length]
+    # - if the model is a decoder, apply a causal mask in addition to the padding mask
+    # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
+    if attention_mask.dim() == 2:
+        if bert.config.is_decoder:
+            batch_size, seq_length = input_shape
+            seq_ids = torch.arange(seq_length, device=device)
+            causal_mask = (
+                seq_ids[None, None, :].repeat(batch_size, seq_length, 1)
+                <= seq_ids[None, :, None]
+            )
+            extended_attention_mask = (
+                causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
+            )
+        else:
+            extended_attention_mask = attention_mask[:, None, None, :]
+
+    # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+    # masked positions, this operation will create a tensor which is 0.0 for
+    # positions we want to attend and -10000.0 for masked positions.
+    # Since we are adding it to the raw scores before the softmax, this is
+    # effectively the same as removing these entirely.
+    extended_attention_mask = extended_attention_mask.to(
+        dtype=next(bert.parameters()).dtype
+    )  # fp16 compatibility
+    extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+
+    # If a 2D ou 3D attention mask is provided for the cross-attention
+    # we need to make broadcastabe to [batch_size, num_heads, seq_length, seq_length]
+    if encoder_attention_mask.dim() == 3:
+        encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
+    if encoder_attention_mask.dim() == 2:
+        encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
+
+    encoder_extended_attention_mask = encoder_extended_attention_mask.to(
+        dtype=next(bert.parameters()).dtype
+    )  # fp16 compatibility
+    encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -10000.0
+
+    # Prepare head mask if needed
+    # 1.0 in head_mask indicate we keep the head
+    # attention_probs has shape bsz x n_heads x N x N
+    # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
+    # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+    head_mask = [None] * bert.config.num_hidden_layers
+    encoder_outputs = bert.encoder(
+        embedding_output,
+        attention_mask=extended_attention_mask,
+        head_mask=head_mask,
+        encoder_hidden_states=None,
+        encoder_attention_mask=encoder_extended_attention_mask,
+    )
+    sequence_output = encoder_outputs[0]
+    pooled_output = bert.pooler(sequence_output)
+
+    outputs = (sequence_output, pooled_output,) + encoder_outputs[
+        1:
+    ]  # add hidden_states and attentions if they are here
+    return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)

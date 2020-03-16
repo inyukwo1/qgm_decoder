@@ -1,4 +1,8 @@
 from service import End2End
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import pickle
 from ours.preprocess.data_process import process_data_one_entry
 from ours.src import args as arg, utils
@@ -8,14 +12,17 @@ from ours.src.utils import (
     schema_linking,
     get_col_table_dict,
     get_table_colNames,
+    to_batch_seq,
 )
 from ours.src.rule.sem_utils import (
     alter_column0_one_entry,
     alter_inter_one_entry,
     alter_not_in_one_entry,
 )
+from value_prediction_utils import is_number_tryexcept, exchange_values, find_values
+
 from ours.sem2SQL import transform
-from ours.src.dataset import Example
+from ours.src.dataset import Example, Batch
 from ours.src.rule import semQL
 import torch
 from pattern.en import lemma
@@ -24,17 +31,45 @@ import re
 import sqlite3
 import time
 import copy
+import seaborn as sns
+import numpy as np
+
+from irnet.preprocess.sql2SemQL import SemQLConverter
+from captum.attr import (
+    LayerConductance,
+    IntegratedGradients,
+    configure_interpretable_embedding_layer,
+    remove_interpretable_embedding_layer,
+)
+from captum.attr import visualization as viz
+from universal_utils import (
+    captum_vis_to_html,
+    tab_col_attribution_to_html,
+    src_attribution_to_html,
+)
 
 
 class End2EndOurs(End2End):
+    english_RelatedTo = None
+    english_IsA = None
+
+    def __init__(self):
+        if End2EndOurs.english_RelatedTo is None:
+            with open("ours/preprocess/conceptNet/english_RelatedTo.pkl", "rb") as f:
+                End2EndOurs.english_RelatedTo = pickle.load(f)
+        if End2EndOurs.english_IsA is None:
+            with open("ours/preprocess/conceptNet/english_IsA.pkl", "rb") as f:
+                End2EndOurs.english_IsA = pickle.load(f)
+
+    def captum_mode(self):
+        self.model.train()
+
+    def eval(self):
+        self.model.eval()
+
     def prepare_model(self, dataset):
         model_path = "test_models/ours_{}.model".format(dataset)
-        with open("ours/preprocess/conceptNet/english_RelatedTo.pkl", "rb") as f:
-            self.english_RelatedTo = pickle.load(f)
-
-        with open("ours/preprocess/conceptNet/english_IsA.pkl", "rb") as f:
-            self.english_IsA = pickle.load(f)
-
+        model_path = "test_models/spider_service_bert_basic.model"
         arg_parser = arg.init_arg_parser()
         args = arg.init_config(arg_parser)
 
@@ -76,8 +111,8 @@ class End2EndOurs(End2End):
             if db_id not in self.db_values:
                 schema_json = schema_dict[db_id]
                 primary_foreigns = set()
-                if not db_id == "imdb":
-                    continue
+                # if not db_id == "imdb":
+                #     continue
 
                 for f, p in schema_json["foreign_keys"]:
                     primary_foreigns.add(f)
@@ -139,18 +174,21 @@ class End2EndOurs(End2End):
                             col_value_set[col] = value_set
                 self.db_values[db_id] = col_value_set
         # print("lang elliot" in self.db_values["imdb"]["name"])
+        self.semql_parser = SemQLConverter("data/{}/tables.json".format(dataset))
 
-    def run_model(self, db_id, nl_string):
-        table = self.val_table_data[db_id]
+    def prepare_table(self, db_id, table=None):
+        if not table:
+            table = self.val_table_data[db_id]
         tmp_col = []
         for cc in [x[1] for x in table["column_names"]]:
             if cc not in tmp_col:
                 tmp_col.append(cc)
         table["col_set"] = tmp_col
-        db_name = table["db_id"]
         table["schema_content"] = [col[1] for col in table["column_names"]]
         table["col_table"] = [col[0] for col in table["column_names"]]
+        return table
 
+    def prepare_entry(self, table, db_id, nl_string):
         entry = {}
         entry["db_id"] = db_id
         entry["question"] = nl_string
@@ -168,12 +206,9 @@ class End2EndOurs(End2End):
         for id_k in table["primary_keys"]:
             keys[id_k] = id_k
         entry["keys"] = keys
-        print("Start preprocessing.. {}".format(time.strftime("%Y%m%d-%H%M%S")))
-        process_data_one_entry(
-            entry, self.english_RelatedTo, self.english_IsA, self.db_values
-        )
-        print("End preprocessing.. {}".format(time.strftime("%Y%m%d-%H%M%S")))
+        return entry
 
+    def prepare_example(self, entry, table, sql):
         process_dict = process(entry, table)
 
         for c_id, col_ in enumerate(process_dict["col_set_iter"]):
@@ -229,12 +264,28 @@ class End2EndOurs(End2End):
         )
         example.sql_json = copy.deepcopy(entry)
         example.db_id = entry["db_id"]
+        return example
+
+    def run_model(self, db_id, nl_string, table=None):
+        self.eval()
+        table = self.prepare_table(db_id, table)
+        entry = self.prepare_entry(table, db_id, nl_string)
+
+        print("Start preprocessing.. {}".format(time.strftime("%Y%m%d-%H%M%S")))
+        process_data_one_entry(
+            entry,
+            End2EndOurs.english_RelatedTo,
+            End2EndOurs.english_IsA,
+            self.db_values,
+        )
+        print("End preprocessing.. {}".format(time.strftime("%Y%m%d-%H%M%S")))
+
         print(
             "End schema linking and start model running.. {}".format(
                 time.strftime("%Y%m%d-%H%M%S")
             )
         )
-
+        example = self.prepare_example(entry, table, None)
         results_all = self.model.parse(example, beam_size=5)
         print(
             "End model running and start postprocessing.. {}".format(
@@ -279,175 +330,170 @@ class End2EndOurs(End2End):
                 simple_json["mapper"],
             )
         )
-        sql_values = self._find_values(
+        sql_values = find_values(
             simple_json["question_arg"],
             simple_json["question_arg_type"],
             simple_json["origin_question_toks_for_value"],
             simple_json["mapper"],
         )
         print(sql_values)
-        sql_with_value = self._exchange_values(sql, sql_values, " 1")
+        sql_with_value = exchange_values(sql, sql_values, " 1")
         print("End post processing {}".format(time.strftime("%Y%m%d-%H%M%S")))
         return sql_with_value, None, entry["question_toks"]
 
-    def _is_number_tryexcept(self, s):
-        try:
-            float(s)
-            return True
-        except ValueError:
-            return False
+    def run_captum(self, db_id, nl_string, gold_sql, table=None):
+        self.captum_mode()
+        model = self.model
+        table = self.prepare_table(db_id, table)
+        entry = self.prepare_entry(table, db_id, nl_string)
+        process_data_one_entry(
+            entry,
+            End2EndOurs.english_RelatedTo,
+            End2EndOurs.english_IsA,
+            self.db_values,
+        )
+        entry["query"] = gold_sql
+        entry = self.semql_parser.parse(db_id, gold_sql, entry, table)
 
-    def _find_values(self, question_arg, question_arg_type, question_origin, mapper):
-        values = []
-        flag_double_q = False
-        flag_double_q_for_schema = False
-        cur_val = []
-        flag_single_q = False
-        flag_single_q_for_schema = False
-        flag_upper = False
-        cur_upper_val = []
-        for idx, (token, tag) in enumerate(zip(question_arg, question_arg_type)):
-            if idx == 0:
-                continue
-            start_idx = mapper[idx][0]
-            end_idx = mapper[idx][1]
-            if len(token) == 0:
-                continue
-            if flag_double_q:
-                if '"' not in token[0]:
-                    cur_val.append(" ".join(question_origin[start_idx:end_idx]))
-                    if tag[0] in ("table", "col"):
-                        flag_double_q_for_schema = True
-                    continue
-            if flag_single_q:
-                if "'" not in token[0]:
-                    #                      for i, t in enumerate(token):
-                    #                          idx = first_substring( question_origin[start_idx:end_idx], t )
-                    #                          if idx != -1:
-                    #                              token[i]=question_origin[idx]
-                    cur_val.append(" ".join(question_origin[start_idx:end_idx]))
-                    if tag[0] in ("table", "col"):
-                        flag_single_q_for_schema = True
-                    continue
+        def to_ref_examples(examples):
+            new_examples = [copy.copy(example) for example in examples]
+            for example in new_examples:
+                example.src_sent = [
+                    ["[unk]"] * len(words) for words in example.src_sent
+                ]
+                example.tab_cols = [
+                    ["[unk]"] * len(words) for words in example.tab_cols
+                ]
+                example.table_names = [
+                    ["[unk]"] * len(words) for words in example.table_names
+                ]
+            return new_examples
 
-            if flag_upper:
-                # If Jason 'Two ... separate
-                if (
-                    len(question_origin[start_idx]) > 0
-                    and question_origin[start_idx][0].isupper()
-                    and tag[0] not in ("col", "table")
-                ):
-                    cur_upper_val.append(" ".join(question_origin[start_idx:end_idx]))
-                    continue
-                else:
-                    values.append(" ".join(cur_upper_val))
-                    cur_upper_val = []
-                    flag_upper = False
+        def summarize_attributions(
+            attributions,
+            word_start_end_batch,
+            col_start_end_batch,
+            tab_start_end_batch,
+        ):
+            attributions = attributions.sum(dim=-1).squeeze(0)
+            attributions = attributions / torch.norm(attributions)
 
-            def is_year(tok):
-                if (
-                    len(str(tok)) == 4
-                    and str(tok).isdigit()
-                    and 15 < int(str(tok)[:2]) < 22
-                ):
-                    return True
+            src_attributions = torch.stack(
+                [attributions[st:ed].sum() for st, ed in word_start_end_batch[0]]
+            )
+            col_attributions = torch.stack(
+                [attributions[st:ed].sum() for st, ed in col_start_end_batch[0]]
+            )
+            tab_attributions = torch.stack(
+                [attributions[st:ed].sum() for st, ed in tab_start_end_batch[0]]
+            )
+            src_attributions = src_attributions / torch.norm(src_attributions)
+            col_attributions = col_attributions / torch.norm(col_attributions)
+            tab_attributions = tab_attributions / torch.norm(tab_attributions)
 
-            is_inserted_already = False
-            if (
-                len(token) == 1
-                and is_year(token[0])
-                and self._is_number_tryexcept(question_origin[start_idx])
-            ):
-                is_inserted_already = True
-                values.append(question_origin[start_idx])
+            return src_attributions, col_attributions, tab_attributions
 
-            if '"' in token[0]:
-                if flag_double_q:
-                    is_inserted_already = True
-                    flag_double_q = False
-                    if not flag_double_q_for_schema:
-                        values.append(" ".join(cur_val))
-                    cur_val = []
-                    flag_double_q_for_schema = False
-                elif len(token[0]) == 1:
-                    is_inserted_already = True
-                    flag_double_q = True
-            elif "'" in token[0]:
-                if flag_single_q:
-                    is_inserted_already = True
-                    flag_single_q = False
-                    if not flag_single_q_for_schema:
-                        values.append(" ".join(cur_val))
-                    cur_val = []
-                    flag_single_q_for_schema = False
-                elif len(token[0]) == 1:
-                    is_inserted_already = True
-                    flag_single_q = True
+        def summarize_conductance_attributions(attributions):
+            attributions = attributions.sum(dim=-1).squeeze(0)
+            attributions = attributions / torch.norm(attributions)
+            return attributions
 
-            if (
-                (not is_inserted_already)
-                and len(question_origin[start_idx]) > 0
-                and question_origin[start_idx][0].isupper()
-                and start_idx != 0
-            ):
-                if tag[0] not in ("col", "table"):
-                    is_inserted_already = True
-                    flag_upper = True
-                    cur_upper_val.append(" ".join(question_origin[start_idx:end_idx]))
-            if (
-                (not is_inserted_already)
-                and tag[0] in ("value", "*", "db")
-                and token[0] != "the"
-            ):
-                is_inserted_already = True
-                values.append(" ".join(question_origin[start_idx:end_idx]))
-        return values
+        def forward_captum(
+            input_embedding,
+            word_start_end_batch,
+            col_start_end_batch,
+            tab_start_end_batch,
+            examples,
+        ):
+            examples = examples * len(input_embedding)
+            word_start_end_batch = word_start_end_batch * len(input_embedding)
+            col_start_end_batch = col_start_end_batch * len(input_embedding)
+            tab_start_end_batch = tab_start_end_batch * len(input_embedding)
+            sketch_score, lf_score = model.forward(
+                examples,
+                input_embedding,
+                word_start_end_batch,
+                col_start_end_batch,
+                tab_start_end_batch,
+            )
+            return sketch_score + lf_score
 
-    def _exchange_values(self, sql, sql_values, value_tok):
-        sql = sql.replace(value_tok, " 1")
-        cur_index = sql.find(" 1")
-        sql_with_value = ""
-        before_index = 0
-        values_index = 0
-        while cur_index != -1 and values_index < len(sql_values):
-            sql_with_value = sql_with_value + sql[before_index:cur_index]
-            if sql[cur_index - 1] in ("=", ">", "<"):
-                cur_value = sql_values[values_index]
-                values_index = values_index + 1
-                if not self._is_number_tryexcept(cur_value):
-                    cur_value = '"' + cur_value + '"'
-                sql_with_value = sql_with_value + " " + cur_value
-            elif cur_index - 3 > 0 and sql[cur_index - 4 : cur_index] in ("like"):
-                cur_value = "%" + sql_values[values_index] + "%"
-                values_index = values_index + 1
-                if not self._is_number_tryexcept(cur_value):
-                    cur_value = '"' + cur_value + '"'
-                sql_with_value = sql_with_value + " " + cur_value
-            elif cur_index - 6 > 0 and sql[cur_index - 7 : cur_index] in ("between"):
-                if values_index + 1 < len(sql_values):
-                    cur_value1 = sql_values[values_index]
-                    values_index = values_index + 1
-                    cur_value2 = sql_values[values_index]
-                    values_index = values_index + 1
-                else:
-                    cur_value1 = sql_values[values_index]
-                    cur_value2 = sql_values[values_index]
-                    values_index = values_index + 1
-                if not self._is_number_tryexcept(cur_value1):
-                    cur_value1 = "1"
-                if not self._is_number_tryexcept(cur_value2):
-                    cur_value2 = "2"
-                sql_with_value = (
-                    sql_with_value + " " + cur_value1 + " AND " + cur_value2
-                )
-                cur_index = cur_index + 6
-            else:
-                sql_with_value = sql_with_value + sql[cur_index : cur_index + 2]
-            before_index = cur_index + 2
-            cur_index = sql.find(" 1", cur_index + 1)
-        sql_with_value = sql_with_value + sql[before_index:]
-        print(sql_with_value)
-        return sql_with_value
+        lig = IntegratedGradients(forward_captum)
+        examples = to_batch_seq([entry], self.val_table_data, [0], 0, 1, True, table)
+        batch = Batch(examples, model.grammar, cuda=model.args.cuda)
+        (
+            input_embedding,
+            word_start_end_batch,
+            col_start_end_batch,
+            tab_start_end_batch,
+            tokenized_questions,
+        ) = model.transformer_embed(batch)
+        print(list(input_embedding.size()))
+        attributions, delta = lig.attribute(
+            inputs=input_embedding,
+            baselines=torch.zeros_like(input_embedding),
+            additional_forward_args=(
+                word_start_end_batch,
+                col_start_end_batch,
+                tab_start_end_batch,
+                examples,
+            ),
+            return_convergence_delta=True,
+        )
+
+        src_attributions, col_attributions, tab_attributions = summarize_attributions(
+            attributions,
+            word_start_end_batch,
+            col_start_end_batch,
+            tab_start_end_batch,
+        )
+
+        layer_attrs = []
+        bert_config = self.model.transformer_encoder.config
+        for i in range(bert_config.num_hidden_layers):
+            lc = LayerConductance(
+                forward_captum, self.model.transformer_encoder.encoder.layer[i]
+            )
+            layer_attributions, delta = lc.attribute(
+                inputs=input_embedding,
+                baselines=torch.zeros_like(input_embedding),
+                additional_forward_args=(
+                    word_start_end_batch,
+                    col_start_end_batch,
+                    tab_start_end_batch,
+                    examples,
+                ),
+                return_convergence_delta=True,
+            )
+            layer_attrs.append(
+                summarize_conductance_attributions(layer_attributions[0])
+                .cpu()
+                .detach()
+                .tolist()
+            )
+        yticklabels = list(range(1, bert_config.num_hidden_layers + 1))
+        xticklabels = [
+            token if token.startswith("[") else token
+            for token in tokenized_questions[0]
+        ]
+        fig, ax = plt.subplots(figsize=(15, 5))
+        ax = sns.heatmap(
+            np.array(layer_attrs),
+            xticklabels=xticklabels,
+            yticklabels=yticklabels,
+            linewidth=0.2,
+        )
+        plt.xlabel("Tokens")
+        plt.ylabel("Layers")
+        plt.savefig("fig1.png", dpi=300)  # TODO fix
+
+        return (
+            src_attribution_to_html(examples[0].src_sent, src_attributions),
+            tab_col_attribution_to_html(
+                examples[0], col_attributions, tab_attributions
+            ),
+            '<img src="http://141.223.199.148:4001/image" >',
+        )
 
     def value_predictor(self, db_id, sql, question, value_tok):
         table = self.val_table_data[db_id]
@@ -479,15 +525,95 @@ class End2EndOurs(End2End):
         entry["keys"] = keys
         print("Start preprocessing.. {}".format(time.strftime("%Y%m%d-%H%M%S")))
         process_data_one_entry(
-            entry, self.english_RelatedTo, self.english_IsA, self.db_values
+            entry,
+            End2EndOurs.english_RelatedTo,
+            End2EndOurs.english_IsA,
+            self.db_values,
         )
         print(entry["question_arg"])
         print(entry["question_arg_type"])
         print(entry["mapper"])
-        sql_values = self._find_values(
+        sql_values = find_values(
             entry["question_arg"],
             entry["question_arg_type"],
             entry["origin_question_toks_for_value"],
             entry["mapper"],
         )
-        return self._exchange_values(sql, sql_values, value_tok)
+        return exchange_values(sql, sql_values, value_tok)
+
+
+if __name__ == "__main__":
+    end2end = End2EndOurs()
+    end2end.prepare_model("spider")
+    end2end.captum_mode()
+    new_table = {
+        "column_names": [
+            [-1, "*"],
+            [0, "mid"],
+            [0, "title"],
+            [0, "release year"],
+            [1, "msid"],
+            [1, "aid"],
+            [2, "aid"],
+            [2, "name"],
+            [2, "birth year"],
+            [3, "sid"],
+            [3, "title"],
+            [3, "release year"],
+        ],
+        "column_names_original": [
+            [-1, "*"],
+            [0, "mid"],
+            [0, "title"],
+            [0, "release_year"],
+            [1, "msid"],
+            [1, "aid"],
+            [2, "aid"],
+            [2, "name"],
+            [2, "birth_year"],
+            [3, "sid"],
+            [3, "title"],
+            [3, "release_year"],
+        ],
+        "column_types": [
+            "text",
+            "number",
+            "text",
+            "text",
+            "number",
+            "number",
+            "number",
+            "text",
+            "text",
+            "number",
+            "text",
+            "text",
+        ],
+        "db_id": "",
+        "foreign_keys": [[4, 1], [5, 6], [4, 9]],
+        "primary_keys": [1, 6, 9],
+        "table_names": ["movie", "cast", "actor", "tv series"],
+        "table_names_original": ["movie", "cast", "actor", "tv_series"],
+        "only_cnames": [
+            "*",
+            "mid",
+            "title",
+            "release year",
+            "msid",
+            "aid",
+            "aid",
+            "name",
+            "birth year",
+            "sid",
+            "title",
+            "release year",
+        ],
+    }
+    nlq = "How many performers are there?"
+    sql, _, _ = end2end.run_model("imdb", nlq, new_table)
+    print(sql)
+    html_src, html_schema, _ = end2end.run_captum(
+        "imdb", nlq, "SELECT count(*) FROM actor", new_table,
+    )
+    print(html_src)
+    print(html_schema)

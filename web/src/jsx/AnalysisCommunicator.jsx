@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const queryAnalysis = (db_id, model, gen_sql, gold_sql, nlq, url) =>
   axios
-    .get (url, {
+    .get(url, {
       headers: {
         'Access-Control-Allow-Origin': '*',
       },
@@ -16,12 +16,21 @@ const queryAnalysis = (db_id, model, gen_sql, gold_sql, nlq, url) =>
         question: nlq,
       },
     })
-    .then (response => {
+    .then(response => {
+      const pred_results = response.data.pred_results;
       const correct_systems = response.data.result;
       const diff_points = response.data.diff;
       const similarity = response.data.similarity;
-      const captum_html = response.data.captum_html;
-      return [correct_systems, diff_points, similarity, captum_html];
+      const captum_results = response.data.captum_results;
+      return [
+        db_id,
+        nlq,
+        correct_systems,
+        pred_results,
+        diff_points,
+        similarity,
+        captum_results,
+      ];
     });
 
 export default queryAnalysis;

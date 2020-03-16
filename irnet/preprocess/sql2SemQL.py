@@ -468,9 +468,10 @@ class SemQLConverter:
             output_tab[db_name] = temp
             self.tables[db_name] = table
 
-    def _sql_to_semql(self, db_id, sql_json):
+    def _sql_to_semql(self, db_id, sql_json, table=None):
         entry = {"sql": sql_json}
-        table = self.tables[db_id]
+        if table is None:
+            table = self.tables[db_id]
 
         entry["names"] = table["schema_content"]
         entry["table_names"] = table["table_names"]
@@ -485,9 +486,9 @@ class SemQLConverter:
         entry["keys"] = keys
         return entry
 
-    def parse(self, db_id, sql, entry):
-        parsed_sql = self.sqlparser.parse(db_id, sql)
-        new_entry = self._sql_to_semql(db_id, parsed_sql)
+    def parse(self, db_id, sql, entry, table=None):
+        parsed_sql = self.sqlparser.parse(db_id, sql, table)
+        new_entry = self._sql_to_semql(db_id, parsed_sql, table)
         entry.update(new_entry)
         result = self.semparser.full_parse(entry)
         entry["rule_label"] = " ".join([str(x) for x in result])

@@ -2,11 +2,15 @@
 @import url(https://fonts.googleapis.com/css?family=Righteous);
 @import url(https://fonts.googleapis.com/css?family=Baloo+Bhai);
 @import url(https://fonts.googleapis.com/css?family=BenchNine:700);
+img {
+    height: 300px;
+}
+
 .App-explore {
     display: flex;
     flex-direction: column;
     text-align: center;
-    font-family: "Open Sans";
+    font-family: 'Open Sans';
     background-color: #c1d7f7;
     height: 100vh;
     .App-header {
@@ -32,7 +36,7 @@
     }
 }
 
-$analyze_darker:#117a3d;
+$analyze_darker: #117a3d;
 $analyze_dark: #1ca35f;
 $analyze_little_light: #c9f6d8;
 $analyze_light: #dff6ea;
@@ -42,7 +46,7 @@ $analyze_middle: #adf6cb;
     display: flex;
     flex-direction: column;
     text-align: center;
-    font-family: "Open Sans";
+    font-family: 'Open Sans';
     background-color: $analyze_middle;
     height: 100vh;
     .App-header {
@@ -90,7 +94,7 @@ $analyze_middle: #adf6cb;
     flex-direction: row;
     align-items: center;
     justify-content: center;
-    font-family: "Righteous";
+    font-family: 'Righteous';
     letter-spacing: -1px;
     font-size: calc(5vmin);
 }
@@ -132,7 +136,7 @@ $analyze_middle: #adf6cb;
     transition: all 0.25s;
     border-style: solid;
     border-width: 0;
-    content: "";
+    content: '';
     height: calc(2vmin);
     position: absolute;
     width: calc(2vmin);

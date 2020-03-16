@@ -72,8 +72,9 @@ class SQLParser:
         self.db_names = db_names
         self.tables = tables
 
-    def parse(self, db_id, sql):
-        table = self.tables[db_id]
+    def parse(self, db_id, sql, table):
+        if table is None:
+            table = self.tables[db_id]
         schema = Schema(self.schemas[db_id], table)
         return get_sql(schema, sql, table)
 

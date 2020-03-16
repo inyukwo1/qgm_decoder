@@ -10,23 +10,23 @@ class TopInterfaces extends React.Component {
   };
   handleSchemaClicked = e => {
     if (this.state.schema_showing) {
-      this.setState ({
+      this.setState({
         schema_showing: false,
       });
     } else {
-      this.setState ({
+      this.setState({
         schema_showing: true,
       });
     }
   };
   handleExploreAnalyzeButtonClicked = e => {
-    this.props.switchExploreAnalyze ();
+    this.props.switchExploreAnalyze();
     if (this.state.mode === 'Explore') {
-      this.setState ({
+      this.setState({
         mode: 'Analyze',
       });
     } else {
-      this.setState ({
+      this.setState({
         mode: 'Explore',
       });
     }
@@ -34,26 +34,30 @@ class TopInterfaces extends React.Component {
   exploreMode = () => {
     return this.state.mode === 'Explore';
   };
-  render () {
+  render() {
     const classname = this.state.schema_showing
       ? 'button_pretty showing-schema'
       : 'button_pretty hiding-schema';
-    const e = db_ids.find (o => o.value === this.props.db_id);
+    const e = db_ids.find(o => o.value === this.props.db_id);
     const db_img = e ? e.img : null;
-    const schema_div = this.state.schema_showing
-      ? <img className="schema-img" src={db_img} alt="" />
-      : <div className="schema_text">
-          {' '}<b>Schema</b>{' '}
-        </div>;
+    const schema_div = this.state.schema_showing ? (
+      <img className="schema-img" src={db_img} alt="" />
+    ) : (
+      <div className="schema_text">
+        {' '}
+        <b>Schema</b>{' '}
+      </div>
+    );
     return (
       <div className="top_interfaces">
         <label className="switch">
-          <input type="checkbox" />
+          <input type="checkbox" class="botui-checkbox" />
           <span
             className="explore_analyze"
             onClick={this.handleExploreAnalyzeButtonClicked}
           >
-            {' '}<b>{this.state.mode}</b>{' '}
+            {' '}
+            <b>{this.state.mode}</b>{' '}
           </span>
         </label>
         <button className={classname} onClick={this.handleSchemaClicked}>

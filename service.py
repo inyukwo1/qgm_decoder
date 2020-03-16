@@ -5,6 +5,7 @@ from validation.check_correctness import compare_two_queries, diff_two_queries
 import os
 from flask_restful import Resource, reqparse, Api
 from flask import Flask
+from flask import send_file
 from flask_cors import CORS
 import pandas as pd
 from sqlalchemy import create_engine
@@ -247,7 +248,7 @@ class Service(Resource):
             }
 
     def handleAlalyzeMode(self, args):
-        systems = ["ours", "irnet", "gnn"]
+        systems = ["ours", "irnet"]
         result_query = {}
         result_query["ours"], _, _ = ours_end2end["spider"].run_model(
             args["db_id"], args["question"]
@@ -255,9 +256,9 @@ class Service(Resource):
         result_query["irnet"], _, _ = irnet_end2end["spider"].run_model(
             args["db_id"], args["question"]
         )
-        result_query["gnn"], _, _ = gnn_end2end["spider"].run_model(
-            args["db_id"], args["question"]
-        )
+        # result_query["gnn"], _, _ = gnn_end2end["spider"].run_model(
+        #     args["db_id"], args["question"]
+        # )
         gen_sql = args["gen_sql"]
         gold_sql = args["gold_sql"]
         # diff
@@ -309,25 +310,39 @@ class Service(Resource):
         else:
             similarity_score = 100
 
+        pred_results = [result_query[system] for system in equi_class]
+
         # captum
-        captum_html = irnet_end2end["spider"].run_captum(
-            args["db_id"], args["question"], args["gold_sql"]
-        )
+        if args["model"] == "ours":
+            captum_results = ours_end2end["spider"].run_captum(
+                args["db_id"], args["question"], args["gold_sql"]
+            )
+        elif args["model"] == "irnet":
+            captum_results = irnet_end2end["spider"].run_captum(
+                args["db_id"], args["question"], args["gold_sql"]
+            )
         print("Done")
         return {
             "result": equi_class,
+            "pred_results": pred_results,
             "diff": diff,
             "canonicalized_gen_sql": new_gen_sql,
             "canonicalized_gold_sql": new_gold_sql,
             "similarity": similarity_score,
-            "captum_html": captum_html,
+            "captum_results": list(captum_results),
         }
+
+
+class Image(Resource):
+    def get(self):
+        return send_file("fig1.png", mimetype="image/png")
 
 
 if __name__ == "__main__":
     from ours.end2end import End2EndOurs
     from irnet.end2end import End2EndIRNet
-    from gnn.end2end import End2EndGNN
+
+    # from gnn.end2end import End2EndGNN
 
     ours_end2end = dict()
     irnet_end2end = dict()
@@ -337,10 +352,11 @@ if __name__ == "__main__":
         ours_end2end[dataset].prepare_model(dataset)
         irnet_end2end[dataset] = End2EndIRNet()
         irnet_end2end[dataset].prepare_model(dataset)
-        gnn_end2end[dataset] = End2EndGNN()
-        gnn_end2end[dataset].prepare_model(dataset)
+        # gnn_end2end[dataset] = End2EndGNN()
+        # gnn_end2end[dataset].prepare_model(dataset)
     app = Flask("irnet service")
     CORS(app)
     api = Api(app)
     api.add_resource(Service, "/service")
+    api.add_resource(Image, "/image")
     app.run(host="141.223.199.148", port=4001, debug=False)

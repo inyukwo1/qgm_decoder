@@ -1,5 +1,6 @@
 from service import End2End
 import pickle
+import torch
 from irnet.src import args as arg
 from irnet.src import utils
 from irnet.src.models.model import IRNet
@@ -23,22 +24,25 @@ from irnet.src.utils import (
     get_table_colNames,
     to_batch_seq,
 )
-from irnet.src.dataset import Example
+from irnet.src.dataset import Example, Batch
 from irnet.sem2SQL import transform
 from irnet.src.rule.sem_utils import (
     alter_not_in_one_entry,
     alter_column0_one_entry,
     alter_inter_one_entry,
 )
-import torch
 import re
 import time
 import copy
 import nltk
 from irnet.preprocess.sql2SemQL import SemQLConverter
-from captum.attr import LayerIntegratedGradients
+from captum.attr import IntegratedGradients
 from captum.attr import visualization as viz
-from irnet.src.dataset import Batch
+from universal_utils import (
+    captum_vis_to_html,
+    src_attribution_to_html,
+    tab_col_attribution_to_html,
+)
 
 
 class dummy_arg:
@@ -59,6 +63,12 @@ class dummy_arg:
 
 
 class End2EndIRNet(End2End):
+    def captum_mode(self):
+        self.model.train()
+
+    def eval(self):
+        self.model.eval()
+
     def prepare_model(self, dataset, use_dummy_arg=False):
         model_path = "test_models/irnet_{}.model".format(dataset)
         with open("irnet/preprocess/conceptNet/english_RelatedTo.pkl", "rb") as f:
@@ -278,8 +288,9 @@ class End2EndIRNet(End2End):
         entry["question_arg_type"] = type_concol
         entry["nltk_pos"] = nltk_result
 
-    def prepare_table(self, db_id):
-        table = self.val_table_data[db_id]
+    def prepare_table(self, db_id, table=None):
+        if table is None:
+            table = self.val_table_data[db_id]
         tmp_col = []
         for cc in [x[1] for x in table["column_names"]]:
             if cc not in tmp_col:
@@ -357,8 +368,9 @@ class End2EndIRNet(End2End):
         example.sql_json = copy.deepcopy(entry)
         return example
 
-    def run_model(self, db_id, nl_string):
-        table = self.prepare_table(db_id)
+    def run_model(self, db_id, nl_string, table=None):
+        self.eval()
+        table = self.prepare_table(db_id, table)
         entry = self.prepare_entry(table, db_id, nl_string)
 
         print("Start preprocessing.. {}".format(time.strftime("%Y%m%d-%H%M%S")))
@@ -405,13 +417,14 @@ class End2EndIRNet(End2End):
 
         return sql, None, entry["question_toks"]
 
-    def run_captum(self, db_id, nl_string, gold_sql):
+    def run_captum(self, db_id, nl_string, gold_sql, table=None):
+        self.captum_mode()
         model = self.model
-        table = self.prepare_table(db_id)
+        table = self.prepare_table(db_id, table)
         entry = self.prepare_entry(table, db_id, nl_string)
         self.preprocess_data(entry)
         entry["query"] = gold_sql
-        entry = self.semql_parser.parse(db_id, gold_sql, entry)
+        entry = self.semql_parser.parse(db_id, gold_sql, entry, table)
 
         def to_ref_examples(examples, is_bert):
             new_examples = [copy.copy(example) for example in examples]
@@ -423,7 +436,9 @@ class End2EndIRNet(End2End):
                     ]
             else:
                 for example in new_examples:
-                    example.src_sent = ["<unk>" for _ in example.src_sent]
+                    example.src_sent = [["<unk>"] for _ in example.src_sent]
+                    example.tab_cols = [["<unk>"] for _ in example.tab_cols]
+                    example.table_names = [["<unk>"] for _ in example.table_names]
             return new_examples
 
         def summarize_attributions(attributions):
@@ -431,129 +446,157 @@ class End2EndIRNet(End2End):
             attributions = attributions / torch.norm(attributions)
             return attributions
 
-        def forward_captum(src_encodings, last_state, last_cell, examples):
-            examples = examples * len(src_encodings)
+        def forward_captum_src(
+            src_embedding, table_embedding, schema_embedding, examples
+        ):
+            examples = examples * len(src_embedding)
             sketch_score, lf_score = model.forward(
-                examples, src_encodings, last_state, last_cell
+                examples, src_embedding, table_embedding, schema_embedding
             )
             return sketch_score + lf_score
 
-        lig = LayerIntegratedGradients(forward_captum, model.iden)
-        examples = to_batch_seq([entry], self.val_table_data, [0], 0, 1, True)
-        ref_examples = to_ref_examples(examples, True)
+        def forward_captum_col(
+            table_embedding, src_embedding, schema_embedding, examples
+        ):
+            examples = examples * len(src_embedding)
+            sketch_score, lf_score = model.forward(
+                examples, src_embedding, table_embedding, schema_embedding
+            )
+            return sketch_score + lf_score
+
+        def forward_captum_tab(
+            schema_embedding, src_embedding, table_embedding, examples
+        ):
+            examples = examples * len(src_embedding)
+            sketch_score, lf_score = model.forward(
+                examples, src_embedding, table_embedding, schema_embedding
+            )
+            return sketch_score + lf_score
+
+        lig_src = IntegratedGradients(forward_captum_src)
+        lig_col = IntegratedGradients(forward_captum_col)
+        lig_tab = IntegratedGradients(forward_captum_tab)
+
+        examples = to_batch_seq([entry], self.val_table_data, [0], 0, 1, True, table)
+        ref_examples = to_ref_examples(examples, False)
         batch = Batch(examples, model.grammar, cuda=model.args.cuda)
         ref_batch = Batch(ref_examples, model.grammar, cuda=model.args.cuda)
 
-        src_encodings, (last_state, last_cell) = model.encode(
-            batch.src_sents, batch.src_sents_len, None
-        )
-        ref_src_encodings, (ref_last_state, ref_last_cell) = model.encode(
-            ref_batch.src_sents, ref_batch.src_sents_len, None
-        )
-        attributions, delta = lig.attribute(
-            inputs=src_encodings,
-            baselines=ref_src_encodings,
-            additional_forward_args=(last_state, last_cell, examples),
+        src_embedding = model.gen_x_batch(batch.src_sents)
+        table_embedding = model.gen_x_batch(batch.table_sents)
+        schema_embedding = model.gen_x_batch(batch.table_names)
+
+        ref_src_embedding = model.gen_x_batch(ref_batch.src_sents)
+        ref_table_embedding = model.gen_x_batch(ref_batch.table_sents)
+        ref_schema_embedding = model.gen_x_batch(ref_batch.table_names)
+
+        src_attributions, _ = lig_src.attribute(
+            inputs=src_embedding,
+            baselines=ref_src_embedding,
+            additional_forward_args=(table_embedding, schema_embedding, examples),
             return_convergence_delta=True,
         )
-        attributions_sum = summarize_attributions(attributions)
-        sketch_score, lf_score = model.forward(
-            examples, src_encodings, last_state, last_cell
+
+        col_attributions, _ = lig_col.attribute(
+            inputs=table_embedding,
+            baselines=ref_table_embedding,
+            additional_forward_args=(src_embedding, schema_embedding, examples),
+            return_convergence_delta=True,
         )
-        print(examples[0].src_sent)
-        vis = viz.VisualizationDataRecord(
-            attributions_sum,
-            (sketch_score + lf_score).data.cpu().item(),
-            0,
-            gold_sql,
-            gold_sql,
-            attributions_sum.sum(),
-            [" ".join(words) for words in examples[0].src_sent],
-            delta,
+        tab_attributions, _ = lig_tab.attribute(
+            inputs=schema_embedding,
+            baselines=ref_schema_embedding,
+            additional_forward_args=(src_embedding, table_embedding, examples),
+            return_convergence_delta=True,
         )
-        viz.visualize_text([vis])
-        return self._vis_to_html([vis])
 
-    def _vis_to_html(self, datarecords):
-        def format_classname(classname):
-            return '<td><text style="padding-right:2em"><b>{}</b></text></td>'.format(
-                classname
-            )
+        src_attributions_sum = summarize_attributions(src_attributions)
+        col_attributions_sum = summarize_attributions(col_attributions)
+        tab_attributions_sum = summarize_attributions(tab_attributions)
 
-        def format_special_tokens(token):
-            if token.startswith("<") and token.endswith(">"):
-                return "#" + token.strip("<>")
-            return token
-
-        def _get_color(attr):
-            # clip values to prevent CSS errors (Values should be from [-1,1])
-            attr = max(-1, min(1, attr))
-            if attr > 0:
-                hue = 120
-                sat = 75
-                lig = 100 - int(50 * attr)
-            else:
-                hue = 0
-                sat = 75
-                lig = 100 - int(-40 * attr)
-            return "hsl({}, {}%, {}%)".format(hue, sat, lig)
-
-        def format_word_importances(words, importances):
-            if importances is None or len(importances) == 0:
-                return "<td></td>"
-            assert len(words) <= len(importances)
-            tags = ["<td>"]
-            for word, importance in zip(words, importances[: len(words)]):
-                word = format_special_tokens(word)
-                color = _get_color(importance)
-                unwrapped_tag = '<mark style="background-color: {color}; opacity:1.0; \
-                            line-height:1.75"><font color="black"> {word}\
-                            </font></mark>'.format(
-                    color=color, word=word
-                )
-                tags.append(unwrapped_tag)
-            tags.append("</td>")
-            return "".join(tags)
-
-        dom = ["<table width: 100%>"]
-        rows = [
-            "<tr><th>Target Label</th>"
-            "<th>Predicted Label</th>"
-            "<th>Attribution Label</th>"
-            "<th>Attribution Score</th>"
-            "<th>Word Importance</th>"
-        ]
-        for datarecord in datarecords:
-            rows.append(
-                "".join(
-                    [
-                        "<tr>",
-                        format_classname(datarecord.true_class),
-                        format_classname(
-                            "{0} ({1:.2f})".format(
-                                datarecord.pred_class, datarecord.pred_prob
-                            )
-                        ),
-                        format_classname(datarecord.attr_class),
-                        format_classname("{0:.2f}".format(datarecord.attr_score)),
-                        format_word_importances(
-                            datarecord.raw_input, datarecord.word_attributions
-                        ),
-                        "<tr>",
-                    ]
-                )
-            )
-
-        dom.append("".join(rows))
-        dom.append("</table>")
-        return "".join(dom)
+        return (
+            src_attribution_to_html(examples[0].src_sent, src_attributions_sum),
+            tab_col_attribution_to_html(
+                examples[0], col_attributions_sum, tab_attributions_sum
+            ),
+        )
 
 
 if __name__ == "__main__":
     end2end = End2EndIRNet()
     end2end.prepare_model("spider")
-    end2end.run_captum(
-        "concert_singer",
-        "Show the name and theme for all concerts and the number of singers in each concert.",
-        "SELECT T2.concert_name , T2.theme , count(*) FROM singer_in_concert AS T1 JOIN concert AS T2 ON T1.concert_id = T2.concert_id GROUP BY T2.concert_id",
+    end2end.captum_mode()
+    new_table = {
+        "column_names": [
+            [-1, "*"],
+            [0, "mid"],
+            [0, "title"],
+            [0, "release year"],
+            [1, "msid"],
+            [1, "aid"],
+            [2, "aid"],
+            [2, "name"],
+            [2, "birth year"],
+            [3, "sid"],
+            [3, "title"],
+            [3, "release year"],
+        ],
+        "column_names_original": [
+            [-1, "*"],
+            [0, "mid"],
+            [0, "title"],
+            [0, "release_year"],
+            [1, "msid"],
+            [1, "aid"],
+            [2, "aid"],
+            [2, "name"],
+            [2, "birth_year"],
+            [3, "sid"],
+            [3, "title"],
+            [3, "release_year"],
+        ],
+        "column_types": [
+            "text",
+            "number",
+            "text",
+            "text",
+            "number",
+            "number",
+            "number",
+            "text",
+            "text",
+            "number",
+            "text",
+            "text",
+        ],
+        "db_id": "",
+        "foreign_keys": [[4, 1], [5, 6], [4, 9]],
+        "primary_keys": [1, 6, 9],
+        "table_names": ["movie", "cast", "actor", "tv series"],
+        "table_names_original": ["movie", "cast", "actor", "tv_series"],
+        "only_cnames": [
+            "*",
+            "mid",
+            "title",
+            "release year",
+            "msid",
+            "aid",
+            "aid",
+            "name",
+            "birth year",
+            "sid",
+            "title",
+            "release year",
+        ],
+    }
+    nlq = "Find the titles of the movies which 'Brad Pitt' starred in?"
+    sql, _, _ = end2end.run_model("imdb", nlq, new_table)
+    print(sql)
+    html_src, html_schema = end2end.run_captum(
+        "imdb",
+        nlq,
+        "SELECT count(*), birth_year FROM actor GROUP BY birth_year",
+        new_table,
     )
+    print(html_src)
+    print(html_schema)

@@ -85,70 +85,73 @@ def train(args):
     utils.save_args(args, os.path.join(model_save_path, "config.json"))
     best_dev_acc = 0.0
     #
-    try:
-        with open(os.path.join(model_save_path, "epoch.log"), "w") as epoch_fd:
-            for epoch in tqdm.tqdm(range(args.epoch)):
-                if args.lr_scheduler:
-                    scheduler.step()
-                if scheduler_bert:
-                    scheduler_bert.step()
-                epoch_begin = time.time()
-                loss = utils.epoch_train(
+    # try:
+    with open(os.path.join(model_save_path, "epoch.log"), "w") as epoch_fd:
+        for epoch in tqdm.tqdm(range(args.epoch)):
+            if args.lr_scheduler:
+                scheduler.step()
+            if scheduler_bert:
+                scheduler_bert.step()
+            epoch_begin = time.time()
+            loss = utils.epoch_train(
+                model,
+                optimizer,
+                bert_optimizer,
+                args.batch_size,
+                sql_data,
+                table_data,
+                args,
+                epoch,
+                loss_epoch_threshold=args.loss_epoch_threshold,
+                sketch_loss_coefficient=args.sketch_loss_coefficient,
+            )
+            epoch_end = time.time()
+            if epoch % 3 == 0:
+                json_datas = utils.epoch_acc(
                     model,
-                    optimizer,
-                    bert_optimizer,
                     args.batch_size,
-                    sql_data,
-                    table_data,
-                    args,
-                    epoch,
-                    loss_epoch_threshold=args.loss_epoch_threshold,
-                    sketch_loss_coefficient=args.sketch_loss_coefficient,
+                    val_sql_data,
+                    val_table_data,
+                    beam_size=args.beam_size,
                 )
-                epoch_end = time.time()
-                if epoch % 3 == 0:
-                    json_datas = utils.epoch_acc(
-                        model,
-                        args.batch_size,
-                        val_sql_data,
-                        val_table_data,
-                        beam_size=args.beam_size,
-                    )
-                    acc, sketch_acc = utils.eval_acc(json_datas, val_sql_data)
+                acc, sketch_acc = utils.eval_acc(json_datas, val_sql_data)
 
-                    if acc > best_dev_acc:
-                        utils.save_checkpoint(
-                            model, os.path.join(model_save_path, "best_model.model")
-                        )
-                        best_dev_acc = acc
+                if acc > best_dev_acc:
                     utils.save_checkpoint(
-                        model,
-                        os.path.join(model_save_path, "{%s}_{%s}.model") % (epoch, acc),
+                        model, os.path.join(model_save_path, "best_model.model")
                     )
+                    best_dev_acc = acc
+                utils.save_checkpoint(
+                    model,
+                    os.path.join(model_save_path, "{%s}_{%s}.model") % (epoch, acc),
+                )
 
-                    log_str = (
-                        "Epoch: %d, Loss: %f, Sketch Acc: %f, Acc: %f, time: %f\n"
-                        % (epoch + 1, loss, sketch_acc, acc, epoch_end - epoch_begin)
-                    )
-                    tqdm.tqdm.write(log_str)
-                    epoch_fd.write(log_str)
-                    epoch_fd.flush()
-    except Exception as e:
-        # Save model
-        utils.save_checkpoint(model, os.path.join(model_save_path, "end_model.model"))
-        print(e)
-    else:
-        utils.save_checkpoint(model, os.path.join(model_save_path, "end_model.model"))
-        json_datas = utils.epoch_acc(
-            model,
-            args.batch_size,
-            val_sql_data,
-            val_table_data,
-            beam_size=args.beam_size,
-        )
-        acc = utils.eval_acc(json_datas, val_sql_data)
-
-        print("Sketch Acc: %f, Acc: %f, Beam Acc: %f" % (acc, acc, acc,))
+                log_str = "Epoch: %d, Loss: %f, Sketch Acc: %f, Acc: %f, time: %f\n" % (
+                    epoch + 1,
+                    loss,
+                    sketch_acc,
+                    acc,
+                    epoch_end - epoch_begin,
+                )
+                tqdm.tqdm.write(log_str)
+                epoch_fd.write(log_str)
+                epoch_fd.flush()
+    # except Exception as e:
+    # Save model
+    # utils.save_checkpoint(model, os.path.join(model_save_path, "end_model.model"))
+    # print(e)
+    # else:
+    #     utils.save_checkpoint(model, os.path.join(model_save_path, "end_model.model"))
+    #     json_datas = utils.epoch_acc(
+    #         model,
+    #         args.batch_size,
+    #         val_sql_data,
+    #         val_table_data,
+    #         beam_size=args.beam_size,
+    #     )
+    #     acc = utils.eval_acc(json_datas, val_sql_data)
+    #
+    #     print("Sketch Acc: %f, Acc: %f, Beam Acc: %f" % (acc, acc, acc,))
 
 
 if __name__ == "__main__":
