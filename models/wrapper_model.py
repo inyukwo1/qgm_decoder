@@ -1,3 +1,5 @@
+import numpy as np
+
 import torch
 import torch.nn as nn
 import torch.nn.utils
@@ -9,6 +11,7 @@ from decoder.lstm.decoder import LSTM_Decoder
 from decoder.transformer_framework.decoder import TransformerDecoderFramework
 from decoder.semql.semql_decoder import SemQL_Decoder
 from decoder.semql_framework.decoder import SemQLDecoderFramework
+from decoder.ra_transformer_framework.decoder import RATransformerDecoder
 
 from encoder.ra_transformer.encoder import RA_Transformer_Encoder
 from encoder.transformer.encoder import Transformer_Encoder
@@ -36,6 +39,8 @@ class EncoderDecoderModel(nn.Module):
             self.decoder = QGM_Decoder(cfg)
         elif self.decoder_name == "semql":
             self.decoder = SemQLDecoderFramework(cfg)
+        elif self.decoder_name == "ra_transformer":
+            self.decoder = RATransformerDecoder(cfg)
         else:
             raise RuntimeError("Unsupported decoder name: {}".format(self.decoder_name))
 
@@ -55,6 +60,50 @@ class EncoderDecoderModel(nn.Module):
 
         if self.encoder_name != "bert":
             self.without_bert_params = list(self.parameters(recurse=True))
+
+    def gen_x_batch(self, q):
+        B = len(q)
+        val_embs = []
+        val_len = np.zeros(B, dtype=np.int64)
+        is_list = False
+        if type(q[0][0]) == list:
+            is_list = True
+        for i, one_q in enumerate(q):
+            if not is_list:
+                q_val = list(
+                    map(
+                        lambda x: self.word_emb.get(
+                            x, np.zeros(self.embed_size, dtype=np.float32),
+                        ),
+                        one_q,
+                    )
+                )
+            else:
+                q_val = []
+                for ws in one_q:
+                    emb_list = []
+                    ws_len = len(ws)
+                    for w in ws:
+                        emb_list.append(self.word_emb.get(w, self.word_emb["unk"]))
+                    if ws_len == 0:
+                        raise Exception("word list should not be empty!")
+                    elif ws_len == 1:
+                        q_val.append(emb_list[0])
+                    else:
+                        q_val.append(sum(emb_list) / float(ws_len))
+
+            val_embs.append(q_val)
+            val_len[i] = len(q_val)
+        max_len = max(val_len)
+
+        val_emb_array = np.zeros((B, max_len, self.embed_size), dtype=np.float32)
+        for i in range(B):
+            for t in range(len(val_embs[i])):
+                val_emb_array[i, t, :] = val_embs[i][t]
+        val_inp = torch.from_numpy(val_emb_array)
+        if self.is_cuda:
+            val_inp = val_inp.cuda()
+        return val_inp
 
     def forward(self, examples):
         # now should implement the examples
@@ -216,8 +265,22 @@ class EncoderDecoderModel(nn.Module):
                 col_tab_dic,
                 golds,
             )
-
             return losses
+        elif self.decoder_name == "ra_transformer":
+            col_tab_dic = batch.col_table_dict
+            golds = [self.decoder.grammar.create_data(item) for item in batch.qgm]
+            tmp = []
+            for gold in golds:
+                tmp += [
+                    [
+                        self.decoder.grammar.str_to_action(item)
+                        for item in gold.split(" ")
+                    ]
+                ]
+            golds = tmp
+            losses = self.decoder(src_encodings, table_embeddings, schema_embeddings, col_tab_dic, golds)
+            return losses
+
         else:
             raise RuntimeError("Unsupported Decoder Name")
 
@@ -361,6 +424,10 @@ class EncoderDecoderModel(nn.Module):
                     col_tab_dic,
                     golds=None,
                 )
+                return pred
+            elif self.decoder_name == "ra_transformer":
+                col_tab_dic = batch.col_table_dict
+                pred = self.decoder(src_encodings, table_embeddings, schema_embeddings, col_tab_dic, golds=None)
                 return pred
             else:
                 raise RuntimeError("Unsupported decoder name")

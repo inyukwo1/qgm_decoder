@@ -3,9 +3,13 @@ from abc import ABC, abstractmethod
 import torch
 from torch import nn
 import math
-from src.transformer_decoder import (
+from src.transformer.transformer_decoder import (
     TransformerDecoderLayer,
     TransformerDecoder,
+)
+from src.ra_transformer.ra_transformer_decoder import(
+    RATransformerDecoderLayer,
+    RATransformerDecoder,
 )
 from framework.sequential_monad import TensorPromise
 from framework.utils import assert_dim, stack_sequential_tensor_with_mask
@@ -156,7 +160,7 @@ class LazyTransformerDecoder(nn.Module, LazyModule):
         super(LazyTransformerDecoder, self).__init__()
         LazyModule.__init__(self)
         decoder_layer = TransformerDecoderLayer(d_model=in_dim, nhead=nhead)
-        self.transformer_decoder = TransformerDecoder(
+        self.module = TransformerDecoder(
             decoder_layer, num_layers=layer_num
         )
         self.in_dim = in_dim
@@ -196,7 +200,7 @@ class LazyTransformerDecoder(nn.Module, LazyModule):
         stacked_tgt_batch_second = stacked_tgt.transpose(0, 1)
         stacked_mem_batch_second = stacked_mem.transpose(0, 1)
         pos_encoded_tgt_batch_second = self._pos_encode(stacked_tgt_batch_second)
-        out_batch_first = self.transformer_decoder(
+        out_batch_first = self.module(
             pos_encoded_tgt_batch_second,
             stacked_mem_batch_second,
             tgt_key_padding_mask=tgt_mask,
@@ -206,6 +210,49 @@ class LazyTransformerDecoder(nn.Module, LazyModule):
             out_batch_first[idx, : len(tgt_list[idx])]
             for idx in range(len(self.later_buffer))
         ]
+
+class LazyRATransformerDecoder(nn.Module, LazyModule):
+    def __init__(self, in_dim, nhead, layer_num, relation_num):
+        super(LazyRATransformerDecoder, self).__init__()
+        LazyModule.__init__(self)
+        self.in_dim = in_dim
+        decoder_layer = RATransformerDecoderLayer(d_model=in_dim, nhead=nhead)
+        self.module = RATransformerDecoder(
+            decoder_layer, num_layers=layer_num
+        )
+
+    def assert_input(self, *inputs):
+        pass
+
+    def compute(self):
+        # Parse input
+        tgt_list: List[torch.Tensor] = []
+        mem_list: List[torch.Tensor] = []
+        relation_list: List[torch.Tensor] = []
+        for tgt, mem, relation in self.later_buffer:
+            tgt_list.append(tgt)
+            mem_list.append(mem)
+            relation_list.append(relation)
+
+        # Stack
+        stacked_tgt, tgt_mask = stack_sequential_tensor_with_mask(tgt_list)
+        stacked_mem, mem_mask = stack_sequential_tensor_with_mask(mem_list)
+        stacked_relation, relation_mask =  stack_sequential_tensor_with_mask(relation_list)
+
+        # Transpose
+        stacked_tgt_batch_second = stacked_tgt.transpose(0, 1)
+        stacked_mem_batch_second = stacked_mem.transpose(0, 1)
+
+        # Forward
+        out_batch_first = self.module(
+            stacked_tgt_batch_second,
+            stacked_mem_batch_second,
+            stacked_relation,
+        ).transpose(0, 1)
+
+        # Spread
+        tgt_len = [len(item) for item in tgt_list]
+        self.done_buffer = [item[:length] for item, length in zip(out_batch_first, tgt_len)]
 
 
 class LazyCalculateSimilarity(nn.Module, LazyModule):

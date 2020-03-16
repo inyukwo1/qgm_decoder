@@ -29,7 +29,7 @@ class TransformerState(State):
         pass
 
     def is_gold(self):
-        return isinstance(self, TransformerStateGold)
+        pass
 
     def step(self):
         self.step_cnt += 1
@@ -75,6 +75,9 @@ class TransformerStateGold(TransformerState):
     def combine_loss(cls, states: List["TransformerStateGold"]) -> SemQL_Loss_New:
         return sum([state.loss for state in states])
 
+    def is_gold(self):
+        return True
+
     def get_history_actions(self) -> List[Action]:
         return self.gold[: self.step_cnt]
 
@@ -93,7 +96,7 @@ class TransformerStateGold(TransformerState):
         ]
         return impossible_indices
 
-    def apply_loss(self, idx, prod: torch.Tensor):
+    def apply_loss(self, idx, prod: torch.Tensor) -> None:
         gold_action = self.gold[idx]
         gold_symbol = gold_action[0]
         if gold_symbol in {"C", "T"}:
@@ -131,6 +134,9 @@ class TransformerStatePred(TransformerState):
     @classmethod
     def get_preds(cls, states: List["TransformerStatePred"]) -> List[List[Action]]:
         return [state.preds for state in states]
+
+    def is_gold(self):
+        return False
 
     def get_history_actions(self) -> List[Action]:
         return self.preds[: self.step_cnt]

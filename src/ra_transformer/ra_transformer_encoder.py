@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 from src.ra_transformer.ra_multi_head_attention import RAMultiheadAttention
 
-
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 

@@ -230,7 +230,7 @@ class TransformerDecoderFramework(nn.Module):
             prev_tensor_dict: Dict[str, Union[List[TensorPromise], TensorPromise]],
         ):
             prev_tensor_list = prev_tensor_dict["infer_prods"]
-            if isinstance(state, TransformerStateGold):
+            if state.is_gold():
                 #for idx, prod_promise in enumerate(prev_tensor_list):
                 #    prod = prod_promise.result
                 if prev_tensor_list:
@@ -364,7 +364,7 @@ class TransformerDecoderFramework(nn.Module):
             history_actions: List[Action] = state.get_history_actions()
             prev_tensor_list = prev_tensor_dict["refine_prods"]
 
-            if isinstance(state, TransformerStateGold):
+            if state.is_gold():
                 # Loss for C T only?
                 symbols = state.get_history_symbols()
                 assert len(symbols) == len(prev_tensor_list)
