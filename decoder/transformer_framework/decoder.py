@@ -93,6 +93,8 @@ class TransformerDecoderFramework(nn.Module):
         tab_lens,
         col_tab_dic,
         golds=None,
+        target_step=0,
+        pred_guide=None,
     ):
         b_size = len(encoded_src)
         if golds:
@@ -116,6 +118,8 @@ class TransformerDecoderFramework(nn.Module):
                     encoded_tab[b_idx, : tab_lens[b_idx]],
                     col_tab_dic[b_idx],
                     self.grammar.start_symbol,
+                    target_step,
+                    pred_guide[b_idx],
                 )
                 for b_idx in range(b_size)
             ]
@@ -240,6 +244,7 @@ class TransformerDecoderFramework(nn.Module):
             else:
                 assert isinstance(state, TransformerStatePred)
                 prod = prev_tensor_list[-1].result
+                state.save_probs(prod)
                 state.apply_pred(prod)
             state.step()
             return prev_tensor_dict
@@ -420,4 +425,4 @@ class TransformerDecoderFramework(nn.Module):
         if golds:
             return TransformerStateGold.combine_loss(states)
         else:
-            return TransformerStatePred.get_preds(states)
+            return TransformerStatePred.get_preds(states), TransformerStatePred.get_probs(states)

@@ -402,10 +402,9 @@ class LazyLinearLinear(nn.Module, LazyModule):
         LazyModule.__init__(self)
         self.in_dim = in_dim
         self.out_dim = out_dim
-        self.module = nn.Sequential(
-            nn.Linear(in_dim, in_dim),
-            nn.Linear(in_dim, out_dim),
-        )
+        self.module_1 = nn.Linear(in_dim, in_dim, bias=False)
+        self.module_2 = lambda q, k: torch.nn.functional.linear(q, k, self.bias)
+        self.bias = nn.Parameter(torch.FloatTensor(out_dim).zero_())
 
     def assert_input(self, *inputs):
         pass
@@ -413,11 +412,13 @@ class LazyLinearLinear(nn.Module, LazyModule):
     def compute(self):
         input_tensors = [item[0] for item in self.later_buffer]
         input_mask = [item[1] for item in self.later_buffer]
+        emb_weights = [item[2] for item in self.later_buffer]
 
         stacked_input = torch.stack(input_tensors)
         stacked_mask = torch.stack(input_mask)
 
-        scores = self.module(stacked_input)
+        pre_scores = self.module_1(stacked_input)
+        scores = self.module_2(pre_scores, emb_weights[0])
         scores.data.masked_fill_(stacked_mask.bool(), float("-inf"))
         probs = torch.softmax(scores, dim=-1)
 

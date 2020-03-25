@@ -44,6 +44,9 @@ class Grammar(nn.Module):
         self.symbol_emb = nn.Embedding(len(self.symbols), emb_dim)
         self.action_emb = nn.Embedding(len(self.action_to_aid), emb_dim)
 
+        nn.init.xavier_normal_(self.action_emb.weight.data)
+        nn.init.xavier_normal_(self.symbol_emb.weight.data)
+
     def _create_grammar(self, manifesto_path):
         cur_line = 0
 

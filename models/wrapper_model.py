@@ -12,6 +12,7 @@ from decoder.transformer_framework.decoder import TransformerDecoderFramework
 from decoder.semql.semql_decoder import SemQL_Decoder
 from decoder.semql_framework.decoder import SemQLDecoderFramework
 from decoder.ra_transformer_framework.decoder import RATransformerDecoder
+from decoder.ensemble.decoder import EnsembleDecoder
 
 from encoder.ra_transformer.encoder import RA_Transformer_Encoder
 from encoder.transformer.encoder import Transformer_Encoder
@@ -41,6 +42,8 @@ class EncoderDecoderModel(nn.Module):
             self.decoder = SemQLDecoderFramework(cfg)
         elif self.decoder_name == "ra_transformer":
             self.decoder = RATransformerDecoder(cfg)
+        elif self.decoder_name == "ensemble":
+            self.decoder = EnsembleDecoder(cfg)
         else:
             raise RuntimeError("Unsupported decoder name: {}".format(self.decoder_name))
 
@@ -225,7 +228,6 @@ class EncoderDecoderModel(nn.Module):
             )
 
             return losses
-
         elif self.decoder_name == "qgm":
             src_mask = batch.src_token_mask
             col_mask = batch.table_token_mask
@@ -280,7 +282,6 @@ class EncoderDecoderModel(nn.Module):
             golds = tmp
             losses = self.decoder(src_encodings, table_embeddings, schema_embeddings, col_tab_dic, golds)
             return losses
-
         else:
             raise RuntimeError("Unsupported Decoder Name")
 
@@ -302,7 +303,7 @@ class EncoderDecoderModel(nn.Module):
 
                 relation_matrix = relation.create_batch(batch.relation)
 
-                src_encodings, table_embedding, schema_embedding = \
+                src_encodings, table_embeddings, schema_embeddings = \
                     self.encoder(src, col, tab, src_len, col_len, tab_len, src_mask, col_mask, tab_mask,
                                  relation_matrix)
             elif self.encoder_name == "transformer":
@@ -336,7 +337,6 @@ class EncoderDecoderModel(nn.Module):
                 table_embeddings = [item["col_encoding"] for item in encoded_out]
                 schema_embeddings = [item["tab_encoding"] for item in encoded_out]
                 enc_last_cell = torch.stack([item["last_cell"] for item in encoded_out])
-
             else:
                 raise RuntimeError("Unsupported encoder name")
 
@@ -428,6 +428,19 @@ class EncoderDecoderModel(nn.Module):
             elif self.decoder_name == "ra_transformer":
                 col_tab_dic = batch.col_table_dict
                 pred = self.decoder(src_encodings, table_embeddings, schema_embeddings, col_tab_dic, golds=None)
+                return pred
+            elif self.decoder_name == "ensemble":
+                col_tab_dic = batch.col_table_dict
+                pred = self.decoder(
+                    src_encodings,
+                    table_embeddings,
+                    schema_embeddings,
+                    batch.src_sents_len,
+                    batch.col_num,
+                    batch.table_len,
+                    col_tab_dic,
+                    golds=None,
+                )
                 return pred
             else:
                 raise RuntimeError("Unsupported decoder name")

@@ -23,7 +23,7 @@ def train(cfg):
     os.chdir("../../../")
 
     # Set random seed
-    utils.set_randome_seed(cfg.seed)
+    utils.set_random_seed(cfg.seed)
 
     # Load dataset
     train_data, val_data, table_data = utils.load_dataset(

@@ -16,6 +16,7 @@ from preprocess.rule import lf
 from preprocess.rule.semQL import *
 from decoder.qgm.utils import filter_datas
 import src.relation as relation
+from src.dataset import Batch
 
 
 wordnet_lemmatizer = WordNetLemmatizer()
@@ -489,8 +490,8 @@ def epoch_acc(
             sql_data, table_data, perm, st, ed, is_col_set=is_col_set,
         )
         example_list += examples
+        pred += model.parse(examples)
         if model_name == "lstm":
-            pred += model.parse(examples)
             tmp = [
                 model.decoder.grammar.create_data(example.qgm) for example in examples
             ]
@@ -505,7 +506,6 @@ def epoch_acc(
             tmp = tmp2
             gold += tmp
         elif model_name == "transformer":
-            pred += model.parse(examples)
             tmp = [
                 model.decoder.grammar.create_data(example.qgm) for example in examples
             ]
@@ -520,10 +520,8 @@ def epoch_acc(
             tmp = tmp2
             gold += tmp
         elif model_name == "qgm":
-            pred += model.parse(examples)
             gold += [example.qgm for example in examples]
         elif model_name == "semql":
-            pred += model.parse(examples)
             tmp = [
                 model.decoder.grammar.create_data(example.qgm) for example in examples
             ]
@@ -532,6 +530,20 @@ def epoch_acc(
                 tmp2 += [
                     [
                         model.decoder.grammar.str_to_action(value)
+                        for value in item.split(" ")
+                    ]
+                ]
+            tmp = tmp2
+            gold += tmp
+        elif model_name == "ensemble":
+            tmp = [
+                model.decoder.models[0].grammar.create_data(example.qgm) for example in examples
+            ]
+            tmp2 = []
+            for item in tmp:
+                tmp2 += [
+                    [
+                        model.decoder.models[0].grammar.str_to_action(value)
                         for value in item.split(" ")
                     ]
                 ]
@@ -735,7 +747,7 @@ def calculate_total_acc(total_accs, data_lens):
     return total_acc
 
 
-def set_randome_seed(seed):
+def set_random_seed(seed):
     torch.autograd.set_detect_anomaly(True)
     # Set random seed
     torch.manual_seed(seed)

@@ -12,74 +12,46 @@ log = logging.getLogger(__name__)
 
 @hydra.main(config_path="config/config.yaml")
 def evaluate(cfg):
-    # Load Training Info
+    # Load Training info
     log_path = os.getcwd()
     os.chdir("../../../")
 
     # Set random seed
-    utils.set_random_seed(cfg.seed)
+    utils.set_random_seed()
 
     # Load dataset
-    train_data, val_data, table_data = utils.load_dataset(
-        cfg.toy, cfg.is_bert, cfg.dataset.path, cfg.query_type
-    )
+    train_data, val_data, table_data = utils.load_dataset(cfg.toy, cfg.is_bert, cfg.dataset.path, cfg.query_type)
+
     # Set model
     if cfg.cuda != -1:
         torch.cuda.set_device(cfg.cuda)
-    model = EncoderDecoderModel(cfg)
-    if cfg.cuda != -1:
-        model.cuda()
 
-    # Load encoder
-    if cfg.decoder_name == "ensemble":
-        # Load trained weight
-        log.info("Load pretrained model from {}".format(cfg.model_path))
-        log.info("with model names: {}".format(str(cfg.model_names)))
-        path = cfg.model_path.format(cfg.model_names[0])
-        pretrained_model = torch.load(
-            path, map_location=lambda storage, loc: storage
-        )
-        # Filter out decoder parameters
-        pretrained_model = {key: item for key, item in pretrained_model.items() if "decoder" not in key}
-        model.decoder.load_model()
-    else:
-        # Load trained weights
-        log.info("Load pretrained model from {}".format(cfg.load_model))
-        pretrained_model = torch.load(
-            cfg.load_model, map_location=lambda storage, loc: storage
-        )
+    # Create models
+    models = []
+    for model_name in cfg.ensemble_num:
+        # Create model
+        model = EncoderDecoderModel(cfg)
+        if cfg.cuda != -1:
+            model.cuda()
 
-    # Load
-    model.load_state_dict(pretrained_model)
+        # Load model weights
+        pretrained_model = torch.load(cfg.load_model, map_location=lambda storage, loc: storage)
+        for k in list(pretrained_model.keys()):
+            if k not in model.state_dict().keys():
+                del pretrained_model[k]
+        model.load_state_dict(pretrained_model)
 
-    # Load word embedding
-    model.word_emb = None if cfg.is_bert else utils.load_word_emb(cfg.glove_embed_path)
+        models += [model]
 
-    # Evaluation
+        model.word_emb = None if cfg.is_bert else utils.load_word_emb(cfg.glove_embed_path)
+
     log.info("Evaluation:")
-
-    (
-        train_total_acc,
-        train_is_correct,
-        train_pred,
-        train_gold,
-        train_list,
-    ) = utils.epoch_acc(
-        model,
-        cfg.batch_size,
-        train_data,
-        table_data,
-        cfg.decoder_name,
-        cfg.is_col_set,
+    train_total_acc, train_is_correct, train_pred, train_gold, train_list = utils.epoch_acc_ensemble(
+        models, cfg.batch_size, train_data, table_data, cfg.model_name, return_details=True,
     )
 
-    dev_total_acc, dev_is_correct, dev_pred, dev_gold, dev_list = utils.epoch_acc(
-        model,
-        cfg.batch_size,
-        val_data,
-        table_data,
-        cfg.decoder_name,
-        cfg.is_col_set,
+    dev_total_acc, dev_is_correct, dev_pred, dev_gold, dev_list = utils.epoch_acc_ensemble(
+        models, cfg.batch_size, val_data, table_data, cfg.model_name, return_details=True,
     )
 
     print("Train Acc: {}".format(train_total_acc["total"]))
@@ -127,6 +99,8 @@ def evaluate(cfg):
         use_col_set=use_col_set,
     )
 
+    # Load trained Weights
+    assert len(cfg.model_names)
 
 if __name__ == "__main__":
     evaluate()

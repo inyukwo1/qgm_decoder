@@ -83,16 +83,15 @@ class RATransformerDecoder(nn.Module):
         return symbol_embeddings
 
     def parse_relation(self, actions: List[Action]) -> List[List[int]]:
-        def parse_dependency(actions: List[Action]):
-            nonterminals = []
-            actions_with_dependency = []
-            for idx, action in enumerate(actions):
-
-
-            # While(
-
-        actions_with_dependency = parse_dependency(actions)
-
+        # def parse_dependency(actions: List[Action]):
+        #     nonterminals = []
+        #     actions_with_dependency = []
+        #     for idx, action in enumerate(actions):
+        #
+        #
+        #     # While(
+        # actions_with_dependency = parse_dependency(actions)
+        return None
         # Parse Relation
         relations: List[List[int]] = []
         for idx1, action1 in enumerate(actions_with_dependency):

@@ -56,7 +56,8 @@ class SemQLDecoderFramework(nn.Module):
         # New
         self.column_pointer_net= LazyMemoryPointerNet(dim, dim)
         self.table_pointer_net = LazyPointerNet(dim, dim)
-        self.dot_product_attention = LazyDotProductAttention(dim*2, dim)
+        self.sketch_dot_product_attention = LazyDotProductAttention(dim * 2, dim)
+        self.detail_dot_product_attention = LazyDotProductAttention(dim * 2, dim)
         self.action_linear_layer = LazyLinearLinear(dim, len(self.grammar.aid_to_action))
 
     def one_dim_zero_tensor(self):
@@ -163,7 +164,7 @@ class SemQLDecoderFramework(nn.Module):
             h_state, _ = state.get_sketch_state()
             src_encodings = state.get_src_encodings()
             aff_sketch_src = state.get_affine_src()
-            att_out = self.dot_product_attention.forward_later(aff_sketch_src, h_state, src_encodings)  # dot product attention + linear + tanh + dropout
+            att_out = self.sketch_dot_product_attention.forward_later(aff_sketch_src, h_state, src_encodings)  # dot product attention + linear + tanh + dropout
             prev_tensor_dict.update({"att_out": att_out})
             return prev_tensor_dict
 
@@ -182,7 +183,8 @@ class SemQLDecoderFramework(nn.Module):
             action_mask[action_ids] = 0
 
             att_emb = state.get_att_emb()
-            action_prob = self.action_linear_layer.forward_later(att_emb, action_mask)  # linear layer + linear layer
+
+            action_prob = self.action_linear_layer.forward_later(att_emb, action_mask, self.grammar.action_emb.weight)  # linear layer + linear layer
             prev_tensor_dict.update({"action_prob": action_prob})
             return prev_tensor_dict
 
@@ -196,12 +198,6 @@ class SemQLDecoderFramework(nn.Module):
                 nonterminal_symbols = self.grammar.parse_nonterminal_symbol(action)
                 state.apply_pred(action, nonterminal_symbols)
             state.step_sketch()
-            # print("sketch_step_cnt:{} step_cnt:{}".format(state.sketch_step_cnt, state.step_cnt))
-            # if isinstance(state, LSTMStateGold):
-            #     print("\tgold: {}".format(state.gold))
-            # if isinstance(state, LSTMStatePred):
-            #     print("\tpred_sketch: {}".format(state.preds_sketch))
-            #     print("\tpred: {}".format(state.preds))
             return {}
 
         def embed_detail_action(state: LSTMState, _) -> Dict:
@@ -237,7 +233,7 @@ class SemQLDecoderFramework(nn.Module):
             h_state, _ = state.get_detail_state()
             src_encodings = state.get_src_encodings()
             aff_detail_src = state.get_affine_src()
-            att_out = self.dot_product_attention.forward_later(aff_detail_src, h_state, src_encodings)
+            att_out = self.detail_dot_product_attention.forward_later(aff_detail_src, h_state, src_encodings)
 
             prev_tensor_dict.update({"att_out": att_out})
             return prev_tensor_dict
@@ -279,7 +275,7 @@ class SemQLDecoderFramework(nn.Module):
                 action_mask = torch.ones(len(self.grammar.action_to_aid)).cuda()
                 action_mask[action_ids] = 0
                 att_emb = state.get_att_emb()
-                action_probs = self.action_linear_layer.forward_later(att_emb, action_mask)
+                action_probs = self.action_linear_layer.forward_later(att_emb, action_mask, self.grammar.action_emb.weight)
                 prev_tensor_dict.update({"prob": action_probs})
 
             return prev_tensor_dict

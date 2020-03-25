@@ -1,4 +1,5 @@
 import torch
+from torch import Tensor
 from typing import List, NewType, Dict
 from framework.sequential_monad import State
 from framework.utils import assert_dim
@@ -116,10 +117,15 @@ class TransformerStatePred(TransformerState):
         encoded_tab,
         col_tab_dic,
         start_symbol: Symbol,
+        target_step = 0,
+        guide = None,
     ):
         TransformerState.__init__(
             self, encoded_src, encoded_col, encoded_tab, col_tab_dic
         )
+        self.guide = guide
+        self.target_step = target_step
+        self.probs = []
         self.preds: List[Action] = []
         self.nonterminal_symbol_stack: List[Symbol] = [start_symbol]
 
@@ -129,11 +135,21 @@ class TransformerStatePred(TransformerState):
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
-        return state.nonterminal_symbol_stack and state.step_cnt < 50
+        if state.guide:
+            return state.nonterminal_symbol_stack and state.step_cnt < 50 and state.step_cnt <= state.target_step
+        else:
+            return state.nonterminal_symbol_stack and state.step_cnt < 50
 
     @classmethod
     def get_preds(cls, states: List["TransformerStatePred"]) -> List[List[Action]]:
         return [state.preds for state in states]
+
+    @classmethod
+    def get_probs(cls, states: List["TransformerStatePred"]) -> List[List[Tensor]]:
+        try:
+            return [state.probs[state.target_step] for state in states]
+        except:
+            stop = 1
 
     def is_gold(self):
         return False
@@ -158,8 +174,20 @@ class TransformerStatePred(TransformerState):
         ]
         return impossible_indices
 
+    def save_probs(self, probs):
+        self.probs += [probs]
+
     def apply_pred(self, prod):
-        pred_idx = torch.argmax(prod).item()
+        if self.guide and self.step_cnt < len(self.guide):
+            action = self.guide[self.step_cnt]
+            if action[0] in ["C", "T"]:
+                pred_idx = action[1]
+            else:
+                action_id = SemQL.semql.action_to_aid[action]
+                pred_idx = action_id
+        else:
+            pred_idx = torch.argmax(prod).item()
+
         current_symbol = self.nonterminal_symbol_stack.pop(0)
         if current_symbol == "C":
             assert_dim([len(self.col_tab_dic)], prod)
