@@ -16,6 +16,7 @@ from decoder.ensemble.decoder import EnsembleDecoder
 
 from encoder.ra_transformer.encoder import RA_Transformer_Encoder
 from encoder.transformer.encoder import Transformer_Encoder
+from encoder.lstm.encoder import LSTMEncoder
 from encoder.irnet.encoder import IRNetLSTMEncoder
 import src.relation as relation
 
@@ -53,7 +54,8 @@ class EncoderDecoderModel(nn.Module):
         if self.encoder_name == "bert":
             self.encoder = None
         elif self.encoder_name == "lstm":
-            self.encoder = IRNetLSTMEncoder(cfg)
+            self.encoder = LSTMEncoder(cfg)
+            #self.encoder = IRNetLSTMEncoder(cfg)
         elif self.encoder_name == "transformer":
             self.encoder = Transformer_Encoder(cfg)
         elif self.encoder_name == "ra_transformer":
@@ -156,7 +158,8 @@ class EncoderDecoderModel(nn.Module):
                 return None, None
             enc_last_cell = last_cell
         elif self.encoder_name == "lstm":
-            encoded_out = self.encoder(examples)
+            encoded_out = self.encoder(batch)
+            # encoded_out = self.encoder(examples)
             src_encodings = [item["src_encoding"] for item in encoded_out]
             table_embeddings = [item["col_encoding"] for item in encoded_out]
             schema_embeddings = [item["tab_encoding"] for item in encoded_out]
@@ -332,7 +335,8 @@ class EncoderDecoderModel(nn.Module):
                     return None, None
                 enc_last_cell = last_cell
             elif self.encoder_name == "lstm":
-                encoded_out = self.encoder(examples)
+                encoded_out = self.encoder(batch)
+                # encoded_out = self.encoder(examples)
                 src_encodings = [item["src_encoding"] for item in encoded_out]
                 table_embeddings = [item["col_encoding"] for item in encoded_out]
                 schema_embeddings = [item["tab_encoding"] for item in encoded_out]

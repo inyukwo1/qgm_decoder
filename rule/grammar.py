@@ -46,6 +46,7 @@ class Grammar(nn.Module):
 
         nn.init.xavier_normal_(self.action_emb.weight.data)
         nn.init.xavier_normal_(self.symbol_emb.weight.data)
+        nn.init.xavier_normal_(self.key_emb.weight.data)
 
     def _create_grammar(self, manifesto_path):
         cur_line = 0

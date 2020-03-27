@@ -146,10 +146,7 @@ class TransformerStatePred(TransformerState):
 
     @classmethod
     def get_probs(cls, states: List["TransformerStatePred"]) -> List[List[Tensor]]:
-        try:
-            return [state.probs[state.target_step] for state in states]
-        except:
-            stop = 1
+        return [state.probs[state.target_step] for state in states]
 
     def is_gold(self):
         return False

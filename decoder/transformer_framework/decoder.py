@@ -119,7 +119,7 @@ class TransformerDecoderFramework(nn.Module):
                     col_tab_dic[b_idx],
                     self.grammar.start_symbol,
                     target_step,
-                    pred_guide[b_idx],
+                    pred_guide[b_idx] if pred_guide else None,
                 )
                 for b_idx in range(b_size)
             ]

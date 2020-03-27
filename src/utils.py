@@ -490,7 +490,11 @@ def epoch_acc(
             sql_data, table_data, perm, st, ed, is_col_set=is_col_set,
         )
         example_list += examples
-        pred += model.parse(examples)
+        if model_name == "transformer":
+            tmp, _ = model.parse(examples)
+            pred += tmp
+        else:
+            pred += model.parse(examples)
         if model_name == "lstm":
             tmp = [
                 model.decoder.grammar.create_data(example.qgm) for example in examples
@@ -553,7 +557,10 @@ def epoch_acc(
             raise RuntimeError("Unsupported model name")
 
     # Calculate acc
-    total_acc, is_correct_list = model.decoder.grammar.cal_acc(pred, gold)
+    if model_name == "ensemble":
+        total_acc, is_correct_list = model.decoder.models[0].grammar.cal_acc(pred, gold)
+    else:
+        total_acc, is_correct_list = model.decoder.grammar.cal_acc(pred, gold)
 
     if return_details:
         return total_acc, is_correct_list, pred, gold, example_list
@@ -676,7 +683,10 @@ def write_eval_result_as(
             q_type_list = []
             for idx in range(len(sql_json["question_arg"])):
                 q = " ".join(sql_json["question_arg"][idx])
-                q_type = " ".join(sql_json["question_arg_type"][idx])
+                try:
+                    q_type = " ".join(sql_json["question_arg_type"][idx])
+                except:
+                    q_type = " ".join([sql_json["question_arg_type"][idx][0]] + sql_json["question_arg_type"][idx][1])
                 q_pad_len = max(len(q), len(q_type)) - len(q)
                 q_type_pad_len = max(len(q), len(q_type)) - len(q_type)
                 q_pad = " " * (q_pad_len // 2)

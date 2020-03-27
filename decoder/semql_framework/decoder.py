@@ -200,6 +200,7 @@ class SemQLDecoderFramework(nn.Module):
             state.step_sketch()
             return {}
 
+        # Functions for decoding details
         def embed_detail_action(state: LSTMState, _) -> Dict:
             action = state.get_prev_action()
             action_emb = self.action_to_emb(state, action) if action else self.one_dim_zero_tensor()
