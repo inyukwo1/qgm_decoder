@@ -611,8 +611,8 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type):
     val_data = load_data_new(val_path, is_toy, is_bert, query_type)
 
     # Create relations
-    train_data = [relation.create_relation(item, table_data, True) for item in train_data]
-    val_data = [relation.create_relation(item, table_data, True) for item in val_data]
+    #train_data = [relation.create_relation(item, table_data, True) for item in train_data]
+    #val_data = [relation.create_relation(item, table_data, True) for item in val_data]
 
     # Show dataset length
     log.info("Total training set: {}".format(len(train_data)))
