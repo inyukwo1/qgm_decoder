@@ -1,3 +1,4 @@
+import copy
 from framework.sequential_monad import State
 
 
@@ -13,6 +14,7 @@ class EnsembleState(State):
         self.col_tab_dic = col_tab_dic
         self.preds = []
         self.nonterminals = ["Root"]
+        self.child_states = []
 
     @classmethod
     def is_not_done(cls, state) -> bool:
@@ -55,7 +57,18 @@ class EnsembleState(State):
     def get_first_nonterminal(self):
         return self.nonterminals[0]
 
+    def get_child_states(self):
+        return self.child_states
+
     def save_pred(self, action, nonterminals):
         self.step_cnt += 1
         self.preds += [action]
         self.nonterminals = nonterminals + self.nonterminals[1:]
+
+    def save_children_state(self, states):
+        self.child_states = states
+
+    def update_children_state(self):
+        for idx, state in enumerate(self.child_states):
+            state.preds[-1] = self.preds[-1]
+            state.nonterminal_symbol_stack = copy.deepcopy(self.nonterminals)

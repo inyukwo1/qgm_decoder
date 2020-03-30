@@ -117,13 +117,11 @@ class TransformerStatePred(TransformerState):
         encoded_tab,
         col_tab_dic,
         start_symbol: Symbol,
-        target_step = 0,
-        guide = None,
+        target_step = 100,
     ):
         TransformerState.__init__(
             self, encoded_src, encoded_col, encoded_tab, col_tab_dic
         )
-        self.guide = guide
         self.target_step = target_step
         self.probs = []
         self.preds: List[Action] = []
@@ -131,22 +129,22 @@ class TransformerStatePred(TransformerState):
 
     @classmethod
     def is_to_refine(cls, state) -> bool:
-        return state.nonterminal_symbol_stack == [] and state.refine_step_cnt < state.step_cnt
+        return False
+        #return state.nonterminal_symbol_stack == [] and state.refine_step_cnt < state.step_cnt
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
-        if state.guide:
-            return state.nonterminal_symbol_stack and state.step_cnt < 50 and state.step_cnt <= state.target_step
-        else:
-            return state.nonterminal_symbol_stack and state.step_cnt < 50
+        return state.nonterminal_symbol_stack and state.step_cnt < 50 and state.step_cnt <= state.target_step
 
     @classmethod
     def get_preds(cls, states: List["TransformerStatePred"]) -> List[List[Action]]:
         return [state.preds for state in states]
 
-    @classmethod
-    def get_probs(cls, states: List["TransformerStatePred"]) -> List[List[Tensor]]:
-        return [state.probs[state.target_step] for state in states]
+    def get_probs(self) -> List[List[Tensor]]:
+        try:
+            return self.probs[self.target_step]
+        except:
+            stop = 1
 
     def is_gold(self):
         return False
@@ -175,15 +173,7 @@ class TransformerStatePred(TransformerState):
         self.probs += [probs]
 
     def apply_pred(self, prod):
-        if self.guide and self.step_cnt < len(self.guide):
-            action = self.guide[self.step_cnt]
-            if action[0] in ["C", "T"]:
-                pred_idx = action[1]
-            else:
-                action_id = SemQL.semql.action_to_aid[action]
-                pred_idx = action_id
-        else:
-            pred_idx = torch.argmax(prod).item()
+        pred_idx = torch.argmax(prod).item()
 
         current_symbol = self.nonterminal_symbol_stack.pop(0)
         if current_symbol == "C":

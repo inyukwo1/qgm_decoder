@@ -93,11 +93,17 @@ class TransformerDecoderFramework(nn.Module):
         tab_lens,
         col_tab_dic,
         golds=None,
-        target_step=0,
-        pred_guide=None,
+        target_step=100,
+        states=None,
     ):
         b_size = len(encoded_src)
-        if golds:
+
+        # Create states
+        if states:
+            state_class = type(states[0])
+            for state in states:
+                state.target_step = target_step
+        elif golds:
             state_class = TransformerStateGold
             states = [
                 TransformerStateGold(
@@ -119,7 +125,6 @@ class TransformerDecoderFramework(nn.Module):
                     col_tab_dic[b_idx],
                     self.grammar.start_symbol,
                     target_step,
-                    pred_guide[b_idx] if pred_guide else None,
                 )
                 for b_idx in range(b_size)
             ]
@@ -425,4 +430,4 @@ class TransformerDecoderFramework(nn.Module):
         if golds:
             return TransformerStateGold.combine_loss(states)
         else:
-            return TransformerStatePred.get_preds(states), TransformerStatePred.get_probs(states)
+            return TransformerStatePred.get_preds(states), states

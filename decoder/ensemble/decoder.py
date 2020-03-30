@@ -57,9 +57,12 @@ class EnsembleDecoder(nn.Module):
 
         def get_individual_model_score(state: EnsembleState, _) -> Dict[str, Tensor]:
             # Pass to individual models and get
-            probs = []
-            for model in self.models:
-                _, prob = model(
+            new_child_states = []
+            # Get states
+            child_states = state.get_child_states()
+
+            for idx, model in enumerate(self.models):
+                _, new_child_state = model(
                     state.get_encoded_src(),
                     state.get_encoded_col(),
                     state.get_encoded_tab(),
@@ -68,16 +71,21 @@ class EnsembleDecoder(nn.Module):
                     state.get_tab_lens(),
                     state.get_col_tab_dic(),
                     target_step=state.get_pred_len(),
-                    pred_guide=state.get_preds(),
+                    states=[child_states[idx]] if child_states else None,
                 )
-                probs += [prob[0]]
+                new_child_states += [new_child_state[0]]
 
+            # Save state_list
+            state.save_children_state(new_child_states)
+
+            probs = [state.get_probs() for state in new_child_states]
             prev_tensor_dict = {"probs": probs}
             return prev_tensor_dict
 
         def vote(state: EnsembleState, prev_tensor_dict: Dict[str, Tensor]) -> Dict[str, Tensor]:
             # Compute Avg
             scores = prev_tensor_dict["probs"]
+
             avg = sum(scores) / len(scores)
 
             # Find highest prob
@@ -98,6 +106,7 @@ class EnsembleDecoder(nn.Module):
 
             # Save
             state.save_pred(action, nonterminals)
+            state.update_children_state()
 
             return None
 

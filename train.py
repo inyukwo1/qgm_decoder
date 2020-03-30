@@ -174,7 +174,7 @@ def train(cfg):
                 )
                 with open(os.path.join(log_path, "best_model.log"), "a") as f:
                     f.write(
-                        "Epoch: {} Train Acc: Val Acc:{}".format(
+                        "Epoch: {} Train Acc: {} Val Acc:{}".format(
                             epoch, train_acc, best_val_acc
                         )
                     )
