@@ -379,7 +379,7 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed, is_col_set=True):
             qgm=process_dict["qgm"],
             # qgm_action=process_dict["rule_label"],
             qgm_action=rule_label,
-            relation=sql['relation'],
+            relation=sql['relation'] if 'relation' in sql else None,
         )
 
         example.sql_json = copy.deepcopy(sql)
@@ -611,8 +611,8 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type):
     val_data = load_data_new(val_path, is_toy, is_bert, query_type)
 
     # Create relations
-    train_data = [relation.create_relation(item, table_data, True) for item in train_data]
-    val_data = [relation.create_relation(item, table_data, True) for item in val_data]
+    #train_data = [relation.create_relation(item, table_data, True) for item in train_data]
+    #val_data = [relation.create_relation(item, table_data, True) for item in val_data]
 
     # Show dataset length
     log.info("Total training set: {}".format(len(train_data)))
