@@ -151,6 +151,7 @@ class End2EndIRNet(End2End):
         num_toks = len(question_toks)
         idx = 0
         tok_concol = []
+        tok_concol_origin = []
         type_concol = []
         nltk_result = nltk.pos_tag(question_toks)
 
@@ -162,6 +163,7 @@ class End2EndIRNet(End2End):
             )
             if header:
                 tok_concol.append(question_toks[idx:end_idx])
+                tok_concol_origin.append(origin_question_toks[idx:end_idx])
                 type_concol.append(["col"])
                 idx = end_idx
                 continue
@@ -170,6 +172,7 @@ class End2EndIRNet(End2End):
             end_idx, tname = group_header(question_toks, idx, num_toks, table_names)
             if tname:
                 tok_concol.append(question_toks[idx:end_idx])
+                tok_concol_origin.append(origin_question_toks[idx:end_idx])
                 type_concol.append(["table"])
                 idx = end_idx
                 continue
@@ -178,6 +181,7 @@ class End2EndIRNet(End2End):
             end_idx, header = group_header(question_toks, idx, num_toks, header_toks)
             if header:
                 tok_concol.append(question_toks[idx:end_idx])
+                tok_concol_origin.append(origin_question_toks[idx:end_idx])
                 type_concol.append(["col"])
                 idx = end_idx
                 continue
@@ -186,6 +190,7 @@ class End2EndIRNet(End2End):
             end_idx, tname = partial_header(question_toks, idx, header_toks_list)
             if tname:
                 tok_concol.append(tname)
+                tok_concol_origin.append(origin_question_toks[idx:end_idx])
                 type_concol.append(["col"])
                 idx = end_idx
                 continue
@@ -194,18 +199,21 @@ class End2EndIRNet(End2End):
             end_idx, agg = group_header(question_toks, idx, num_toks, AGG)
             if agg:
                 tok_concol.append(question_toks[idx:end_idx])
+                tok_concol_origin.append(origin_question_toks[idx:end_idx])
                 type_concol.append(["agg"])
                 idx = end_idx
                 continue
 
             if nltk_result[idx][1] == "RBR" or nltk_result[idx][1] == "JJR":
                 tok_concol.append([question_toks[idx]])
+                tok_concol_origin.append(origin_question_toks[idx:end_idx])
                 type_concol.append(["MORE"])
                 idx += 1
                 continue
 
             if nltk_result[idx][1] == "RBS" or nltk_result[idx][1] == "JJS":
                 tok_concol.append([question_toks[idx]])
+                tok_concol_origin.append(origin_question_toks[idx:end_idx])
                 type_concol.append(["MOST"])
                 idx += 1
                 continue
@@ -218,6 +226,7 @@ class End2EndIRNet(End2End):
                 )
                 if header:
                     tok_concol.append(question_toks[idx:end_idx])
+                    tok_concol_origin.append(origin_question_toks[idx:end_idx])
                     type_concol.append(["col"])
                     idx = end_idx
                     continue
@@ -243,6 +252,7 @@ class End2EndIRNet(End2End):
                     pro_result = "NONE"
                 for tmp in tmp_toks:
                     tok_concol.append([tmp])
+                    tok_concol_origin.append([tmp])
                     type_concol.append([pro_result])
                     pro_result = "NONE"
                 idx = end_idx
@@ -265,6 +275,7 @@ class End2EndIRNet(End2End):
                     pro_result = "NONE"
                 for tmp in tmp_toks:
                     tok_concol.append([tmp])
+                    tok_concol_origin.append([tmp])
                     type_concol.append([pro_result])
                     pro_result = "NONE"
                 idx = end_idx
@@ -273,6 +284,7 @@ class End2EndIRNet(End2End):
             result = group_digital(question_toks, idx)
             if result is True:
                 tok_concol.append(question_toks[idx : idx + 1])
+                tok_concol_origin.append(origin_question_toks[idx : idx + 1])
                 type_concol.append(["value"])
                 idx += 1
                 continue
@@ -280,11 +292,13 @@ class End2EndIRNet(End2End):
                 question_toks[idx] = ["have"]
 
             tok_concol.append([question_toks[idx]])
+            tok_concol_origin.append([origin_question_toks[idx]])
             type_concol.append(["NONE"])
             idx += 1
             continue
 
         entry["question_arg"] = tok_concol
+        entry["question_arg_origin"] = tok_concol_origin
         entry["question_arg_type"] = type_concol
         entry["nltk_pos"] = nltk_result
 
@@ -364,6 +378,7 @@ class End2EndIRNet(End2End):
             table_col_len=len(table_col_name),
             tokenized_src_sent=process_dict["col_set_type"],
             tgt_actions=rule_label,
+            src_sent_origin=process_dict["question_arg_origin"],
         )
         example.sql_json = copy.deepcopy(entry)
         return example
@@ -441,10 +456,21 @@ class End2EndIRNet(End2End):
                     example.table_names = [["<unk>"] for _ in example.table_names]
             return new_examples
 
-        def summarize_attributions(attributions):
-            attributions = attributions.sum(dim=-1).squeeze(0)
-            attributions = attributions / torch.norm(attributions)
-            return attributions
+        def summarize_attributions(
+            src_attributions, col_attributions, tab_attributions
+        ):
+            src_attributions = src_attributions.sum(dim=-1).squeeze(0)
+            col_attributions = col_attributions.sum(dim=-1).squeeze(0)
+            tab_attributions = tab_attributions.sum(dim=-1).squeeze(0)
+
+            concat_attributions = torch.cat(
+                (src_attributions, col_attributions, tab_attributions), dim=-1
+            )
+
+            src_attributions = src_attributions / torch.norm(concat_attributions)
+            col_attributions = col_attributions / torch.norm(concat_attributions)
+            tab_attributions = tab_attributions / torch.norm(concat_attributions)
+            return src_attributions, col_attributions, tab_attributions
 
         def forward_captum_src(
             src_embedding, table_embedding, schema_embedding, examples
@@ -510,13 +536,19 @@ class End2EndIRNet(End2End):
             return_convergence_delta=True,
         )
 
-        src_attributions_sum = summarize_attributions(src_attributions)
-        col_attributions_sum = summarize_attributions(col_attributions)
-        tab_attributions_sum = summarize_attributions(tab_attributions)
+        (
+            src_attributions_sum,
+            col_attributions_sum,
+            tab_attributions_sum,
+        ) = summarize_attributions(src_attributions, col_attributions, tab_attributions)
 
         return (
-            src_attribution_to_html(examples[0].src_sent, src_attributions_sum),
-            tab_col_attribution_to_html(
+            "<b> Attribution of: </b> words of the input sentence </br> <b> For the:</b> ground truth query </br> </br>"
+            + src_attribution_to_html(
+                examples[0].src_sent_origin, src_attributions_sum
+            ),
+            "<b> Attribution of: </b> words of the schema </br> <b> For the:</b> ground truth query </br>"
+            + tab_col_attribution_to_html(
                 examples[0], col_attributions_sum, tab_attributions_sum
             ),
         )

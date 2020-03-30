@@ -14,6 +14,7 @@ from ours.src.utils import (
     get_table_colNames,
     to_batch_seq,
 )
+from ours.my_layerconductance import MyLayerConductance
 from ours.src.rule.sem_utils import (
     alter_column0_one_entry,
     alter_inter_one_entry,
@@ -67,17 +68,13 @@ class End2EndOurs(End2End):
     def eval(self):
         self.model.eval()
 
-    def prepare_model(self, dataset):
-        model_path = "test_models/ours_{}.model".format(dataset)
-        model_path = "test_models/spider_service_bert_basic.model"
+    def load_model(self, dataset):
         arg_parser = arg.init_arg_parser()
         args = arg.init_config(arg_parser)
 
         grammar = semQL.Grammar()
-        _, _, val_sql_data, val_table_data = utils.load_dataset(
-            "./data/{}".format(dataset), use_eval_only=True
-        )
-        self.val_table_data = val_table_data
+        model_path = "test_models/ours_{}.model".format(dataset)
+        model_path = "test_models/spider_service_bert_basic.model"
 
         self.model = IRNet(args, grammar)
 
@@ -97,6 +94,14 @@ class End2EndOurs(End2End):
 
         self.model.eval()
 
+    def prepare_model(self, dataset):
+        _, _, val_sql_data, val_table_data = utils.load_dataset(
+            "./data/{}".format(dataset), use_eval_only=True
+        )
+        self.val_table_data = val_table_data
+
+        self.load_model(dataset)
+
         self.db_values = dict()
 
         schema_dict = dict()
@@ -111,8 +116,8 @@ class End2EndOurs(End2End):
             if db_id not in self.db_values:
                 schema_json = schema_dict[db_id]
                 primary_foreigns = set()
-                # if not db_id == "imdb":
-                #     continue
+                if not db_id == "imdb":
+                    continue
 
                 for f, p in schema_json["foreign_keys"]:
                     primary_foreigns.add(f)
@@ -173,7 +178,7 @@ class End2EndOurs(End2End):
                         else:
                             col_value_set[col] = value_set
                 self.db_values[db_id] = col_value_set
-        # print("lang elliot" in self.db_values["imdb"]["name"])
+        print("lang elliot" in self.db_values["imdb"]["name"])
         self.semql_parser = SemQLConverter("data/{}/tables.json".format(dataset))
 
     def prepare_table(self, db_id, table=None):
@@ -376,7 +381,7 @@ class End2EndOurs(End2End):
             tab_start_end_batch,
         ):
             attributions = attributions.sum(dim=-1).squeeze(0)
-            attributions = attributions / torch.norm(attributions)
+            # attributions = attributions
 
             src_attributions = torch.stack(
                 [attributions[st:ed].sum() for st, ed in word_start_end_batch[0]]
@@ -387,9 +392,9 @@ class End2EndOurs(End2End):
             tab_attributions = torch.stack(
                 [attributions[st:ed].sum() for st, ed in tab_start_end_batch[0]]
             )
-            src_attributions = src_attributions / torch.norm(src_attributions)
-            col_attributions = col_attributions / torch.norm(col_attributions)
-            tab_attributions = tab_attributions / torch.norm(tab_attributions)
+            src_attributions = src_attributions / torch.norm(attributions)
+            col_attributions = col_attributions / torch.norm(attributions)
+            tab_attributions = tab_attributions / torch.norm(attributions)
 
             return src_attributions, col_attributions, tab_attributions
 
@@ -416,7 +421,7 @@ class End2EndOurs(End2End):
                 col_start_end_batch,
                 tab_start_end_batch,
             )
-            return sketch_score + lf_score
+            return (sketch_score + lf_score) * 10
 
         lig = IntegratedGradients(forward_captum)
         examples = to_batch_seq([entry], self.val_table_data, [0], 0, 1, True, table)
@@ -483,16 +488,59 @@ class End2EndOurs(End2End):
             yticklabels=yticklabels,
             linewidth=0.2,
         )
+
+        layer_attrs = []
         plt.xlabel("Tokens")
         plt.ylabel("Layers")
         plt.savefig("fig1.png", dpi=300)  # TODO fix
 
+        lc = MyLayerConductance(
+            forward_captum, [self.model.sketch_decoder_lstm, self.model.lf_decoder_lstm]
+        )
+        layer_attributions, delta = lc.attribute(
+            inputs=input_embedding,
+            baselines=torch.zeros_like(input_embedding),
+            additional_forward_args=(
+                word_start_end_batch,
+                col_start_end_batch,
+                tab_start_end_batch,
+                examples,
+            ),
+            return_convergence_delta=True,
+        )
+        layer_attrs.append(
+            summarize_conductance_attributions(layer_attributions[0])
+            .cpu()
+            .detach()
+            .tolist()
+        )
+        yticklabels = list(range(1, 2))
+        skectch_rule_labels = [
+            w
+            for w in entry["rule_label"].split(" ")
+            if not (w.startsWith("C") and w.startsWith("T") and w.startsWith("A"))
+        ]
+        xticklabels = skectch_rule_labels + entry["rule_label"].split(" ")
+        fig, ax = plt.subplots(figsize=(15, 5))
+        ax = sns.heatmap(
+            np.array(layer_attrs),
+            xticklabels=xticklabels,
+            yticklabels=yticklabels,
+            linewidth=0.2,
+        )
+        plt.xlabel("Tokens")
+        plt.ylabel("Layers")
+        plt.savefig("fig2.png", dpi=300)  # TODO fix
+
         return (
-            src_attribution_to_html(examples[0].src_sent, src_attributions),
-            tab_col_attribution_to_html(
+            "<b> Attribution of: </b> words of the input sentence </br> <b> For the:</b> ground truth query </br> </br>"
+            + src_attribution_to_html(examples[0].src_sent, src_attributions),
+            "<b> Attribution of: </b> words of the schema </br> <b> For the:</b> ground truth query </br>"
+            + tab_col_attribution_to_html(
                 examples[0], col_attributions, tab_attributions
             ),
-            '<img src="http://141.223.199.148:4001/image" >',
+            # "<b> Conductance of: </b> the transformer encoder </br> <b> For the:</b> ground truth query </br>"
+            # + '<img src="http://141.223.199.148:4001/image" >',
         )
 
     def value_predictor(self, db_id, sql, question, value_tok):

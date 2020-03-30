@@ -2,6 +2,7 @@ import torch
 import sklearn
 from validation.check_correctness import compare_two_queries, diff_two_queries
 
+import json
 import os
 from flask_restful import Resource, reqparse, Api
 from flask import Flask
@@ -23,139 +24,6 @@ AGG_SQL = ["count", "avg", "min", "max", "sum"]
 DATASET = ["spider"]
 
 
-def plot_execution(db, sql):
-    filename = ""
-    try:
-        sqlite_db = "sqlite:///" + db
-        disk_engine = create_engine(sqlite_db)
-        df = pd.read_sql_query(sql, disk_engine)
-        print(df)
-        axes = [key for key in df.keys()]
-        contents = [df[key] for key in df.keys()]
-        plot_data = {}
-        plot_data["layout"] = {"autosize": True}
-        new_axes = sql[7 : sql.find("FROM")].split(",")
-        if len(axes) == 1:
-            plot_data["data"] = [
-                gro.Table(
-                    header=dict(
-                        values=new_axes,
-                        line_color="darkslategray",
-                        fill_color="lightskyblue",
-                        align="left",
-                    ),
-                    cells=dict(
-                        values=contents,
-                        line_color="darkslategray",
-                        fill_color="lightcyan",
-                        align="left",
-                    ),
-                )
-            ]
-            plot_data["layout"]["margin"] = {
-                "l": 10,
-                "r": 10,
-                "b": 0,
-                "t": 10,
-                "pad": 0,
-            }
-        elif len(axes) == 2:
-            is_first_agg = False
-            is_second_agg = False
-            for agg_f in AGG_SQL:
-                if agg_f in new_axes[0].lower() and "(" in new_axes[0].lower():
-                    is_first_agg = True
-                if agg_f in new_axes[1].lower() and "(" in new_axes[1].lower():
-                    is_second_agg = True
-
-            if is_first_agg and not is_second_agg:
-                plot_data["data"] = [gro.Bar(x=df[axes[1]], y=df[axes[0]])]
-                plot_data["layout"]["xaxis"] = {
-                    "title": new_axes[1],
-                    "type": "category",
-                }
-                plot_data["layout"]["yaxis"] = {"title": new_axes[0]}
-            elif is_second_agg and not is_first_agg:
-                plot_data["data"] = [gro.Bar(x=df[axes[0]], y=df[axes[1]])]
-                plot_data["layout"]["xaxis"] = {
-                    "title": new_axes[0],
-                    "type": "category",
-                }
-                plot_data["layout"]["yaxis"] = {"title": new_axes[1]}
-            else:
-                plot_data["data"] = [
-                    gro.Table(
-                        header=dict(
-                            values=new_axes,
-                            line_color="darkslategray",
-                            fill_color="lightskyblue",
-                            align="left",
-                        ),
-                        cells=dict(
-                            values=contents,
-                            line_color="darkslategray",
-                            fill_color="lightcyan",
-                            align="left",
-                        ),
-                    )
-                ]
-                plot_data["layout"]["margin"] = {
-                    "l": 10,
-                    "r": 10,
-                    "b": 0,
-                    "t": 10,
-                    "pad": 0,
-                }
-            plot_data["layout"]["height"] = 300
-        else:
-            plot_data["data"] = [
-                gro.Table(
-                    header=dict(
-                        values=new_axes,
-                        line_color="darkslategray",
-                        fill_color="lightskyblue",
-                        align="left",
-                    ),
-                    cells=dict(
-                        values=contents,
-                        line_color="darkslategray",
-                        fill_color="lightcyan",
-                        align="left",
-                    ),
-                )
-            ]
-            plot_data["layout"]["margin"] = {
-                "l": 10,
-                "r": 10,
-                "b": 0,
-                "t": 10,
-                "pad": 0,
-            }
-        filename = os.path.join(
-            "execution_results", "plot" + str(time.strftime("%Y%m%d%H%M%S")) + ".html"
-        )
-        plot_data["layout"]["paper_bgcolor"] = "#fff"
-        plot(plot_data, filename=os.path.join(PLOTDIR, filename), auto_open=False)
-    except Exception as e:
-        results = e
-        filename = ""
-        print(e)
-    return filename
-
-
-def createSSHClient(server, port, user, password):
-    client = paramiko.SSHClient()
-    client.load_system_host_keys()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(server, port, user, password)
-    return client
-
-
-# ssh = createSSHClient('141.223.199.39', '2022', 'hjkim', 'sksmsdi!wkfTodrlszlaguswl33')
-ssh = createSSHClient("141.223.199.39", "2022", "ihna", "Sook2303!@")
-scp = SCPClient(ssh.get_transport())
-
-
 class End2End(metaclass=ABCMeta):
     @abstractmethod
     def prepare_model(self, dataset):
@@ -166,17 +34,341 @@ class End2End(metaclass=ABCMeta):
         pass
 
 
+origin_db_table = {
+    "headers": [
+        [{"name": "cast", "colspan": 9}],
+        [
+            {"name": "movie.mid", "colspan": 1},
+            {"name": "movie.title", "colspan": 1},
+            {"name": "movie.release_year", "colspan": 1},
+            {"name": "tv_series.sid", "colspan": 1},
+            {"name": "tv_series.title", "colspan": 1},
+            {"name": "tv_series.release_year", "colspan": 1},
+            {"name": "actor.aid", "colspan": 1},
+            {"name": "actor.name", "colspan": 1},
+            {"name": "actor.birth_year", "colspan": 1},
+        ],
+    ],
+    "rows": [
+        [
+            "2627267",
+            "100 NO SHIKAKU WO MOTSU ONNA - FUTARI NO BATSUICHI SATSUJIN SôSA 1",
+            "2008",
+            "-",
+            "-",
+            "-",
+            "4479",
+            "ROKURO ABE",
+            "-",
+        ],
+        [
+            "2627616",
+            "1001 INVENTIONS AND THE WORLD OF IBN AL-HAYTHAM",
+            "2015",
+            "-",
+            "-",
+            "-",
+            "3267",
+            "KHALID ABDALLA",
+            "1980",
+        ],
+        [
+            "2627656",
+            "101 BIGGEST CELEBRITY OOPS",
+            "2004",
+            "-",
+            "-",
+            "-",
+            "1718368",
+            "BRAD PITT",
+            "1963",
+        ],
+        [
+            "2627707",
+            "101 SEXIEST CELEBRITY BODIES",
+            "2005",
+            "-",
+            "-",
+            "-",
+            "1718368",
+            "BRAD PITT",
+            "1963",
+        ],
+        [
+            "2627707",
+            "101 SEXIEST CELEBRITY BODIES",
+            "2005",
+            "-",
+            "-",
+            "-",
+            "7131985",
+            "SUNSHINE",
+            "-",
+        ],
+        [
+            "2628257",
+            "12 MEN OF CHRISTMAS",
+            "2009",
+            "-",
+            "-",
+            "-",
+            "6855",
+            "AARON ABRAMS",
+            "1978",
+        ],
+        ["2628399", "120", "2008", "-", "-", "-", "7172", "YASAR ABRAVAYA", "1990",],
+        [
+            "2632907",
+            "2013 MTV MOVIE AWARDS",
+            "2013",
+            "-",
+            "-",
+            "-",
+            "1718368",
+            "BRAD PITT",
+            "1963",
+        ],
+        [
+            "-",
+            "-",
+            "-",
+            "905371",
+            "HEADLINES ON TRIAL",
+            "2006",
+            "1718368",
+            "BRAD PITT",
+            "1963",
+        ],
+        [
+            "-",
+            "-",
+            "-",
+            "905371",
+            "HEADLINES ON TRIAL",
+            "2006",
+            "2466214",
+            "JENNIFER ANISTON",
+            "1969",
+        ],
+    ],
+}
+
+verify_db_table = {
+    "headers": [
+        [{"name": "cast", "colspan": 9}],
+        [
+            {"name": "movie.mid", "colspan": 1},
+            {"name": "movie.title", "colspan": 1},
+            {"name": "movie.release_year", "colspan": 1},
+            {"name": "tv_series.sid", "colspan": 1},
+            {"name": "tv_series.title", "colspan": 1},
+            {"name": "tv_series.release_year", "colspan": 1},
+            {"name": "actor.aid", "colspan": 1},
+            {"name": "actor.name", "colspan": 1},
+            {"name": "actor.birth_year", "colspan": 1},
+        ],
+    ],
+    "rows": [
+        [
+            "2625911",
+            "...FIRST DO NO HARM",
+            "1997",
+            "-",
+            "-",
+            "-",
+            "6512",
+            "CHARLIE ABRAHAMS",
+            "1992",
+        ],
+        [
+            "2627595",
+            "10000 HOURS",
+            "2013",
+            "-",
+            "-",
+            "-",
+            "6261",
+            "APOLLO ABRAHAM",
+            "1972",
+        ],
+        [
+            "2627707",
+            "101 SEXIEST CELEBRITY BODIES",
+            "2005",
+            "-",
+            "-",
+            "-",
+            "1718368",
+            "BRAD PITT",
+            "1963",
+        ],
+        [
+            "2627707",
+            "101 SEXIEST CELEBRITY BODIES",
+            "2005",
+            "-",
+            "-",
+            "-",
+            "7131985",
+            "SUNSHINE",
+            "-",
+        ],
+        [
+            "2628257",
+            "12 MEN OF CHRISTMAS",
+            "2009",
+            "-",
+            "-",
+            "-",
+            "6855",
+            "AARON ABRAMS",
+            "1978",
+        ],
+        [
+            "-",
+            "-",
+            "-",
+            "905371",
+            "HEADLINES ON TRIAL",
+            "2006",
+            "1718368",
+            "BRAD PITT",
+            "1963",
+        ],
+        [
+            "-",
+            "-",
+            "-",
+            "905371",
+            "HEADLINES ON TRIAL",
+            "2006",
+            "2466214",
+            "JENNIFER ANISTON",
+            "1969",
+        ],
+        [
+            "-",
+            "-",
+            "-",
+            "1005702",
+            "IMPERIUM",
+            "2004",
+            "3484963",
+            "ADRIENNE SANTANGELO",
+            "-",
+        ],
+    ],
+}
+
+
+class VerifyService(Resource):
+    def get(self):
+        try:
+            parser = reqparse.RequestParser()
+            parser.add_argument("db_id", required=True, type=str)
+            return {
+                "new_db_instance": verify_db_table,
+                "execution_result": {
+                    "headers": [[{"name": "count(*)", "colspan": 1}]],
+                    "rows": [["4"]],
+                },
+            }
+        except Exception as e:
+            print("done not well")
+            traceback.print_exc()
+            return {"result": str(e)}
+
+
+class DBInstanceService(Resource):
+    def get(self):
+        try:
+            parser = reqparse.RequestParser()
+            parser.add_argument("db_id", required=True, type=str)
+            return {
+                "db_obj": {
+                    "column_names": [
+                        [-1, "*"],
+                        [0, "mid"],
+                        [0, "title"],
+                        [0, "release year"],
+                        [1, "msid"],
+                        [1, "aid"],
+                        [2, "aid"],
+                        [2, "name"],
+                        [2, "birth year"],
+                        [3, "sid"],
+                        [3, "title"],
+                        [3, "release year"],
+                    ],
+                    "column_names_original": [
+                        [-1, "*"],
+                        [0, "mid"],
+                        [0, "title"],
+                        [0, "release_year"],
+                        [1, "msid"],
+                        [1, "aid"],
+                        [2, "aid"],
+                        [2, "name"],
+                        [2, "birth_year"],
+                        [3, "sid"],
+                        [3, "title"],
+                        [3, "release_year"],
+                    ],
+                    "column_types": [
+                        "text",
+                        "number",
+                        "text",
+                        "text",
+                        "number",
+                        "number",
+                        "number",
+                        "text",
+                        "text",
+                        "number",
+                        "text",
+                        "text",
+                    ],
+                    "db_id": "",
+                    "foreign_keys": [[4, 1], [5, 6], [4, 9]],
+                    "primary_keys": [1, 6, 9],
+                    "table_names": ["movie", "cast", "actor", "tv series"],
+                    "table_names_original": ["movie", "cast", "actor", "tv_series"],
+                    "only_cnames": [
+                        "*",
+                        "mid",
+                        "title",
+                        "release year",
+                        "msid",
+                        "aid",
+                        "aid",
+                        "name",
+                        "birth year",
+                        "sid",
+                        "title",
+                        "release year",
+                    ],
+                },
+                "db_instance_table": origin_db_table,
+            }
+        except Exception as e:
+            print("done not well")
+            traceback.print_exc()
+            return {"result": str(e)}
+
+
 class Service(Resource):
     def get(self):
         try:
             parser = reqparse.RequestParser()
             parser.add_argument("model", required=True, type=str)
             parser.add_argument("db_id", required=True, type=str)
+            parser.add_argument("db_obj", required=True, type=str)
             parser.add_argument("question", required=True, type=str)
             parser.add_argument("mode", default="Explore", type=str)
             parser.add_argument("gold_sql", default=None, type=str)
             parser.add_argument("gen_sql", default=None, type=str)
             parser.add_argument("diffmode", default="origin", type=str)
+            parser.add_argument("query_cnt", default=0, type=int)
             args = parser.parse_args()
 
             print(args)
@@ -192,6 +384,7 @@ class Service(Resource):
             return {"result": str(e)}
 
     def handleExploreMode(self, args):
+        table = json.loads(args["db_obj"])
         if args["model"] == "ours":
             model = ours_end2end["spider"]
         elif args["model"] == "irnet":
@@ -203,7 +396,7 @@ class Service(Resource):
         else:
             return
         result_query, actions, question = model.run_model(
-            args["db_id"], args["question"]
+            args["db_id"], args["question"], table
         )
 
         if args["model"] == "irnet-improved":
@@ -218,43 +411,44 @@ class Service(Resource):
                 args["db_id"], result_query, args["question"], " ' value '"
             )
 
-        plot_filename = plot_execution(
-            os.path.join(
-                "./data/{}/database".format("spider"),
-                args["db_id"],
-                args["db_id"] + ".sqlite",
-            ),
-            result_query,
-        )
-        # plot_filename = ""
-
-        if plot_filename == "":
-            return {
-                "result": result_query,
-                "actions": actions,
-                "question": question,
+        # HACK!!!
+        if args["query_cnt"] == 0:
+            execution_result = {
+                "headers": [[{"name": "movie.title", "colspan": 1}]],
+                "rows": [
+                    ["101 BIGGEST CELEBRITY OOPS"],
+                    ["101 SEXIEST CELEBRITY BODIES"],
+                    ["2013 MTV MOVIE AWARDS"],
+                ],
+            }
+        elif args["query_cnt"] == 1:
+            execution_result = {
+                "headers": [[{"name": "count(*)", "colspan": 1}]],
+                "rows": [["7"]],
             }
         else:
-            scp.put(
-                os.path.join(PLOTDIR, plot_filename),
-                os.path.join("/home/ihna/web/build/", plot_filename),
-            )
-            print("Done")
-            return {
-                "result": result_query,
-                "actions": actions,
-                "question": question,
-                "plot_filename": plot_filename,
+            execution_result = {
+                "headers": [[{"name": "count(*)", "colspan": 1}]],
+                "rows": [["4"]],
             }
 
+        print("Done")
+        return {
+            "pred_sql": result_query,
+            "execution_result": execution_result,
+            "actions": actions,
+            "question": question,
+        }
+
     def handleAlalyzeMode(self, args):
+        table = json.loads(args["db_obj"])
         systems = ["ours", "irnet"]
         result_query = {}
         result_query["ours"], _, _ = ours_end2end["spider"].run_model(
-            args["db_id"], args["question"]
+            args["db_id"], args["question"], table
         )
         result_query["irnet"], _, _ = irnet_end2end["spider"].run_model(
-            args["db_id"], args["question"]
+            args["db_id"], args["question"], table
         )
         # result_query["gnn"], _, _ = gnn_end2end["spider"].run_model(
         #     args["db_id"], args["question"]
@@ -314,12 +508,15 @@ class Service(Resource):
 
         # captum
         if args["model"] == "ours":
+            ours_end2end["spider"].load_model("spider")
             captum_results = ours_end2end["spider"].run_captum(
-                args["db_id"], args["question"], args["gold_sql"]
+                args["db_id"], args["question"], args["gold_sql"], table
             )
+            print(captum_results[0])
+            print(captum_results[1])
         elif args["model"] == "irnet":
             captum_results = irnet_end2end["spider"].run_captum(
-                args["db_id"], args["question"], args["gold_sql"]
+                args["db_id"], args["question"], args["gold_sql"], table
             )
         print("Done")
         return {
@@ -357,6 +554,8 @@ if __name__ == "__main__":
     app = Flask("irnet service")
     CORS(app)
     api = Api(app)
+    api.add_resource(DBInstanceService, "/dbinstance")
     api.add_resource(Service, "/service")
+    api.add_resource(VerifyService, "/verify")
     api.add_resource(Image, "/image")
     app.run(host="141.223.199.148", port=4001, debug=False)

@@ -6,6 +6,17 @@ img {
     height: 300px;
 }
 
+table {
+    width: 150px;
+    font-size: 13px;
+    margin: 20px;
+}
+
+th {
+    background-color: cornflowerblue;
+    text-align: center;
+}
+
 .App-explore {
     display: flex;
     flex-direction: column;

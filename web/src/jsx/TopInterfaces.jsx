@@ -45,7 +45,7 @@ class TopInterfaces extends React.Component {
     ) : (
       <div className="schema_text">
         {' '}
-        <b>Schema</b>{' '}
+        <b>Show Table</b>{' '}
       </div>
     );
     return (

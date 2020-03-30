@@ -1,8 +1,8 @@
 import axios from 'axios';
 
-const queryAnalysis = (db_id, model, gen_sql, gold_sql, nlq, url) =>
+const queryAnalysis = (db_id, model, gen_sql, gold_sql, nlq, db_obj) =>
   axios
-    .get(url, {
+    .get('http://141.223.199.148:4001/service', {
       headers: {
         'Access-Control-Allow-Origin': '*',
       },
@@ -14,21 +14,21 @@ const queryAnalysis = (db_id, model, gen_sql, gold_sql, nlq, url) =>
         gen_sql: gen_sql,
         gold_sql: gold_sql,
         question: nlq,
+        db_obj: db_obj,
       },
     })
     .then(response => {
       const pred_results = response.data.pred_results;
       const correct_systems = response.data.result;
       const diff_points = response.data.diff;
-      const similarity = response.data.similarity;
       const captum_results = response.data.captum_results;
+      const analysisAgain = (model, pred) =>
+        queryAnalysis(db_id, model, pred, gold_sql, nlq, db_obj);
       return [
-        db_id,
-        nlq,
+        analysisAgain,
         correct_systems,
         pred_results,
         diff_points,
-        similarity,
         captum_results,
       ];
     });

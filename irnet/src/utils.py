@@ -210,6 +210,7 @@ def process(sql, table):
     process_dict["q_iter_small"] = q_iter_small
     process_dict["col_set_type"] = col_set_type
     process_dict["question_arg"] = question_arg
+    process_dict["question_arg_origin"] = copy.deepcopy(sql["question_arg_origin"])
     process_dict["question_arg_type"] = question_arg_type
     process_dict["one_hot_type"] = one_hot_type
     process_dict["tab_cols"] = tab_cols
@@ -300,6 +301,7 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed, is_train=True, table=None)
             table_col_len=len(table_col_name),
             tokenized_src_sent=process_dict["col_set_type"],
             tgt_actions=rule_label,
+            src_sent_origin=process_dict["question_arg_origin"],
         )
         example.sql_json = copy.deepcopy(sql)
         examples.append(example)

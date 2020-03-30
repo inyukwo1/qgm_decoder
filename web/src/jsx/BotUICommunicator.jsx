@@ -1,5 +1,6 @@
-import queryAnalysis from './AnalysisCommunicator';
 import {models} from '../constants.js';
+import ColWiseTable from './colwisetable';
+import {verifyQuery} from './BackendCommunicator';
 
 const sqlFormatter = sql => {
   const formatted_sql = sql
@@ -17,6 +18,7 @@ const unformatsql = formatted_sql => {
   return sql;
 };
 
+// eslint-disable-next-line no-extend-native
 String.prototype.insert = function(index, string) {
   if (index > 0)
     return (
@@ -94,12 +96,10 @@ class BotUICommunicator {
 
     prepare_analysis_promise.then(analysis_result => {
       const [
-        db_id,
-        nlq,
+        analysisAgain,
         correct_models,
         pred_results,
         pred_sql_wrong_parts,
-        similarity,
         captum_results,
       ] = analysis_result;
 
@@ -112,6 +112,7 @@ class BotUICommunicator {
         const now_selected_index = selected_index + 4 + captum_results.length;
         return {
           name: model_name,
+          visible: _ => true,
           callback: () => {
             this.state.selected_index = now_selected_index;
             this.state.ready_to_analyze = true;
@@ -119,91 +120,142 @@ class BotUICommunicator {
               this.analyzeMessage(
                 gold_sql,
                 pred_results[index],
-                queryAnalysis(
-                  db_id,
-                  model,
-                  pred_results[index],
-                  gold_sql,
-                  nlq,
-                  'http://141.223.199.148:4001/service'
-                ),
+                analysisAgain(model, pred_results[index]),
                 true
               )
             );
           },
         };
       });
-      console.log(selected_index);
-      captum_results.reduce(
-        (prev_promise, captum_result) => {
-          return prev_promise.then(insert_idx => {
-            console.log(captum_result);
-            console.log(this.botui.message);
-            const insert_obj = {
-              type: 'html',
-              content: captum_result,
-              delay: 1000,
-            };
-            this.botui.message.insert(insert_idx, insert_obj);
-            return insert_idx + 1;
-          });
-        },
-        this.botui.message
-          .update(selected_index, {
-            content: 'Incorrectly predicted phrases are highlighted in red.',
+      captum_results
+        .reduce(
+          (prev_promise, captum_result) => {
+            return prev_promise.then(insert_idx => {
+              const insert_obj = {
+                type: 'html',
+                content: captum_result,
+                delay: 1000,
+              };
+              this.botui.message.insert(insert_idx, insert_obj);
+              return insert_idx + 1;
+            });
+          },
+          new Promise((resolve, reject) => {
+            resolve(selected_index);
           })
-          .then(_ =>
-            this.oneBotInsertMessage(
-              selected_index + 1,
-              sqlFormatterWithWrongParts(pred_sql, pred_sql_wrong_parts)
+        )
+        .then(index =>
+          this.botui.message
+            .update(index, {
+              content: 'Incorrectly predicted phrases are highlighted in red.',
+            })
+            .then(_ =>
+              this.oneBotInsertMessage(
+                index + 1,
+                sqlFormatterWithWrongParts(pred_sql, pred_sql_wrong_parts)
+              )
             )
-          )
-          .then(_ =>
-            this.oneBotInsertMessageWithButtons(
-              selected_index + 2,
-              'Recommended Models: ',
-              recommend_buttons
+            .then(_ =>
+              this.oneBotInsertMessageWithButtons(
+                index + 2,
+                'Correct model(s) for this question: </br> </br>',
+                recommend_buttons
+              )
             )
-          )
-          .then(_ => selected_index + 3)
-      );
+            .then(_ => index + 3)
+        );
       this.state.ready_to_analyze = false;
     });
   }
 
-  exploreMessage(nlq, promise_result) {
+  exploreMessage(isverifying, nlq, promise_result) {
     this.sequentialHumanBotMessage([nlq], ['processing...'])
       .then(_ => promise_result)
-      .then(pred_sql_filename => {
-        const [pred_sql, plot_filename] = pred_sql_filename;
+      .then(result => {
+        const [pred_sql, execution_result] = result;
         this.botui.message
           .remove(-1)
-          .then(_ =>
-            this.botui.message.bot({
-              content: sqlFormatter(pred_sql),
-              delay: 100,
+          .then(_ => this.oneBotMessage('The result is: '))
+          .then(_ => {
+            const table = ColWiseTable(execution_result);
+            return this.botui.message.insert_with_button(-1, {
+              type: 'html',
+              content: table,
+              delay: 1000,
               add_button: true,
               toggle_callback: this.callback,
+              nlq_ref_idx: -2,
+              buttons: [
+                {
+                  name: 'Verify',
+                  callback: index => {
+                    this.verifyMessage(index + 3, nlq, pred_sql, verifyQuery());
+                  },
+                  visible: _ => isverifying(),
+                },
+              ],
+            });
+          })
+          .then(_ => this.oneBotMessage('The underlying SQL query is: '))
+          .then(_ =>
+            this.botui.message.bot({
+              type: 'html',
+              content: sqlFormatter(pred_sql),
+              delay: 1000,
+              correct_ref_idx: -2,
+              nlq_ref_idx: -4,
             })
-          )
-          .then(_ => {
-            if (plot_filename) {
-              this.botui.message.bot({
-                type: 'embed',
-                content: plot_filename,
-                delay: 1000,
-              });
-            } else {
-              return this.oneBotMessage(
-                'The generated SQL query is not executable.'
-              );
-            }
-          });
+          );
       })
       .catch(err => {
         this.oneBotMessage(err);
       });
   }
+
+  verifyMessage(insert_idx, nlq, pred_sql, verify_promise) {
+    return verify_promise.then(verify_result => {
+      const [new_db_instance, execution_result] = verify_result;
+      const db_instance_table = ColWiseTable(new_db_instance);
+      const execution_result_table = ColWiseTable(execution_result);
+      return this.oneBotInsertMessage(insert_idx, 'Verify with a new table: ')
+        .then(index => this.oneBotInsertHTMLMessage(index, db_instance_table))
+        .then(index => this.oneBotInsertMessage(index, 'The question is: '))
+        .then(index => this.oneBotInsertMessage(index, nlq))
+        .then(index => this.oneBotInsertMessage(index, 'The result is: '))
+        .then(index => {
+          return this.botui.message.insert(index, {
+            type: 'html',
+            content: execution_result_table,
+            delay: 1000,
+            add_button: true,
+            toggle_callback: this.callback,
+            nlq_ref_idx: -2,
+          });
+        })
+        .then(index => index + 1)
+        .then(index =>
+          this.oneBotInsertMessage(index, 'The underlying SQL query is: ')
+        )
+        .then(index =>
+          this.botui.message.insert(index, {
+            type: 'html',
+            content: sqlFormatter(pred_sql),
+            delay: 1000,
+            correct_ref_idx: -2,
+            nlq_ref_idx: -4,
+          })
+        );
+    });
+  }
+
+  drawDBInstance = db_instance => {
+    const table = ColWiseTable(db_instance);
+    const description_with_table =
+      'Instance 14 was selected: </br> </br>' + table;
+    return this.oneBotHTMLMessage(description_with_table).then(_ =>
+      this.oneBotMessage("Done! What's yout question?")
+    );
+  };
 
   oneBotInsertMessageWithButtons = (index, content, buttons, delay = 1000) =>
     this.botui.message
@@ -214,6 +266,15 @@ class BotUICommunicator {
       })
       .then(this.callback)
       .then(_ => index + 1);
+
+  oneBotHTMLMessage = content =>
+    this.botui.message
+      .bot({
+        type: 'html',
+        content: content,
+        delay: 1000,
+      })
+      .then(this.callback);
 
   oneBotMessage = content =>
     this.botui.message
@@ -232,11 +293,21 @@ class BotUICommunicator {
       .then(this.callback)
       .then(_ => index + 1);
 
+  oneBotInsertHTMLMessage = (index, content, delay = 1000) =>
+    this.botui.message
+      .insert(index, {
+        type: 'html',
+        content: content,
+        delay: delay,
+      })
+      .then(this.callback)
+      .then(_ => index + 1);
+
   OneBotInsertCheckboxTable = (index, delay = 1000) =>
     new Promise((resolve, reject) =>
       this.botui.message
         .insert_with_checkbox_table(index, {
-          content: 'Please select attribution analysis options: ',
+          content: 'Please select analysis options: </br> </br>',
           delay: delay,
           callback: () => {
             resolve(index + 1);
@@ -244,11 +315,11 @@ class BotUICommunicator {
           headers: [
             [
               {
-                name: 'gold',
+                name: 'Ground truth',
                 colspan: 1,
               },
               {
-                name: 'pred',
+                name: 'Generated',
                 colspan: 1,
               },
             ],
@@ -258,11 +329,11 @@ class BotUICommunicator {
             {
               category: [
                 {
-                  name: 'input',
+                  name: 'Input',
                   rowspan: 2,
                 },
                 {
-                  name: 'words in the sentence',
+                  name: 'Words in the sentence',
                   rowspan: 1,
                 },
               ],
@@ -271,7 +342,7 @@ class BotUICommunicator {
             {
               category: [
                 {
-                  name: 'schema',
+                  name: 'Schema',
                   rowspan: 1,
                 },
               ],
@@ -280,7 +351,7 @@ class BotUICommunicator {
             {
               category: [
                 {
-                  name: 'encoder',
+                  name: 'Encoder',
                   rowspan: 2,
                 },
                 {
@@ -302,7 +373,7 @@ class BotUICommunicator {
             {
               category: [
                 {
-                  name: 'decoder',
+                  name: 'Decoder',
                   rowspan: 2,
                 },
                 {

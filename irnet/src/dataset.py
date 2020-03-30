@@ -37,9 +37,11 @@ class Example:
         table_col_len=None,
         col_pred=None,
         tokenized_src_sent=None,
+        src_sent_origin=None,
     ):
 
         self.src_sent = src_sent
+        self.src_sent_origin = src_sent_origin
         self.tokenized_src_sent = tokenized_src_sent
         self.vis_seq = vis_seq
         self.tab_cols = tab_cols

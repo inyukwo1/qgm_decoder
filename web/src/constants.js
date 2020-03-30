@@ -54,8 +54,7 @@ export const select_styles = {
     option: (base, state) => ({
         ...base,
         backgroundColor: state.isSelected ?
-            '#1c52a3' :
-            state.isFocused ? '#e3edfc' : 'white',
+            '#1c52a3' : state.isFocused ? '#e3edfc' : 'white',
     }),
     indicatorSeparator: base => ({
         ...base,
@@ -102,6 +101,7 @@ export const models = [
 export const loading_files = [
     { label: 'Load...', value: 'load' },
     { label: 'George', value: 'george' },
+    { label: 'John', value: 'john' },
     { label: 'Tom', value: 'tom' },
     { label: 'Jill', value: 'jill' },
     { label: 'Bryan', value: 'bryan' },

@@ -38,10 +38,11 @@ def process_data_one_entry(entry, english_RelatedTo, english_IsA, db_values):
             r"[^,.():;\"`?! ]+|[,.():;\"?!]", entry["question"].replace("'", " ' ")
         )
     ]
-    question_toks = [wordnet_lemmatizer.lemmatize(x) for x in origin_question_toks]
+    # question_toks = [wordnet_lemmatizer.lemmatize(x) for x in origin_question_toks]
+    question_toks = origin_question_toks
     entry["origin_question_toks"] = entry["question_toks"]
     entry["origin_question_toks_for_value"] = entry["question_toks"]
-    entry["question_toks"] = origin_question_toks
+    # entry["question_toks"] = origin_question_toks
 
     table_names = []
     table_names_pattern = []

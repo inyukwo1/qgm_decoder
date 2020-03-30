@@ -5,13 +5,16 @@ import BottomInterfaces from './BottomInterfaces';
 import MiddleInterfaces from './MiddleInterfaces';
 import Examples from './Examples';
 import BotUICommunicator from './BotUICommunicator';
-import queryTextToSQL from './BackendCommunicator';
+import {queryTextToSQL, getDBInstance} from './BackendCommunicator';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'botui/build/botui-theme-default.css';
 import 'botui/build/botui.min.css';
 import '../css/App.scss';
 import SpeechRecognition from 'react-speech-recognition';
 import queryAnalysis from './AnalysisCommunicator';
+
+// HACK!!!
+let query_cnt = 0;
 
 class App extends React.Component {
   componentDidMount() {
@@ -50,6 +53,7 @@ class App extends React.Component {
     mode: 'Explore',
     analyze_sql: '',
     analyze_nlq: '',
+    db_obj: null,
   };
 
   handleClickedMic = clicked => {
@@ -81,12 +85,14 @@ class App extends React.Component {
     });
     this.BotUICommunicator.sequentialHumanBotMessage(
       [e.label],
-      [
-        'Selecting ' + e.value + '...',
-        '![one of my article](' + e.img + ')',
-        "Done! What's your question?",
-      ]
-    );
+      ['Randomly selecting a database instance from ' + e.value + '...']
+    )
+      .then(_ => getDBInstance(e.value))
+      .then(response => {
+        const [db_obj, db_instance_table] = response;
+        this.setState({db_obj: db_obj});
+        this.BotUICommunicator.drawDBInstance(db_instance_table);
+      });
   };
 
   handleModelChange = val => {
@@ -123,13 +129,16 @@ class App extends React.Component {
         model: '',
       });
     } else {
-      this._messageVisible();
       this.setState({
         file: val,
+      });
+      this.setState({
         db_id: 'imdb',
         model: 'irnet',
       });
     }
+    console.log(this.BotUICommunicator);
+    this.BotUICommunicator.botui.message.updateMsgs();
   };
 
   handleNLQChange = e => {
@@ -178,7 +187,7 @@ class App extends React.Component {
           pred_sql,
           gold_sql,
           analyze_nlq,
-          'http://141.223.199.148:4001/service'
+          this.state.db_obj
         )
       );
       this._initInput();
@@ -188,9 +197,11 @@ class App extends React.Component {
     const db_id = this.state.db_id;
     const model = this.state.model;
     this.BotUICommunicator.exploreMessage(
+      _ => this.state.file === 'john',
       nlq,
-      queryTextToSQL(db_id, model, nlq, 'http://141.223.199.148:4001/service')
+      queryTextToSQL(db_id, model, nlq, this.state.db_obj, query_cnt)
     );
+    query_cnt += 1;
     this._initInput();
   };
 
@@ -201,7 +212,7 @@ class App extends React.Component {
   };
 
   incorrectClickAnalyzeCallback = (next_index, pred_sql, nlq) => {
-    this.BotUICommunicator.OneBotInsertCheckboxTable(next_index + 1)
+    this.BotUICommunicator.OneBotInsertCheckboxTable(next_index)
       .then(index =>
         this.BotUICommunicator.oneBotInsertMessage(
           index,
@@ -272,7 +283,7 @@ class App extends React.Component {
             file={this.state.file}
             clicked_mic={this.state.clicked_mic}
             original_nlq={this.state.original_nlq}
-            hide_loading={this.state.mode === 'Explore'}
+            hide_loading={false}
           />
           <Examples db_id={this.state.db_id} />
         </div>
