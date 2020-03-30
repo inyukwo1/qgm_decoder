@@ -379,7 +379,7 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed, is_col_set=True):
             qgm=process_dict["qgm"],
             # qgm_action=process_dict["rule_label"],
             qgm_action=rule_label,
-            relation=sql['relation'],
+            relation=sql['relation'] if 'relation' in sql else None,
         )
 
         example.sql_json = copy.deepcopy(sql)
