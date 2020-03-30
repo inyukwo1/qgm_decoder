@@ -17,6 +17,7 @@ from decoder.ensemble.decoder import EnsembleDecoder
 from encoder.ra_transformer.encoder import RA_Transformer_Encoder
 from encoder.transformer.encoder import Transformer_Encoder
 from encoder.lstm.encoder import LSTMEncoder
+from encoder.bert.encoder import BERT
 from encoder.irnet.encoder import IRNetLSTMEncoder
 import src.relation as relation
 
@@ -52,7 +53,7 @@ class EncoderDecoderModel(nn.Module):
 
         # Encoder
         if self.encoder_name == "bert":
-            self.encoder = None
+            self.encoder = BERT(cfg)
         elif self.encoder_name == "lstm":
             self.encoder = LSTMEncoder(cfg)
             #self.encoder = IRNetLSTMEncoder(cfg)

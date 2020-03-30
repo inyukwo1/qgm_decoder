@@ -129,8 +129,7 @@ class TransformerStatePred(TransformerState):
 
     @classmethod
     def is_to_refine(cls, state) -> bool:
-        return False
-        #return state.nonterminal_symbol_stack == [] and state.refine_step_cnt < state.step_cnt
+        return state.nonterminal_symbol_stack == [] and state.refine_step_cnt < state.step_cnt
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
@@ -141,10 +140,7 @@ class TransformerStatePred(TransformerState):
         return [state.preds for state in states]
 
     def get_probs(self) -> List[List[Tensor]]:
-        try:
-            return self.probs[self.target_step]
-        except:
-            stop = 1
+        return self.probs[self.target_step]
 
     def is_gold(self):
         return False

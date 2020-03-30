@@ -13,10 +13,12 @@ class RA_Transformer_Encoder(nn.Module):
         layer_num = cfg.layer_num
         hidden_size = cfg.hidden_size
         dim = hidden_size
+        self.is_bert = cfg.is_bert
 
-        self.sen_lstm = nn.LSTM(dim, hidden_size // 2, bidirectional=True, batch_first=True)
-        self.col_lstm = nn.LSTM(dim, hidden_size // 2, bidirectional=True, batch_first=True)
-        self.tab_lstm = nn.LSTM(dim, hidden_size // 2, bidirectional=True, batch_first=True)
+        if not self.is_bert:
+            self.sen_lstm = nn.LSTM(dim, hidden_size // 2, bidirectional=True, batch_first=True)
+            self.col_lstm = nn.LSTM(dim, hidden_size // 2, bidirectional=True, batch_first=True)
+            self.tab_lstm = nn.LSTM(dim, hidden_size // 2, bidirectional=True, batch_first=True)
 
         encoder_layer = RATransformerEncoderLayer(d_model=dim, nhead=nhead, nrelation=N_RELATIONS)
         self.ra_transformer_encoder = RATransformerEncoder(encoder_layer, num_layers=layer_num)
@@ -24,9 +26,10 @@ class RA_Transformer_Encoder(nn.Module):
 
     def forward(self, sen, col, tab, sen_len, col_len, tab_len, sen_mask, col_mask, tab_mask, relation):
         # LSTM
-        sen = self.encode_with_lstm(sen, sen_len, self.sen_lstm)
-        col = self.encode_with_lstm(col, col_len, self.col_lstm)
-        tab = self.encode_with_lstm(tab, tab_len, self.tab_lstm)
+        if not self.is_bert:
+            sen = self.encode_with_lstm(sen, sen_len, self.sen_lstm)
+            col = self.encode_with_lstm(col, col_len, self.col_lstm)
+            tab = self.encode_with_lstm(tab, tab_len, self.tab_lstm)
 
         # Get len
         sen_max_len = sen.shape[1]
@@ -61,10 +64,7 @@ class RA_Transformer_Encoder(nn.Module):
     def encode_with_lstm(self, src_emb, src_len, lstm):
         # Sort
         sorted_len, sorted_data_indices = torch.tensor(src_len).sort(0, descending=True)
-        try:
-            sorted_src_emb = src_emb[sorted_data_indices]
-        except:
-            stop=1
+        sorted_src_emb = src_emb[sorted_data_indices]
 
         # Encode
         packed_src_emb = pack_padded_sequence(sorted_src_emb, sorted_len, batch_first=True)
