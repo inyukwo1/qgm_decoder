@@ -38,6 +38,7 @@ class Example:
         qgm=None,
         qgm_action=None,
         relation=None,
+        gt=None,
     ):
         self.src_sent = src_sent
         self.tokenized_src_sent = tokenized_src_sent
@@ -68,6 +69,7 @@ class Example:
         self.qgm_action = qgm_action
         self.sketch = list()
         self.relation = relation
+        self.gt = gt
         if self.truth_actions:
             for ta in self.truth_actions:
                 if (
@@ -134,6 +136,7 @@ class Batch(object):
         self.qgm = [e.qgm for e in examples]
         self.qgm_action = [e.qgm_action for e in examples]
         self.relation = [e.relation for e in examples]
+        self.gt = [e.gt for e in examples]
 
         self.grammar = grammar
         self.cuda = is_cuda

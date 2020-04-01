@@ -3,15 +3,16 @@ from framework.sequential_monad import State
 
 
 class EnsembleState(State):
-    def __init__(self, encoded_src, encoded_col, encoded_tab, src_len, col_len, tab_len, col_tab_dic):
+    def __init__(self, src_len, col_len, tab_len, col_tab_dic, gt):
         self.step_cnt = 0
-        self.encoded_src = encoded_src
-        self.encoded_col = encoded_col
-        self.encoded_tab = encoded_tab
+        self.encoded_src = []
+        self.encoded_col = []
+        self.encoded_tab = []
         self.src_len = src_len
         self.col_len = col_len
         self.tab_len = tab_len
         self.col_tab_dic = col_tab_dic
+        self.gt = gt
         self.preds = []
         self.nonterminals = ["Root"]
         self.child_states = []
@@ -27,14 +28,14 @@ class EnsembleState(State):
     def get_prev_action(self):
         return self.preds[-1]
 
-    def get_encoded_src(self):
-        return self.encoded_src.unsqueeze(0)
+    def get_encoded_src(self, idx):
+        return self.encoded_src[idx].unsqueeze(0)
 
-    def get_encoded_col(self):
-        return self.encoded_col.unsqueeze(0)
+    def get_encoded_col(self, idx):
+        return self.encoded_col[idx].unsqueeze(0)
 
-    def get_encoded_tab(self):
-        return self.encoded_tab.unsqueeze(0)
+    def get_encoded_tab(self, idx):
+        return self.encoded_tab[idx].unsqueeze(0)
 
     def get_src_lens(self):
         return [self.src_len]
@@ -59,6 +60,11 @@ class EnsembleState(State):
 
     def get_child_states(self):
         return self.child_states
+
+    def append_encoded_values(self, src, col, tab):
+        self.encoded_src.append(src)
+        self.encoded_col.append(col)
+        self.encoded_tab.append(tab)
 
     def save_pred(self, action, nonterminals):
         self.step_cnt += 1

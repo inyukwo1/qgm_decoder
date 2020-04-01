@@ -141,7 +141,8 @@ class Grammar(nn.Module):
         return [self.symbol_to_sid[symbol] for symbol in symbols]
 
     # action - symbol Translation
-    def str_to_action(self, action_str):
+    @classmethod
+    def str_to_action(cls, action_str):
         symbol, id = action_str.split("(")
         id = int(id.split(")")[0])
         return (symbol, id)

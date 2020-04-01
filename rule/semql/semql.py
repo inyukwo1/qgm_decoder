@@ -18,7 +18,8 @@ class SemQL(Grammar):
     def create_loss_object(self):
         return SemQL_Loss(self.symbol_to_sid)
 
-    def create_data(self, qgm_boxes):
+    @classmethod
+    def create_data(cls, qgm_boxes):
         # Simple query only
         qgm_box = qgm_boxes[0]
 

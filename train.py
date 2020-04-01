@@ -10,6 +10,7 @@ from radam import RAdam
 from torch.utils.tensorboard import SummaryWriter
 
 from src import utils
+from rule.semql.semql import SemQL
 from models.wrapper_model import EncoderDecoderModel
 #from models.LSTMEncoderQGMTransformerDecoder import LSTMEncoderQGMTransformerDecoder
 
@@ -25,17 +26,21 @@ def train(cfg):
     # Set random seed
     utils.set_random_seed(cfg.seed)
 
-    # Load dataset
-    train_data, val_data, table_data = utils.load_dataset(
-        cfg.toy, cfg.is_bert, cfg.dataset.path, cfg.query_type
-    )
-
     # Set model
     if cfg.cuda != -1:
         torch.cuda.set_device(cfg.cuda)
     model = EncoderDecoderModel(cfg)
     if cfg.cuda != -1:
         model.cuda()
+
+    # Load dataset
+    train_data, val_data, table_data = utils.load_dataset(
+        cfg.toy, cfg.is_bert, cfg.dataset.path, cfg.query_type
+    )
+
+    # Append anw
+    train_data = utils.append_ground_truth(SemQL, train_data)
+    val_data = utils.append_ground_truth(SemQL, val_data)
 
     # Set optimizer
     optimizer_cls = (

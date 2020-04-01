@@ -90,10 +90,10 @@ def load_word_emb(file_name, use_small=False):
                     ret[info[0]] = np.array(list(map(lambda x: float(x), info[1:])))
         with open(cache_name, "wb") as cache_file:
             pickle.dump(ret, cache_file)
-    # Add key words
-    key_words = ["[db]", "[table]", "[column]", "[value]"]
-    for key_word in key_words:
-        ret[key_word] = np.random.randn(300)
+    # # Add key words
+    # key_words = ["[db]", "[table]", "[column]", "[value]"]
+    # for key_word in key_words:
+    #     ret[key_word] = np.random.randn(300)
     return ret
 
 
@@ -380,6 +380,7 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed, is_col_set=True):
             # qgm_action=process_dict["rule_label"],
             qgm_action=rule_label,
             relation=sql['relation'] if 'relation' in sql else None,
+            gt=sql["gt"],
         )
 
         example.sql_json = copy.deepcopy(sql)
@@ -540,25 +541,14 @@ def epoch_acc(
             tmp = tmp2
             gold += tmp
         elif model_name == "ensemble":
-            tmp = [
-                model.decoder.models[0].grammar.create_data(example.qgm) for example in examples
-            ]
-            tmp2 = []
-            for item in tmp:
-                tmp2 += [
-                    [
-                        model.decoder.models[0].grammar.str_to_action(value)
-                        for value in item.split(" ")
-                    ]
-                ]
-            tmp = tmp2
-            gold += tmp
+            for example in examples:
+                gold += [example.gt]
         else:
             raise RuntimeError("Unsupported model name")
 
     # Calculate acc
     if model_name == "ensemble":
-        total_acc, is_correct_list = model.decoder.models[0].grammar.cal_acc(pred, gold)
+        total_acc, is_correct_list = model.decoder.decoders[0].grammar.cal_acc(pred, gold)
     else:
         total_acc, is_correct_list = model.decoder.grammar.cal_acc(pred, gold)
 
@@ -611,8 +601,8 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type):
     val_data = load_data_new(val_path, is_toy, is_bert, query_type)
 
     # Create relations
-    #train_data = [relation.create_relation(item, table_data, True) for item in train_data]
-    #val_data = [relation.create_relation(item, table_data, True) for item in val_data]
+    train_data = [relation.create_relation(item, table_data, True) for item in train_data]
+    val_data = [relation.create_relation(item, table_data, True) for item in val_data]
 
     # Show dataset length
     log.info("Total training set: {}".format(len(train_data)))
@@ -765,3 +755,12 @@ def set_random_seed(seed):
         torch.cuda.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
+
+
+def append_ground_truth(grammar, data_list):
+    for idx, data in enumerate(data_list):
+        gt_str = grammar.create_data(data["qgm"])
+        data_list[idx]["gt"] = [grammar.str_to_action(item) for item in gt_str.split(" ")]
+
+    return data_list
+

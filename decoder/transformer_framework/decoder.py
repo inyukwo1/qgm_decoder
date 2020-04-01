@@ -137,7 +137,6 @@ class TransformerDecoderFramework(nn.Module):
                 self.action_to_embedding(state, action) for action in history_actions
             ]
             current_action_embedding = self.onedim_zero_tensor()
-            #current_action_embedding = self.grammar.get_key_emb()
             history_action_embeddings += [current_action_embedding]
             action_embeddings = torch.stack(history_action_embeddings, dim=0)
             action_embeddings_promise: TensorPromise = self.action_affine_layer.forward_later(

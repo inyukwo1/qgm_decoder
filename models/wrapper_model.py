@@ -64,6 +64,10 @@ class EncoderDecoderModel(nn.Module):
         else:
             raise RuntimeError("Unsupported encoder name")
 
+        # Key embeddings
+        self.key_emb = nn.Embedding(4, 300).double()
+
+
         if self.encoder_name != "bert":
             self.without_bert_params = list(self.parameters(recurse=True))
 
@@ -76,7 +80,20 @@ class EncoderDecoderModel(nn.Module):
             is_list = True
         for i, one_q in enumerate(q):
             if not is_list:
-                q_val = list(
+                q_val = []
+                for w in one_q:
+                    if w == "[db]":
+                        q_val.append(self.key_emb[torch.tensor(0)])
+                    elif w == "[table]":
+                        q_val.append(self.key_emb[torch.tensor(1)])
+                    elif w == "[column]":
+                        q_val.append(self.key_emb[torch.tensor(3)])
+                    elif w == "[value]":
+                        q_val.append(self.key_emb[torch.tensor(4)])
+                    else:
+                        q_val.append(self.word_emb.get(w, self.word_emb["unk"]))
+
+                q_val2 = list(
                     map(
                         lambda x: self.word_emb.get(
                             x, np.zeros(self.embed_size, dtype=np.float32),
@@ -84,13 +101,25 @@ class EncoderDecoderModel(nn.Module):
                         one_q,
                     )
                 )
+                print("Warning!")
+                raise RuntimeWarning("Check this logic")
             else:
                 q_val = []
                 for ws in one_q:
                     emb_list = []
                     ws_len = len(ws)
                     for w in ws:
-                        emb_list.append(self.word_emb.get(w, self.word_emb["unk"]))
+                        if w == "[db]":
+                            emb_list.append(self.key_emb.weight[0])
+                        elif w == "[table]":
+                            emb_list.append(self.key_emb.weight[1])
+                        elif w == "[column]":
+                            emb_list.append(self.key_emb.weight[2])
+                        elif w == "[value]":
+                            emb_list.append(self.key_emb.weight[3])
+                        else:
+                            numpy_emb = self.word_emb.get(w, self.word_emb["unk"])
+                            emb_list.append(torch.tensor(numpy_emb).cuda())
                     if ws_len == 0:
                         raise Exception("word list should not be empty!")
                     elif ws_len == 1:
@@ -102,14 +131,11 @@ class EncoderDecoderModel(nn.Module):
             val_len[i] = len(q_val)
         max_len = max(val_len)
 
-        val_emb_array = np.zeros((B, max_len, self.embed_size), dtype=np.float32)
+        val_emb_array = torch.zeros((B, max_len, self.embed_size)).cuda()
         for i in range(B):
             for t in range(len(val_embs[i])):
                 val_emb_array[i, t, :] = val_embs[i][t]
-        val_inp = torch.from_numpy(val_emb_array)
-        if self.is_cuda:
-            val_inp = val_inp.cuda()
-        return val_inp
+        return val_emb_array
 
     def forward(self, examples):
         # now should implement the examples
@@ -404,7 +430,6 @@ class EncoderDecoderModel(nn.Module):
                 tab_mask = batch.schema_token_mask
                 col_tab_dic = batch.col_table_dict
                 b_indices = torch.arange(len(batch)).cuda()
-
                 self.decoder.set_variables(
                     self.is_bert,
                     src_encodings,
@@ -435,16 +460,35 @@ class EncoderDecoderModel(nn.Module):
                 pred = self.decoder(src_encodings, table_embeddings, schema_embeddings, col_tab_dic, golds=None)
                 return pred
             elif self.decoder_name == "ensemble":
+                #Pass batch
+                src = self.gen_x_batch(batch.src_sents)
+                col = self.gen_x_batch(batch.table_sents)
+                tab = self.gen_x_batch(batch.table_names)
+
+                src_len = batch.src_sents_len
+                col_len = [len(item) for item in batch.table_sents]
+                tab_len = [len(item) for item in batch.table_names]
+
+                src_mask = batch.src_token_mask
+                col_mask = batch.table_token_mask
+                tab_mask = batch.schema_token_mask
+
+                relation_matrix = relation.create_batch(batch.relation)
                 col_tab_dic = batch.col_table_dict
+
                 pred = self.decoder(
-                    src_encodings,
-                    table_embeddings,
-                    schema_embeddings,
-                    batch.src_sents_len,
-                    batch.col_num,
-                    batch.table_len,
+                    src,
+                    col,
+                    tab,
+                    src_len,
+                    col_len,
+                    tab_len,
+                    src_mask,
+                    col_mask,
+                    tab_mask,
+                    relation_matrix,
                     col_tab_dic,
-                    golds=None,
+                    batch.gt,
                 )
                 return pred
             else:

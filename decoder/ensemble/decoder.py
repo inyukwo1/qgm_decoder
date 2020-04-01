@@ -2,9 +2,11 @@ from typing import Dict
 from torch import Tensor
 import torch
 import torch.nn as nn
+from encoder.ra_transformer.encoder import RA_Transformer_Encoder
 from decoder.transformer_framework.decoder import TransformerDecoderFramework
 from decoder.ensemble.state import EnsembleState
 from framework.sequential_monad import SequentialMonad, WhileLogic, LogicUnit
+from rule.semql.semql import SemQL
 
 
 class EnsembleDecoder(nn.Module):
@@ -12,48 +14,63 @@ class EnsembleDecoder(nn.Module):
         super(EnsembleDecoder, self).__init__()
         self.cfg = cfg
         self.model_num = 0
-        self.models = []
+        self.encoders = []
+        self.decoders = []
 
     def load_model(self):
         for model_name in self.cfg.model_names:
             path = self.cfg.model_path.format(model_name)
-            pretrained_decoder = torch.load(path, map_location=lambda storage, loc: storage)
-            pretrained_decoder = {key.replace("decoder.", ""): item for key, item in pretrained_decoder.items() if "decoder." in key}
+            pretrained_weights = torch.load(path, map_location=lambda storage, loc: storage)
+            pretrained_encoder = {".".join(key.split(".")[1:]) : item for key, item in pretrained_weights.items() if
+                                  "encoder." in key}
+            pretrained_decoder = {key.replace("decoder.", ""): item for key, item in pretrained_weights.items() if
+                                  "decoder." in key}
 
-            model = TransformerDecoderFramework(self.cfg)
-            model.load_state_dict(pretrained_decoder)
+            encoder = RA_Transformer_Encoder(self.cfg)
+            encoder.load_state_dict(pretrained_encoder)
+            self.encoders += [encoder]
 
-            self.models += [model]
-        self.model_num = len(self.models)
+            decoder = TransformerDecoderFramework(self.cfg)
+            decoder.load_state_dict(pretrained_decoder)
+            self.decoders += [decoder]
+
+        self.model_num = len(self.decoders)
 
         # Setting
-        for model in self.models:
+        for model in self.decoders:
+            model.eval()
+            model.cuda()
+        for model in self.encoders:
             model.eval()
             model.cuda()
 
     def forward(self,
-        encoded_src,
-        encoded_col,
-        encoded_tab,
-        src_lens,
-        col_lens,
-        tab_lens,
+        src,
+        col,
+        tab,
+        src_len,
+        col_len,
+        tab_len,
+        src_mask,
+        col_mask,
+        tab_mask,
+        relation_matrix,
         col_tab_dic,
-        golds=None
+        gt,
         ):
-        b_size = len(encoded_src)
-        states = [
-                EnsembleState(
-                    encoded_src[b_idx, : src_lens[b_idx]],
-                    encoded_col[b_idx, : col_lens[b_idx]],
-                    encoded_tab[b_idx, : tab_lens[b_idx]],
-                    src_lens[b_idx],
-                    col_lens[b_idx],
-                    tab_lens[b_idx],
-                    col_tab_dic[b_idx],
-                    )
-                for b_idx in range(b_size)
-            ]
+        b_size = len(src)
+
+        states = [EnsembleState(src_len[b_idx], col_len[b_idx], tab_len[b_idx], col_tab_dic[b_idx], gt[b_idx]) for b_idx in range(b_size)]
+
+        # Encoder
+        for encoder in self.encoders:
+            encoded_src, encoded_col, encoded_tab = \
+                encoder(src, col, tab, src_len, col_len, tab_len, src_mask, col_mask, tab_mask, relation_matrix)
+            # save into state
+            for b_idx in range(b_size):
+                states[b_idx].append_encoded_values(encoded_src[b_idx, : src_len[b_idx]],
+                    encoded_col[b_idx, : col_len[b_idx]],
+                    encoded_tab[b_idx, : tab_len[b_idx]])
 
         def get_individual_model_score(state: EnsembleState, _) -> Dict[str, Tensor]:
             # Pass to individual models and get
@@ -61,11 +78,11 @@ class EnsembleDecoder(nn.Module):
             # Get states
             child_states = state.get_child_states()
 
-            for idx, model in enumerate(self.models):
+            for idx, model in enumerate(self.decoders):
                 _, new_child_state = model(
-                    state.get_encoded_src(),
-                    state.get_encoded_col(),
-                    state.get_encoded_tab(),
+                    state.get_encoded_src(idx),
+                    state.get_encoded_col(idx),
+                    state.get_encoded_tab(idx),
                     state.get_src_lens(),
                     state.get_col_lens(),
                     state.get_tab_lens(),
@@ -78,7 +95,7 @@ class EnsembleDecoder(nn.Module):
             # Save state_list
             state.save_children_state(new_child_states)
 
-            probs = [state.get_probs() for state in new_child_states]
+            probs = [s.get_probs() for s in new_child_states]
             prev_tensor_dict = {"probs": probs}
             return prev_tensor_dict
 
@@ -86,10 +103,80 @@ class EnsembleDecoder(nn.Module):
             # Compute Avg
             scores = prev_tensor_dict["probs"]
 
-            avg = sum(scores) / len(scores)
+            aids = [action[1] if action[0] in ["C", "T"] else SemQL.semql.action_to_aid[action] for action in state.gt]
+            if state.step_cnt < len(state.gt):
+                gt = state.gt[state.step_cnt]
+                gt = gt[1] if gt[0] in ["C", "T"] else SemQL.semql.action_to_aid[gt]
+                gt_action = state.gt[state.step_cnt]
+            else:
+                gt = -1
+                gt_action = "-1"
+
+            max_indices = [torch.argmax(score).item() for score in scores]
 
             # Find highest prob
-            pred_idx = torch.argmax(avg).item()
+            # Soft voting
+            soft_voting = True
+            avg = sum(scores) / len(scores)
+            if soft_voting:
+                pred_idx = torch.argmax(avg).item()
+            # Hard voting
+            else:
+                from collections import Counter
+                counter = Counter(max_indices)
+                max_num = 0
+                max_list = []
+                for key, value in counter.items():
+                    if value > max_num:
+                        max_num = value
+                        max_list = [key]
+                    elif value == max_num:
+                        max_list += [key]
+
+                # Soft voting with max_list
+                max_value = float("-inf")
+                max_idx = -1
+                for idx in max_list:
+                    value = avg[idx]
+                    if value >= max_value:
+                        max_idx = idx
+                        max_value = value
+
+                pred_idx = max_idx
+
+            def printt(tag):
+                with open("tmp.txt", "a") as f:
+                    f.write(tag+"\n")
+                    f.write("aids: {}\n".format(aids))
+                    f.write("ground_truth: {} {}\n".format(gt_action, gt))
+                    f.write("avg_idx: {}\n".format(pred_idx))
+                    f.write("avg_score: {}\n".format(avg))
+                    for score in scores:
+                        max_idx = torch.argmax(score).item()
+                        f.write("max_idx: {}\n".format(max_idx))
+                        f.write("score: {}\n\n".format(score))
+
+            # If all pred same
+            with open("tmp.txt", "a") as f:
+                f.write("cnt!\n")
+
+            right_wrong = [item == gt for item in max_indices]
+            # All wrong
+            if gt not in max_indices:
+                if pred_idx == gt:
+                    printt("All wrong and final right")
+                else:
+                    printt("All wrong and final wrong")
+            elif False in right_wrong:
+                if pred_idx == gt:
+                    printt("some right and final right")
+                else:
+                    printt("some right and final wrong")
+            else:
+                if pred_idx == gt:
+                    printt("All right and final right")
+                else:
+                    printt("All right and final wrong")
 
             prev_tensor_dict.update({"pred_idx": pred_idx})
             return prev_tensor_dict
@@ -101,8 +188,8 @@ class EnsembleDecoder(nn.Module):
             if symbol in ["C", "T"]:
                 action = (symbol, pred_idx)
             else:
-                action = self.models[0].grammar.aid_to_action[pred_idx]
-            nonterminals = self.models[0].grammar.parse_nonterminal_symbol(action)
+                action = self.decoders[0].grammar.aid_to_action[pred_idx]
+            nonterminals = self.decoders[0].grammar.parse_nonterminal_symbol(action)
 
             # Save
             state.save_pred(action, nonterminals)
