@@ -52,7 +52,8 @@ def create_relation(data, dbs, use_col_set=True):
     table = split_words(table)
 
     # Sen - Sen
-    qq_relation = parse_q_q_relation(data["question_arg"], data["question_relation"])
+    question_relations = data["question_relation"] if "question_relation" in data else None
+    qq_relation = parse_q_q_relation(data["question_arg"], question_relations)
 
     # Sen & Col
     qc_relation = parse_match_relation(tokens, column_name, "q", "c")
@@ -224,7 +225,7 @@ def parse_c_c_relation(cols, foreign_keys, fp_relations):
 
 def parse_q_q_relation(sentence, relation_matrix):
     USE_DEP = False
-    if USE_DEP:
+    if USE_DEP and relation_matrix:
         new_relation_matrix = []
         for relations in relation_matrix:
             new_relation_matrix += [[RELATION_TYPE[str(relation)] for relation in relations]]
