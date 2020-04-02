@@ -18,7 +18,8 @@ class EnsembleDecoder(nn.Module):
         self.decoders = []
 
     def load_model(self):
-        for model_name in self.cfg.model_names:
+        key_embs = []
+        for idx, model_name in enumerate(self.cfg.model_names):
             path = self.cfg.model_path.format(model_name)
             pretrained_weights = torch.load(path, map_location=lambda storage, loc: storage)
             pretrained_encoder = {".".join(key.split(".")[1:]) : item for key, item in pretrained_weights.items() if
@@ -33,6 +34,7 @@ class EnsembleDecoder(nn.Module):
             decoder = TransformerDecoderFramework(self.cfg)
             decoder.load_state_dict(pretrained_decoder)
             self.decoders += [decoder]
+            key_embs += [pretrained_weights["key_emb.weight"]]
 
         self.model_num = len(self.decoders)
 
@@ -43,11 +45,12 @@ class EnsembleDecoder(nn.Module):
         for model in self.encoders:
             model.eval()
             model.cuda()
+        return key_embs
 
     def forward(self,
-        src,
-        col,
-        tab,
+        srcs,
+        cols,
+        tabs,
         src_len,
         col_len,
         tab_len,
@@ -58,12 +61,15 @@ class EnsembleDecoder(nn.Module):
         col_tab_dic,
         gt,
         ):
-        b_size = len(src)
+        b_size = len(srcs[0])
 
         states = [EnsembleState(src_len[b_idx], col_len[b_idx], tab_len[b_idx], col_tab_dic[b_idx], gt[b_idx]) for b_idx in range(b_size)]
 
         # Encoder
-        for encoder in self.encoders:
+        for idx, encoder in enumerate(self.encoders):
+            src = srcs[idx]
+            col = cols[idx]
+            tab = tabs[idx]
             encoded_src, encoded_col, encoded_tab = \
                 encoder(src, col, tab, src_len, col_len, tab_len, src_mask, col_mask, tab_mask, relation_matrix)
             # save into state

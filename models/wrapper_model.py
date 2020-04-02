@@ -65,13 +65,17 @@ class EncoderDecoderModel(nn.Module):
             raise RuntimeError("Unsupported encoder name")
 
         # Key embeddings
-        self.key_emb = nn.Embedding(4, 300).double()
-
+        self.key_embs = [nn.Embedding(4, 300).double() for _ in range(8)]
 
         if self.encoder_name != "bert":
             self.without_bert_params = list(self.parameters(recurse=True))
 
-    def gen_x_batch(self, q):
+    def load_model(self):
+        key_embs = self.decoder.load_model()
+        for idx, key_emb in enumerate(key_embs):
+            self.key_embs[idx].weight = nn.Parameter(key_emb.cuda())
+
+    def gen_x_batch(self, q, iidx):
         B = len(q)
         val_embs = []
         val_len = np.zeros(B, dtype=np.int64)
@@ -83,13 +87,13 @@ class EncoderDecoderModel(nn.Module):
                 q_val = []
                 for w in one_q:
                     if w == "[db]":
-                        q_val.append(self.key_emb[torch.tensor(0)])
+                        emb_list.append(self.key_embs[iidx].weight[0])
                     elif w == "[table]":
-                        q_val.append(self.key_emb[torch.tensor(1)])
+                        emb_list.append(self.key_embs[iidx].weight[1])
                     elif w == "[column]":
-                        q_val.append(self.key_emb[torch.tensor(3)])
+                        emb_list.append(self.key_embs[iidx].weight[2])
                     elif w == "[value]":
-                        q_val.append(self.key_emb[torch.tensor(4)])
+                        emb_list.append(self.key_embs[iidx].weight[3])
                     else:
                         q_val.append(self.word_emb.get(w, self.word_emb["unk"]))
 
@@ -110,13 +114,13 @@ class EncoderDecoderModel(nn.Module):
                     ws_len = len(ws)
                     for w in ws:
                         if w == "[db]":
-                            emb_list.append(self.key_emb.weight[0])
+                            emb_list.append(self.key_embs[iidx].weight[0])
                         elif w == "[table]":
-                            emb_list.append(self.key_emb.weight[1])
+                            emb_list.append(self.key_embs[iidx].weight[1])
                         elif w == "[column]":
-                            emb_list.append(self.key_emb.weight[2])
+                            emb_list.append(self.key_embs[iidx].weight[2])
                         elif w == "[value]":
-                            emb_list.append(self.key_emb.weight[3])
+                            emb_list.append(self.key_embs[iidx].weight[3])
                         else:
                             numpy_emb = self.word_emb.get(w, self.word_emb["unk"])
                             emb_list.append(torch.tensor(numpy_emb).cuda())
@@ -319,23 +323,24 @@ class EncoderDecoderModel(nn.Module):
         with torch.no_grad():
             batch = Batch(examples, is_cuda=self.is_cuda)
             if self.encoder_name == "ra_transformer":
-                src = self.gen_x_batch(batch.src_sents)
-                col = self.gen_x_batch(batch.table_sents)
-                tab = self.gen_x_batch(batch.table_names)
-
-                src_len = batch.src_sents_len
-                col_len = [len(item) for item in batch.table_sents]
-                tab_len = [len(item) for item in batch.table_names]
-
-                src_mask = batch.src_token_mask
-                col_mask = batch.table_token_mask
-                tab_mask = batch.schema_token_mask
-
-                relation_matrix = relation.create_batch(batch.relation)
-
-                src_encodings, table_embeddings, schema_embeddings = \
-                    self.encoder(src, col, tab, src_len, col_len, tab_len, src_mask, col_mask, tab_mask,
-                                 relation_matrix)
+                # src = self.gen_x_batch(batch.src_sents)
+                # col = self.gen_x_batch(batch.table_sents)
+                # tab = self.gen_x_batch(batch.table_names)
+                #
+                # src_len = batch.src_sents_len
+                # col_len = [len(item) for item in batch.table_sents]
+                # tab_len = [len(item) for item in batch.table_names]
+                #
+                # src_mask = batch.src_token_mask
+                # col_mask = batch.table_token_mask
+                # tab_mask = batch.schema_token_mask
+                #
+                # relation_matrix = relation.create_batch(batch.relation)
+                #
+                # src_encodings, table_embeddings, schema_embeddings = \
+                #     self.encoder(src, col, tab, src_len, col_len, tab_len, src_mask, col_mask, tab_mask,
+                #                  relation_matrix)
+                pass
             elif self.encoder_name == "transformer":
                 (
                     src_encodings,
@@ -461,9 +466,9 @@ class EncoderDecoderModel(nn.Module):
                 return pred
             elif self.decoder_name == "ensemble":
                 #Pass batch
-                src = self.gen_x_batch(batch.src_sents)
-                col = self.gen_x_batch(batch.table_sents)
-                tab = self.gen_x_batch(batch.table_names)
+                srcs = [self.gen_x_batch(batch.src_sents, idx) for idx in range(len(self.decoder.decoders))]
+                cols = [self.gen_x_batch(batch.table_sents, idx) for idx in range(len(self.decoder.decoders))]
+                tabs = [self.gen_x_batch(batch.table_names, idx) for idx in range(len(self.decoder.decoders))]
 
                 src_len = batch.src_sents_len
                 col_len = [len(item) for item in batch.table_sents]
@@ -474,12 +479,13 @@ class EncoderDecoderModel(nn.Module):
                 tab_mask = batch.schema_token_mask
 
                 relation_matrix = relation.create_batch(batch.relation)
+
                 col_tab_dic = batch.col_table_dict
 
                 pred = self.decoder(
-                    src,
-                    col,
-                    tab,
+                    srcs,
+                    cols,
+                    tabs,
                     src_len,
                     col_len,
                     tab_len,

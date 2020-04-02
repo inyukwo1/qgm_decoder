@@ -33,14 +33,14 @@ def evaluate(cfg):
     )
 
     # Append anw
-    train_data = utils.append_ground_truth(SemQL, train_data)
+    # train_data = utils.append_ground_truth(SemQL, train_data)
     val_data = utils.append_ground_truth(SemQL, val_data)
 
     # Load encoder
     if cfg.decoder_name == "ensemble":
         # Load trained weight
         log.info("Load pretrained model from {}".format(cfg.model_path))
-        model.decoder.load_model()
+        model.load_model()
     else:
         # Load trained weights
         log.info("Load pretrained model from {}".format(cfg.load_model))
