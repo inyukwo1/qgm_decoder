@@ -29,7 +29,7 @@ class RATransformerState(State):
         pass
 
     def get_history_symbols(self) -> List[Symbol]:
-        return [item[1] for item in self.get_history_actions()]
+        return [item[0] for item in self.get_history_actions()]
 
     def get_current_symbol(self) -> Symbol:
         pass

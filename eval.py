@@ -88,6 +88,15 @@ def evaluate(cfg):
     # train_out_path = os.path.join(log_path, "train.result")
     dev_out_path = os.path.join(log_path, "dev.result")
 
+    # # Save outputs from train
+    # assert len(train_pred) == len(train_gold) and len(train_gold) == len(train_list)
+    # if cfg.model_name == "transformer":
+    #     # Format pred
+    #     tmp = []
+    #     for pred in train_pred:
+    #         tmp += [" ".join(["{}({})".format(*item) for item in pred])]
+    #     train_pred = tmp
+
     # utils.write_eval_result_as(
     #     train_out_path,
     #     train_list,
@@ -111,6 +120,8 @@ def evaluate(cfg):
     # dev_is_correct
     indices = [idx for idx, item in enumerate(dev_is_correct) if item == True]
     print(indices)
+
+    utils.analyze_regarding_schema_size(dev_list, dev_is_correct, dev_pred, dev_gold, table_data)
 
 if __name__ == "__main__":
     evaluate()

@@ -1,6 +1,7 @@
 decoder_name: ensemble
 is_col_set: true
-model_path: ./logs/03-25/{}/model/best_model.pt
+model_path: ./logs/04-01/{}/model/best_model.pt
 #model_names: [seed_100, seed_200, seed_300, seed_400, seed_500, seed_600, seed_700, seed_800]
 #model_names: [seed_100, seed_200, seed_300, seed_400]
-model_names: [seed_300]
+#model_names: [seed_100, seed_200]
+model_names: [seed_100, seed_200, seed_300]

@@ -764,3 +764,106 @@ def append_ground_truth(grammar, data_list):
 
     return data_list
 
+def analyze_regarding_schema_size(examples, is_correct, preds, golds, table_data):
+    tab_acc_dic = {}
+    col_acc_dic = {}
+    tab_cnt_dic = {}
+    col_cnt_dic = {}
+    # table: action, column, table
+    tab_cnt_act_dic = {}
+    tab_cnt_col_dic = {}
+    tab_cnt_tab_dic = {}
+
+    # column: action, column, table
+    col_cnt_act_dic = {}
+    col_cnt_col_dic = {}
+    col_cnt_tab_dic = {}
+
+    # Column number for table num
+    col_cnt_tab_cnt = {}
+
+    for example, correct, pred, gold in zip(examples, is_correct, preds, golds):
+        # Categorize by schema size
+        db = table_data[example.db_id]
+        col_len = len(db["column_names"])
+        tab_len = len(db["table_names"])
+
+        # Initialize and count for col
+        if col_len not in col_acc_dic:
+            col_cnt_tab_cnt[col_len] = set()
+            col_cnt_tab_cnt[col_len].add(tab_len)
+
+            col_acc_dic[col_len] = 0
+            col_cnt_dic[col_len] = 1
+            # Detailed analysis
+            col_cnt_act_dic[col_len] = 0
+            col_cnt_col_dic[col_len] = 0
+            col_cnt_tab_dic[col_len] = 0
+        else:
+            col_cnt_dic[col_len] += 1
+            col_cnt_tab_cnt[col_len].add(tab_len)
+
+        # Initialize and count for tab
+        if tab_len not in tab_acc_dic:
+            tab_acc_dic[tab_len] = 0
+            tab_cnt_dic[tab_len] = 1
+
+            # Detailed analysis
+            tab_cnt_act_dic[tab_len] = 0
+            tab_cnt_col_dic[tab_len] = 0
+            tab_cnt_tab_dic[tab_len] = 0
+        else:
+            tab_cnt_dic[tab_len] += 1
+
+        # Count correct
+        if pred == gold:
+            tab_acc_dic[tab_len] += 1
+            col_acc_dic[col_len] += 1
+        # Count wrong
+        else:
+            min_len = min(len(pred), len(gold))
+            for idx in range(min_len):
+                if pred[idx] != gold[idx]:
+                    if gold[idx][0] == "C":
+                        tab_cnt_col_dic[tab_len] += 1
+                        col_cnt_col_dic[col_len] += 1
+                    elif gold[idx][0] == "T":
+                        tab_cnt_tab_dic[tab_len] += 1
+                        col_cnt_tab_dic[col_len] += 1
+                    else:
+                        tab_cnt_act_dic[tab_len] += 1
+                        col_cnt_act_dic[col_len] += 1
+                    break
+
+    for key, item in sorted(col_acc_dic.items()):
+        cnt = col_cnt_dic[key]
+        acc = item / cnt
+        action_acc = 1 - col_cnt_act_dic[key] / cnt
+        col_acc = 1 - col_cnt_col_dic[key] / cnt
+        tab_acc = 1 - col_cnt_tab_dic[key] / cnt
+        print("Column size: {}  cnt: {}  Total Acc: {}  Action Acc: {}  Column Acc: {}  Table Acc: {}".format(key, cnt, acc, action_acc, col_acc, tab_acc))
+    print("")
+    for key, item in sorted(tab_acc_dic.items()):
+        cnt = tab_cnt_dic[key]
+        acc = item / cnt
+        action_acc = 1 - tab_cnt_act_dic[key] / cnt
+        col_acc = 1 - tab_cnt_col_dic[key] / cnt
+        tab_acc = 1 - tab_cnt_tab_dic[key] / cnt
+        print("Table size: {}  cnt: {}  Total Acc: {}  Action Acc: {}  Column Acc: {}  Table Acc: {}".format(key, cnt, acc, action_acc, col_acc, tab_acc))
+
+    tab_cnt_col_cnt = {}
+    for col_len in col_cnt_tab_cnt.keys():
+        tab_lens = col_cnt_tab_cnt[col_len]
+        print("col_len: {} tab_len: {}".format(col_len, tab_lens))
+
+        for tab_len in tab_lens:
+            if tab_len not in tab_cnt_col_cnt.keys():
+                tab_cnt_col_cnt[tab_len] = set()
+                tab_cnt_col_cnt[tab_len].add(col_len)
+            else:
+                tab_cnt_col_cnt[tab_len].add(col_len)
+
+    print("")
+    for tab_len in tab_cnt_col_cnt.keys():
+        col_len = tab_cnt_col_cnt[tab_len]
+        print("tab_len: {} col_len: {}".format(tab_len, col_len))
