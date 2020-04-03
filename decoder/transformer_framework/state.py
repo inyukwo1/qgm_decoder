@@ -129,8 +129,7 @@ class TransformerStatePred(TransformerState):
 
     @classmethod
     def is_to_refine(cls, state) -> bool:
-        return False
-        #return state.nonterminal_symbol_stack == [] and state.refine_step_cnt < state.step_cnt
+        return state.nonterminal_symbol_stack == [] and state.refine_step_cnt < state.step_cnt
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
