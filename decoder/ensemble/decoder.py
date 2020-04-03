@@ -109,60 +109,65 @@ class EnsembleDecoder(nn.Module):
             # Compute Avg
             scores = prev_tensor_dict["probs"]
 
-            aids = [action[1] if action[0] in ["C", "T"] else SemQL.semql.action_to_aid[action] for action in state.gt]
-            if state.step_cnt < len(state.gt):
-                gt = state.gt[state.step_cnt]
-                gt = gt[1] if gt[0] in ["C", "T"] else SemQL.semql.action_to_aid[gt]
-                gt_action = state.gt[state.step_cnt]
-            else:
-                gt = -1
-                gt_action = "-1"
+            # aids = [action[1] if action[0] in ["C", "T"] else SemQL.semql.action_to_aid[action] for action in state.gt]
+            # if state.step_cnt < len(state.gt):
+            #     gt = state.gt[state.step_cnt]
+            #     gt = gt[1] if gt[0] in ["C", "T"] else SemQL.semql.action_to_aid[gt]
+            #     gt_action = state.gt[state.step_cnt]
+            # else:
+            #     gt = -1
+            #     gt_action = "-1"
 
             max_indices = [torch.argmax(score).item() for score in scores]
 
             # Find highest prob
             # Soft voting
-            soft_voting = False
+            soft_voting = True
             avg = sum(scores) / len(scores)
-            if soft_voting:
-                pred_idx = torch.argmax(avg).item()
-            # Hard voting
+            act_only = False
+            current_symbol = state.nonterminals[0]
+            if act_only and current_symbol not in ["A", "C", "T"]:
+                pred_idx = max_indices[0]
             else:
-                # Assuming that 3 models are given
-                # pred Same
-                if max_indices[0] == max_indices[0]:
-                    pred_idx = max_indices[0]
-                else:
-                    # Pred differently. Need an arbitrator.
-                    if max_indices[2] in max_indices[0:2]:
-                        # Arbitrator chooses a side
-                        pred_idx = max_indices[2]
+                if soft_voting:
+                    pred_idx = torch.argmax(avg).item()
+                # Hard voting
+                #elif False:
+                elif len(max_indices) == 3:
+                    # Assuming that 3 models are given
+                    # pred Same
+                    if max_indices[0] == max_indices[1]:
+                        pred_idx = max_indices[0]
                     else:
-                        # If arbitrator thinks differently. Soft voting
-                        pred_idx = torch.argmax(avg).item()
+                        # Pred differently. Need an arbitrator.
+                        if max_indices[2] in max_indices[0:2]:
+                            # Arbitrator chooses a side
+                            pred_idx = max_indices[2]
+                        else:
+                            # If arbitrator thinks differently. Soft voting
+                            pred_idx = torch.argmax(avg).item()
+                else:
+                    # Hard voting
+                    from collections import Counter
+                    counter = Counter(max_indices)
+                    max_num = 0
+                    max_list = []
+                    for key, value in counter.items():
+                        if value > max_num:
+                            max_num = value
+                            max_list = [key]
+                        elif value == max_num:
+                            max_list += [key]
 
-            # else:
-            #     from collections import Counter
-            #     counter = Counter(max_indices)
-            #     max_num = 0
-            #     max_list = []
-            #     for key, value in counter.items():
-            #         if value > max_num:
-            #             max_num = value
-            #             max_list = [key]
-            #         elif value == max_num:
-            #             max_list += [key]
-            #
-            #     # Soft voting with max_list
-            #     max_value = float("-inf")
-            #     max_idx = -1
-            #     for idx in max_list:
-            #         value = avg[idx]
-            #         if value >= max_value:
-            #             max_idx = idx
-            #             max_value = value
-            #
-            #     pred_idx = max_idx
+                    # Soft voting with max_list
+                    max_value = float("-inf")
+                    max_idx = -1
+                    for idx in max_list:
+                        value = avg[idx]
+                        if value >= max_value:
+                            max_idx = idx
+                            max_value = value
+                    pred_idx = max_idx
 
             # def printt(tag):
             #     with open("tmp.txt", "a") as f:

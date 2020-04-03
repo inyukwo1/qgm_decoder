@@ -782,14 +782,17 @@ def analyze_regarding_schema_size(examples, is_correct, preds, golds, table_data
     # Column number for table num
     col_cnt_tab_cnt = {}
 
+    dbs = set()
     for example, correct, pred, gold in zip(examples, is_correct, preds, golds):
         # Categorize by schema size
         db = table_data[example.db_id]
+        dbs.add(example.db_id)
         col_len = len(db["column_names"])
         tab_len = len(db["table_names"])
 
         # Initialize and count for col
         if col_len not in col_acc_dic:
+            print("db: {} col_len: {}".format(example.db_id, col_len))
             col_cnt_tab_cnt[col_len] = set()
             col_cnt_tab_cnt[col_len].add(tab_len)
 
@@ -852,7 +855,7 @@ def analyze_regarding_schema_size(examples, is_correct, preds, golds, table_data
         print("Table size: {}  cnt: {}  Total Acc: {}  Action Acc: {}  Column Acc: {}  Table Acc: {}".format(key, cnt, acc, action_acc, col_acc, tab_acc))
 
     tab_cnt_col_cnt = {}
-    for col_len in col_cnt_tab_cnt.keys():
+    for col_len in sorted(col_cnt_tab_cnt.keys()):
         tab_lens = col_cnt_tab_cnt[col_len]
         print("col_len: {} tab_len: {}".format(col_len, tab_lens))
 
@@ -864,6 +867,7 @@ def analyze_regarding_schema_size(examples, is_correct, preds, golds, table_data
                 tab_cnt_col_cnt[tab_len].add(col_len)
 
     print("")
-    for tab_len in tab_cnt_col_cnt.keys():
+    for tab_len in sorted(tab_cnt_col_cnt.keys()):
         col_len = tab_cnt_col_cnt[tab_len]
         print("tab_len: {} col_len: {}".format(tab_len, col_len))
+    print("number of db: {}".format(len(db)))
