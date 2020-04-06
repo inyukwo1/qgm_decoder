@@ -20,7 +20,9 @@ def evaluate(cfg):
     utils.set_random_seed()
 
     # Load dataset
-    train_data, val_data, table_data = utils.load_dataset(cfg.toy, cfg.is_bert, cfg.dataset.path, cfg.query_type)
+    train_data, val_data, table_data = utils.load_dataset(
+        cfg.toy, cfg.is_bert, cfg.dataset.path, cfg.query_type
+    )
 
     # Set model
     if cfg.cuda != -1:
@@ -35,7 +37,9 @@ def evaluate(cfg):
             model.cuda()
 
         # Load model weights
-        pretrained_model = torch.load(cfg.load_model, map_location=lambda storage, loc: storage)
+        pretrained_model = torch.load(
+            cfg.load_model, map_location=lambda storage, loc: storage
+        )
         for k in list(pretrained_model.keys()):
             if k not in model.state_dict().keys():
                 del pretrained_model[k]
@@ -43,15 +47,39 @@ def evaluate(cfg):
 
         models += [model]
 
-        model.word_emb = None if cfg.is_bert else utils.load_word_emb(cfg.glove_embed_path)
+        model.word_emb = (
+            None if cfg.is_bert else utils.load_word_emb(cfg.glove_embed_path)
+        )
 
     log.info("Evaluation:")
-    train_total_acc, train_is_correct, train_pred, train_gold, train_list = utils.epoch_acc_ensemble(
-        models, cfg.batch_size, train_data, table_data, cfg.model_name, return_details=True,
+    (
+        train_total_acc,
+        train_is_correct,
+        train_pred,
+        train_gold,
+        train_list,
+    ) = utils.epoch_acc_ensemble(
+        models,
+        cfg.batch_size,
+        train_data,
+        table_data,
+        cfg.model_name,
+        return_details=True,
     )
 
-    dev_total_acc, dev_is_correct, dev_pred, dev_gold, dev_list = utils.epoch_acc_ensemble(
-        models, cfg.batch_size, val_data, table_data, cfg.model_name, return_details=True,
+    (
+        dev_total_acc,
+        dev_is_correct,
+        dev_pred,
+        dev_gold,
+        dev_list,
+    ) = utils.epoch_acc_ensemble(
+        models,
+        cfg.batch_size,
+        val_data,
+        table_data,
+        cfg.model_name,
+        return_details=True,
     )
 
     print("Train Acc: {}".format(train_total_acc["total"]))
@@ -101,6 +129,7 @@ def evaluate(cfg):
 
     # Load trained Weights
     assert len(cfg.model_names)
+
 
 if __name__ == "__main__":
     evaluate()

@@ -379,7 +379,7 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed, is_col_set=True):
             qgm=process_dict["qgm"],
             # qgm_action=process_dict["rule_label"],
             qgm_action=rule_label,
-            relation=sql['relation'] if 'relation' in sql else None,
+            relation=sql["relation"] if "relation" in sql else None,
         )
 
         example.sql_json = copy.deepcopy(sql)
@@ -406,6 +406,7 @@ def epoch_train(
     model.train()
     # shuffle
     perm = np.random.permutation(len(sql_data))
+
     optimizer.zero_grad()
     if bert_optimizer:
         bert_optimizer.zero_grad()
@@ -541,7 +542,8 @@ def epoch_acc(
             gold += tmp
         elif model_name == "ensemble":
             tmp = [
-                model.decoder.models[0].grammar.create_data(example.qgm) for example in examples
+                model.decoder.models[0].grammar.create_data(example.qgm)
+                for example in examples
             ]
             tmp2 = []
             for item in tmp:
@@ -611,8 +613,8 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type):
     val_data = load_data_new(val_path, is_toy, is_bert, query_type)
 
     # Create relations
-    #train_data = [relation.create_relation(item, table_data, True) for item in train_data]
-    #val_data = [relation.create_relation(item, table_data, True) for item in val_data]
+    # train_data = [relation.create_relation(item, table_data, True) for item in train_data]
+    # val_data = [relation.create_relation(item, table_data, True) for item in val_data]
 
     # Show dataset length
     log.info("Total training set: {}".format(len(train_data)))
@@ -686,7 +688,10 @@ def write_eval_result_as(
                 try:
                     q_type = " ".join(sql_json["question_arg_type"][idx])
                 except:
-                    q_type = " ".join([sql_json["question_arg_type"][idx][0]] + sql_json["question_arg_type"][idx][1])
+                    q_type = " ".join(
+                        [sql_json["question_arg_type"][idx][0]]
+                        + sql_json["question_arg_type"][idx][1]
+                    )
                 q_pad_len = max(len(q), len(q_type)) - len(q)
                 q_type_pad_len = max(len(q), len(q_type)) - len(q_type)
                 q_pad = " " * (q_pad_len // 2)

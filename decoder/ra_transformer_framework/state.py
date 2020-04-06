@@ -36,8 +36,12 @@ class RATransformerState(State):
 
 
 class RATransformerStateGold(RATransformerState):
-    def __init__(self, encoded_src, encoded_col, encoded_tab, col_tab_dic, gold: List[Action]):
-        RATransformerState.__init__(self, encoded_src, encoded_col, encoded_tab, col_tab_dic)
+    def __init__(
+        self, encoded_src, encoded_col, encoded_tab, col_tab_dic, gold: List[Action]
+    ):
+        RATransformerState.__init__(
+            self, encoded_src, encoded_col, encoded_tab, col_tab_dic
+        )
         self.gold: List[Action] = gold
         self.loss = SemQL_Loss_New()
 
@@ -66,10 +70,13 @@ class RATransformerStateGold(RATransformerState):
         self.loss.add(-prod[gold_action_idx], gold_symbol, prev_actions)
 
 
-
 class RATransformerStatePred(RATransformerState):
-    def __init__(self, encoded_src, encoded_col, encoded_tab, col_tab_dic, start_symbol: Symbol):
-        RATransformerState.__init__(self, encoded_src, encoded_col, encoded_tab, col_tab_dic)
+    def __init__(
+        self, encoded_src, encoded_col, encoded_tab, col_tab_dic, start_symbol: Symbol
+    ):
+        RATransformerState.__init__(
+            self, encoded_src, encoded_col, encoded_tab, col_tab_dic
+        )
         self.preds: List[Action] = []
         self.nonterminal_symbol_stack: List[Symbol] = [start_symbol]
 
@@ -88,5 +95,7 @@ class RATransformerStatePred(RATransformerState):
         return self.nonterminal_symbol_stack[0]
 
     def apply_pred(self, action: Action, new_nonterminal_symbols: List[Symbol]) -> None:
-        self.nonterminal_symbol_stack = new_nonterminal_symbols + self.nonterminal_symbol_stack[1:]
+        self.nonterminal_symbol_stack = (
+            new_nonterminal_symbols + self.nonterminal_symbol_stack[1:]
+        )
         self.preds.append(action)

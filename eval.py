@@ -36,11 +36,11 @@ def evaluate(cfg):
         log.info("Load pretrained model from {}".format(cfg.model_path))
         log.info("with model names: {}".format(str(cfg.model_names)))
         path = cfg.model_path.format(cfg.model_names[0])
-        pretrained_model = torch.load(
-            path, map_location=lambda storage, loc: storage
-        )
+        pretrained_model = torch.load(path, map_location=lambda storage, loc: storage)
         # Filter out decoder parameters
-        pretrained_model = {key: item for key, item in pretrained_model.items() if "decoder" not in key}
+        pretrained_model = {
+            key: item for key, item in pretrained_model.items() if "decoder" not in key
+        }
         model.decoder.load_model()
     else:
         # Load trained weights
@@ -126,6 +126,7 @@ def evaluate(cfg):
         dev_gold,
         use_col_set=cfg.is_col_set,
     )
+
 
 if __name__ == "__main__":
     evaluate()

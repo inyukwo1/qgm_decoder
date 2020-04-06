@@ -3,7 +3,16 @@ from framework.sequential_monad import State
 
 
 class EnsembleState(State):
-    def __init__(self, encoded_src, encoded_col, encoded_tab, src_len, col_len, tab_len, col_tab_dic):
+    def __init__(
+        self,
+        encoded_src,
+        encoded_col,
+        encoded_tab,
+        src_len,
+        col_len,
+        tab_len,
+        col_tab_dic,
+    ):
         self.step_cnt = 0
         self.encoded_src = encoded_src
         self.encoded_col = encoded_col

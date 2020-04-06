@@ -17,8 +17,14 @@ class EnsembleDecoder(nn.Module):
     def load_model(self):
         for model_name in self.cfg.model_names:
             path = self.cfg.model_path.format(model_name)
-            pretrained_decoder = torch.load(path, map_location=lambda storage, loc: storage)
-            pretrained_decoder = {key.replace("decoder.", ""): item for key, item in pretrained_decoder.items() if "decoder." in key}
+            pretrained_decoder = torch.load(
+                path, map_location=lambda storage, loc: storage
+            )
+            pretrained_decoder = {
+                key.replace("decoder.", ""): item
+                for key, item in pretrained_decoder.items()
+                if "decoder." in key
+            }
 
             model = TransformerDecoderFramework(self.cfg)
             model.load_state_dict(pretrained_decoder)
@@ -31,7 +37,8 @@ class EnsembleDecoder(nn.Module):
             model.eval()
             model.cuda()
 
-    def forward(self,
+    def forward(
+        self,
         encoded_src,
         encoded_col,
         encoded_tab,
@@ -39,21 +46,21 @@ class EnsembleDecoder(nn.Module):
         col_lens,
         tab_lens,
         col_tab_dic,
-        golds=None
-        ):
+        golds=None,
+    ):
         b_size = len(encoded_src)
         states = [
-                EnsembleState(
-                    encoded_src[b_idx, : src_lens[b_idx]],
-                    encoded_col[b_idx, : col_lens[b_idx]],
-                    encoded_tab[b_idx, : tab_lens[b_idx]],
-                    src_lens[b_idx],
-                    col_lens[b_idx],
-                    tab_lens[b_idx],
-                    col_tab_dic[b_idx],
-                    )
-                for b_idx in range(b_size)
-            ]
+            EnsembleState(
+                encoded_src[b_idx, : src_lens[b_idx]],
+                encoded_col[b_idx, : col_lens[b_idx]],
+                encoded_tab[b_idx, : tab_lens[b_idx]],
+                src_lens[b_idx],
+                col_lens[b_idx],
+                tab_lens[b_idx],
+                col_tab_dic[b_idx],
+            )
+            for b_idx in range(b_size)
+        ]
 
         def get_individual_model_score(state: EnsembleState, _) -> Dict[str, Tensor]:
             # Pass to individual models and get
@@ -82,7 +89,9 @@ class EnsembleDecoder(nn.Module):
             prev_tensor_dict = {"probs": probs}
             return prev_tensor_dict
 
-        def vote(state: EnsembleState, prev_tensor_dict: Dict[str, Tensor]) -> Dict[str, Tensor]:
+        def vote(
+            state: EnsembleState, prev_tensor_dict: Dict[str, Tensor]
+        ) -> Dict[str, Tensor]:
             # Compute Avg
             scores = prev_tensor_dict["probs"]
 
@@ -94,7 +103,9 @@ class EnsembleDecoder(nn.Module):
             prev_tensor_dict.update({"pred_idx": pred_idx})
             return prev_tensor_dict
 
-        def update_state(state: EnsembleState, prev_tensor_dict: Dict[str, Tensor]) -> Dict[str, Tensor]:
+        def update_state(
+            state: EnsembleState, prev_tensor_dict: Dict[str, Tensor]
+        ) -> Dict[str, Tensor]:
             # Find highest and create action and save it
             pred_idx = prev_tensor_dict["pred_idx"]
             symbol = state.get_first_nonterminal()
@@ -111,8 +122,7 @@ class EnsembleDecoder(nn.Module):
             return None
 
         states = SequentialMonad(states)(
-            WhileLogic.While(EnsembleState.is_not_done)
-            .Do(
+            WhileLogic.While(EnsembleState.is_not_done).Do(
                 LogicUnit.If(EnsembleState.is_not_done)
                 .Then(get_individual_model_score)
                 .Then(vote)

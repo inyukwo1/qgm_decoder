@@ -55,7 +55,7 @@ class EncoderDecoderModel(nn.Module):
         if self.encoder_name == "bert":
             self.encoder = BERT(cfg)
         elif self.encoder_name == "lstm":
-            #self.encoder = LSTMEncoder(cfg)
+            # self.encoder = LSTMEncoder(cfg)
             self.encoder = IRNetLSTMEncoder(cfg)
         elif self.encoder_name == "transformer":
             self.encoder = Transformer_Encoder(cfg)
@@ -129,24 +129,34 @@ class EncoderDecoderModel(nn.Module):
 
             relation_matrix = relation.create_batch(batch.relation)
 
-            src_encodings, table_embeddings, schema_embeddings = \
-                self.encoder(src, col, tab, src_len, col_len, tab_len, src_mask, col_mask, tab_mask, relation_matrix)
+            src_encodings, table_embeddings, schema_embeddings = self.encoder(
+                src,
+                col,
+                tab,
+                src_len,
+                col_len,
+                tab_len,
+                src_mask,
+                col_mask,
+                tab_mask,
+                relation_matrix,
+            )
             enc_last_cell = None
         elif self.encoder_name == "transformer":
-            (
-                src_encodings,
-                table_embeddings,
-                schema_embeddings,
-                _,
-            ) = self.lstm_encode(batch)
+            (src_encodings, table_embeddings, schema_embeddings, _,) = self.lstm_encode(
+                batch
+            )
             src_mask = batch.src_token_mask
             col_mask = batch.table_token_mask
             tab_mask = batch.schema_token_mask
-            (
+            (src_encodings, table_embeddings, schema_embeddings) = self.encoder(
                 src_encodings,
                 table_embeddings,
-                schema_embeddings
-            ) = self.encoder(src_encodings, table_embeddings, schema_embeddings, src_mask, col_mask, tab_mask)
+                schema_embeddings,
+                src_mask,
+                col_mask,
+                tab_mask,
+            )
             enc_last_cell = None
         elif self.encoder_name == "bert":
             (
@@ -159,7 +169,7 @@ class EncoderDecoderModel(nn.Module):
                 return None, None
             enc_last_cell = last_cell
         elif self.encoder_name == "lstm":
-            #encoded_out = self.encoder(batch)
+            # encoded_out = self.encoder(batch)
             encoded_out = self.encoder(examples)
             src_encodings = [item["src_encoding"] for item in encoded_out]
             table_embeddings = [item["col_encoding"] for item in encoded_out]
@@ -258,10 +268,12 @@ class EncoderDecoderModel(nn.Module):
             golds = [self.decoder.grammar.create_data(item) for item in batch.qgm]
             tmp = []
             for gold in golds:
-                tmp += [[
+                tmp += [
+                    [
                         self.decoder.grammar.str_to_action(item)
                         for item in gold.split(" ")
-                        ]]
+                    ]
+                ]
             golds = tmp
             losses = self.decoder(
                 enc_last_cell,
@@ -284,7 +296,9 @@ class EncoderDecoderModel(nn.Module):
                     ]
                 ]
             golds = tmp
-            losses = self.decoder(src_encodings, table_embeddings, schema_embeddings, col_tab_dic, golds)
+            losses = self.decoder(
+                src_encodings, table_embeddings, schema_embeddings, col_tab_dic, golds
+            )
             return losses
         else:
             raise RuntimeError("Unsupported Decoder Name")
@@ -307,9 +321,18 @@ class EncoderDecoderModel(nn.Module):
 
                 relation_matrix = relation.create_batch(batch.relation)
 
-                src_encodings, table_embeddings, schema_embeddings = \
-                    self.encoder(src, col, tab, src_len, col_len, tab_len, src_mask, col_mask, tab_mask,
-                                 relation_matrix)
+                src_encodings, table_embeddings, schema_embeddings = self.encoder(
+                    src,
+                    col,
+                    tab,
+                    src_len,
+                    col_len,
+                    tab_len,
+                    src_mask,
+                    col_mask,
+                    tab_mask,
+                    relation_matrix,
+                )
             elif self.encoder_name == "transformer":
                 (
                     src_encodings,
@@ -320,11 +343,14 @@ class EncoderDecoderModel(nn.Module):
                 src_mask = batch.src_token_mask
                 col_mask = batch.table_token_mask
                 tab_mask = batch.schema_token_mask
-                (
+                (src_encodings, table_embeddings, schema_embeddings) = self.encoder(
                     src_encodings,
                     table_embeddings,
-                    schema_embeddings
-                ) = self.encoder(src_encodings, table_embeddings, schema_embeddings, src_mask, col_mask, tab_mask)
+                    schema_embeddings,
+                    src_mask,
+                    col_mask,
+                    tab_mask,
+                )
             elif self.encoder_name == "bert":
                 (
                     src_encodings,
@@ -336,7 +362,7 @@ class EncoderDecoderModel(nn.Module):
                     return None, None
                 enc_last_cell = last_cell
             elif self.encoder_name == "lstm":
-                #encoded_out = self.encoder(batch)
+                # encoded_out = self.encoder(batch)
                 encoded_out = self.encoder(examples)
                 src_encodings = [item["src_encoding"] for item in encoded_out]
                 table_embeddings = [item["col_encoding"] for item in encoded_out]
@@ -432,7 +458,13 @@ class EncoderDecoderModel(nn.Module):
                 return pred
             elif self.decoder_name == "ra_transformer":
                 col_tab_dic = batch.col_table_dict
-                pred = self.decoder(src_encodings, table_embeddings, schema_embeddings, col_tab_dic, golds=None)
+                pred = self.decoder(
+                    src_encodings,
+                    table_embeddings,
+                    schema_embeddings,
+                    col_tab_dic,
+                    golds=None,
+                )
                 return pred
             elif self.decoder_name == "ensemble":
                 col_tab_dic = batch.col_table_dict

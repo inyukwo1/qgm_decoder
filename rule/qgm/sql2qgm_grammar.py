@@ -6,7 +6,6 @@ datas = json.load(open(data_file_name))
 dbs = {item["db_id"]: item for item in json.load(open(table_file_name))}
 
 
-
 def sql2qgm(query, sql, db):
     if "FROM (SELECT" in query or "FROM ( SELECT" in query:
         stop = 1

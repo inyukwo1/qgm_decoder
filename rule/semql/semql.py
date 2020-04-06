@@ -85,6 +85,12 @@ class SemQL(Grammar):
             acc["sketch"] += sketch_is_correct
             acc["total"] += total_is_correct
 
+            print("gold s: {}".format(g_sketch))
+            print("pred s: {}".format(p_sketch))
+            print("gold d: {}".format(g_detail))
+            print("pred d: {}".format(p_detail))
+            print("res: {}, {}".format(sketch_is_correct, detail_is_correct))
+
             # More specific accs
             # Head num: Check sel
             p_head_num = utils.get_symbol_indices(p_actions, "Sel")

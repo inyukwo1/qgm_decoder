@@ -1,7 +1,10 @@
 import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
-from src.ra_transformer.ra_transformer_encoder import RATransformerEncoder, RATransformerEncoderLayer
+from src.ra_transformer.ra_transformer_encoder import (
+    RATransformerEncoder,
+    RATransformerEncoderLayer,
+)
 from src.relation import N_RELATIONS
 
 
@@ -16,15 +19,36 @@ class RA_Transformer_Encoder(nn.Module):
         self.is_bert = cfg.is_bert
 
         if not self.is_bert:
-            self.sen_lstm = nn.LSTM(dim, hidden_size // 2, bidirectional=True, batch_first=True)
-            self.col_lstm = nn.LSTM(dim, hidden_size // 2, bidirectional=True, batch_first=True)
-            self.tab_lstm = nn.LSTM(dim, hidden_size // 2, bidirectional=True, batch_first=True)
+            self.sen_lstm = nn.LSTM(
+                dim, hidden_size // 2, bidirectional=True, batch_first=True
+            )
+            self.col_lstm = nn.LSTM(
+                dim, hidden_size // 2, bidirectional=True, batch_first=True
+            )
+            self.tab_lstm = nn.LSTM(
+                dim, hidden_size // 2, bidirectional=True, batch_first=True
+            )
 
-        encoder_layer = RATransformerEncoderLayer(d_model=dim, nhead=nhead, nrelation=N_RELATIONS)
-        self.ra_transformer_encoder = RATransformerEncoder(encoder_layer, num_layers=layer_num)
+        encoder_layer = RATransformerEncoderLayer(
+            d_model=dim, nhead=nhead, nrelation=N_RELATIONS
+        )
+        self.ra_transformer_encoder = RATransformerEncoder(
+            encoder_layer, num_layers=layer_num
+        )
 
-
-    def forward(self, sen, col, tab, sen_len, col_len, tab_len, sen_mask, col_mask, tab_mask, relation):
+    def forward(
+        self,
+        sen,
+        col,
+        tab,
+        sen_len,
+        col_len,
+        tab_len,
+        sen_mask,
+        col_mask,
+        tab_mask,
+        relation,
+    ):
         # LSTM
         if not self.is_bert:
             sen = self.encode_with_lstm(sen, sen_len, self.sen_lstm)
@@ -45,13 +69,17 @@ class RA_Transformer_Encoder(nn.Module):
         src = torch.cat([sen, col, tab], dim=0)
         src_key_padding_mask = torch.cat([sen_mask, col_mask, tab_mask], dim=1).bool()
 
-        encoded_src = self.ra_transformer_encoder(src, relation, src_key_padding_mask=src_key_padding_mask).transpose(0, 1)
+        encoded_src = self.ra_transformer_encoder(
+            src, relation, src_key_padding_mask=src_key_padding_mask
+        ).transpose(0, 1)
 
         # Get split points
         sen_idx = sen_max_len
         col_idx = sen_idx + col_max_len
         tab_idx = col_idx + tab_max_len
-        assert tab_idx == src.shape[0], "Size doesn't match {} {}".format(tab_idx, src.shape)
+        assert tab_idx == src.shape[0], "Size doesn't match {} {}".format(
+            tab_idx, src.shape
+        )
 
         # Split
         encoded_sen = encoded_src[:, :sen_idx, :]
@@ -60,16 +88,19 @@ class RA_Transformer_Encoder(nn.Module):
 
         return encoded_sen, encoded_col, encoded_tab
 
-
     def encode_with_lstm(self, src_emb, src_len, lstm):
         # Sort
         sorted_len, sorted_data_indices = torch.tensor(src_len).sort(0, descending=True)
         sorted_src_emb = src_emb[sorted_data_indices]
 
         # Encode
-        packed_src_emb = pack_padded_sequence(sorted_src_emb, sorted_len, batch_first=True)
+        packed_src_emb = pack_padded_sequence(
+            sorted_src_emb, sorted_len, batch_first=True
+        )
         packed_src_encodings, (last_state, last_cell) = lstm(packed_src_emb)
-        packed_src_encodings, _ = pad_packed_sequence(packed_src_encodings, batch_first=True)
+        packed_src_encodings, _ = pad_packed_sequence(
+            packed_src_encodings, batch_first=True
+        )
 
         # Back to original order
         new_idx = list(range(len(src_len)))

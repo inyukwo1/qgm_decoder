@@ -11,7 +11,8 @@ from torch.utils.tensorboard import SummaryWriter
 
 from src import utils
 from models.wrapper_model import EncoderDecoderModel
-#from models.LSTMEncoderQGMTransformerDecoder import LSTMEncoderQGMTransformerDecoder
+
+# from models.LSTMEncoderQGMTransformerDecoder import LSTMEncoderQGMTransformerDecoder
 
 log = logging.getLogger(__name__)
 
@@ -87,6 +88,9 @@ def train(cfg):
     # Create Save directory
     if not os.path.exists(log_model_path):
         os.mkdir(log_model_path)
+
+    # train_data = train_data[50:60]
+    # val_data = train_data[:]
 
     best_val_acc = 0
     for epoch in range(1, cfg.max_epoch):
@@ -180,8 +184,8 @@ def train(cfg):
                     )
 
             # Print Accuracy
-            log.info("Total Train Acc: {}".format(train_acc["total"]))
-            log.info("Total Val Acc: {}\n".format(val_acc["total"]))
+            log.info("Total Train Acc: {} \n loss: {}".format(train_acc, train_loss))
+            log.info("Total Val Acc: {} \n loss: {}\n".format(val_acc, val_loss))
 
         # Change learning rate
         scheduler.step()

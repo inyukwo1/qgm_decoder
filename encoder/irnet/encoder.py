@@ -25,7 +25,9 @@ class IRNetLSTMEncoder(nn.Module):
         self.col_type_encoder = LazyLinear(9, hidden_size)
         self.tab_type_encoder = LazyLinear(5, hidden_size)
 
-        self.encoder_lstm = LazyLSTM(self.embed_size, hidden_size // 2, batch_first=True, bidirection=True)
+        self.encoder_lstm = LazyLSTM(
+            self.embed_size, hidden_size // 2, batch_first=True, bidirection=True
+        )
 
         self.dropout = nn.Dropout(cfg.dropout)
 

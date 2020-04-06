@@ -1,17 +1,51 @@
 import torch
+
 # q - question, c - column, t - table
 RELATION_LIST = [
-    '[PAD]', #0
-    'cc_identical', 'cc_sibling', 'cc_foreign_primary', 'cc_primary_foreign', 'cc_neighbor', 'cc_cnt_col', 'cc_col_cnt', 'cc_etc', #1
-    'ct_primary_child', 'ct_child', 'ct_etc', #9
-    'tc_primary_child', 'tc_child', 'tc_etc', #12
-    'tt_identical', 'tt_foreign', 'tt_reversed', 'tt_both', 'tt_etc', #15
-    'qt_exact', 'qt_partial', 'qt_no', 'qc_exact', 'qc_partial', 'qc_no', #20
-    'tq_exact', 'tq_partial', 'tq_no', 'cq_exact', 'cq_partial', 'cq_no', #26
-    'qq_-2', 'qq_-1', 'qq_0', 'qq_1', 'qq_2', #32
-    #0: identical #1: Dependent #2: Dependent Reversed #3: ETC
-    "0", "1", "2", "3", #37
-    "qc_db", "cq_db", #41
+    "[PAD]",  # 0
+    "cc_identical",
+    "cc_sibling",
+    "cc_foreign_primary",
+    "cc_primary_foreign",
+    "cc_neighbor",
+    "cc_cnt_col",
+    "cc_col_cnt",
+    "cc_etc",  # 1
+    "ct_primary_child",
+    "ct_child",
+    "ct_etc",  # 9
+    "tc_primary_child",
+    "tc_child",
+    "tc_etc",  # 12
+    "tt_identical",
+    "tt_foreign",
+    "tt_reversed",
+    "tt_both",
+    "tt_etc",  # 15
+    "qt_exact",
+    "qt_partial",
+    "qt_no",
+    "qc_exact",
+    "qc_partial",
+    "qc_no",  # 20
+    "tq_exact",
+    "tq_partial",
+    "tq_no",
+    "cq_exact",
+    "cq_partial",
+    "cq_no",  # 26
+    "qq_-2",
+    "qq_-1",
+    "qq_0",
+    "qq_1",
+    "qq_2",  # 32
+    # 0: identical #1: Dependent #2: Dependent Reversed #3: ETC
+    "0",
+    "1",
+    "2",
+    "3",  # 37
+    "qc_db",
+    "cq_db",  # 41
 ]
 
 # Dictionary
@@ -35,17 +69,19 @@ def create_relation(data, dbs, use_col_set=True):
     col_mapping = {}
     column = []
     for idx, (tab_id, col_name) in enumerate(db["column_names"]):
-            if not use_col_set or col_name not in [item[1] for item in column]:
-                col_mapping[idx] = len(column)
-                column += [[[tab_id], col_name]]
-            else:
-                new_col_idx = [item[1] for item in column].index(col_name)
-                col_mapping[idx] = new_col_idx
-                column[new_col_idx][0] += [tab_id]
+        if not use_col_set or col_name not in [item[1] for item in column]:
+            col_mapping[idx] = len(column)
+            column += [[[tab_id], col_name]]
+        else:
+            new_col_idx = [item[1] for item in column].index(col_name)
+            col_mapping[idx] = new_col_idx
+            column[new_col_idx][0] += [tab_id]
 
     # translate p/f keys
     primary_key = [col_mapping[item] for item in db["primary_keys"]]
-    foreign_key = [[col_mapping[item[0]], col_mapping[item[1]]] for item in db["foreign_keys"]]
+    foreign_key = [
+        [col_mapping[item[0]], col_mapping[item[1]]] for item in db["foreign_keys"]
+    ]
 
     # Split words
     column_name = split_words([item[1] for item in column])
@@ -56,9 +92,9 @@ def create_relation(data, dbs, use_col_set=True):
 
     # Sen & Col
     qc_relation = parse_match_relation(tokens, column_name, "q", "c")
-    #qc_relation = append_db_content_relation("q", qc_relation, column_name, token_types)
+    # qc_relation = append_db_content_relation("q", qc_relation, column_name, token_types)
     cq_relation = parse_match_relation(column_name, tokens, "c", "q")
-    #cq_relation = append_db_content_relation("c", cq_relation, column_name, token_types)
+    # cq_relation = append_db_content_relation("c", cq_relation, column_name, token_types)
 
     # Sen & Tab
     qt_relation = parse_match_relation(tokens, table, "q", "t")
@@ -134,7 +170,9 @@ def fill_matrix(matrix, x_start_idx, y_start_idx, relations):
     for idx, relation in enumerate(relations):
         x_end_idx = x_start_idx + len(relation)
         y_end_idx = y_start_idx + len(relation[0])
-        matrix[idx, x_start_idx:x_end_idx, y_start_idx:y_end_idx] = torch.tensor(relation).long()
+        matrix[idx, x_start_idx:x_end_idx, y_start_idx:y_end_idx] = torch.tensor(
+            relation
+        ).long()
     return matrix
 
 
@@ -227,7 +265,9 @@ def parse_q_q_relation(sentence, relation_matrix):
     if USE_DEP:
         new_relation_matrix = []
         for relations in relation_matrix:
-            new_relation_matrix += [[RELATION_TYPE[str(relation)] for relation in relations]]
+            new_relation_matrix += [
+                [RELATION_TYPE[str(relation)] for relation in relations]
+            ]
         return new_relation_matrix
     else:
         relations = []
@@ -235,13 +275,15 @@ def parse_q_q_relation(sentence, relation_matrix):
         for idx_1 in range(question_length):
             tmp = []
             for idx_2 in range(question_length):
-                key = 'qq_' + str(max(min(idx_1-idx_2, 2), -2))
+                key = "qq_" + str(max(min(idx_1 - idx_2, 2), -2))
                 tmp += [RELATION_TYPE[key]]
             relations += [tmp]
         return relations
 
 
-def append_db_content_relation(first_symbol, relation_matrix, column_names, token_types):
+def append_db_content_relation(
+    first_symbol, relation_matrix, column_names, token_types
+):
     for q_idx, type in enumerate(token_types):
         # If token is db content
         if type[0] == "db":
@@ -305,7 +347,9 @@ def create_fp_relation(db):
 def compare_fp_relation(tab_ids_1, tab_ids_2, fp_relations):
     for tab_id_1 in tab_ids_1:
         for tab_id_2 in tab_ids_2:
-            if [tab_id_1, tab_id_2] in fp_relations or [tab_id_2, tab_id_1] in fp_relations:
+            if [tab_id_1, tab_id_2] in fp_relations or [
+                tab_id_2,
+                tab_id_1,
+            ] in fp_relations:
                 return True
     return False
-

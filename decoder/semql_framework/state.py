@@ -1,5 +1,5 @@
 import torch
-from typing import List, NewType, Dict, Tuple
+from typing import List, NewType, Dict, Tuple, Optional
 from framework.sequential_monad import State
 from framework.utils import assert_dim
 from rule.semql.semql import SemQL
@@ -10,7 +10,16 @@ MAX_STEP = 50
 
 
 class LSTMState(State):
-    def __init__(self, aff_sketch_src, aff_detail_src, encoded_src, encoded_col, encoded_tab, init_state, col_tab_dic):
+    def __init__(
+        self,
+        aff_sketch_src,
+        aff_detail_src,
+        encoded_src,
+        encoded_col,
+        encoded_tab,
+        init_state,
+        col_tab_dic,
+    ):
         self.step_cnt = 0
         self.sketch_step_cnt = 0
         self.aff_sketch_src = aff_sketch_src
@@ -50,7 +59,13 @@ class LSTMState(State):
     def get_prev_sketch(self) -> Action:
         pass
 
+    def get_prev_sketches(self):
+        pass
+
     def get_prev_action(self):
+        pass
+
+    def get_sketch_current_symbol(self):
         pass
 
     def get_current_symbol(self):
@@ -60,7 +75,9 @@ class LSTMState(State):
         pass
 
     def get_att_emb(self):
-        return self.sketch_att_emb if self.sketch_not_done(self) else self.detail_att_emb
+        return (
+            self.sketch_att_emb if self.sketch_not_done(self) else self.detail_att_emb
+        )
 
     def get_sketch_state(self):
         return self.sketch_state
@@ -74,12 +91,14 @@ class LSTMState(State):
     def get_col_encodings(self):
         return self.encoded_col
 
+    def get_tab_encodings(self):
+        return self.encoded_tab
+
     def get_affine_src(self):
         if self.sketch_not_done(self):
             return self.aff_sketch_src
         else:
             return self.aff_detail_src
-
 
     # Update
     def update_sketch_state(self, new_state: Tuple[torch.Tensor, torch.Tensor]):
@@ -94,21 +113,30 @@ class LSTMState(State):
         else:
             self.detail_att_emb = src_attention_vector
 
-    def _apply_loss(self, golds, step_cnt, prod):
-        gold_action = golds[step_cnt]
-        gold_symbol = gold_action[0]
-        if gold_symbol in ["C", "T"]:
-            gold_action_idx = gold_action[1]
-        else:
-            assert_dim([SemQL.semql.get_action_len()], prod)
-            gold_action_idx = SemQL.semql.action_to_aid[gold_action]
-        prev_actions: List[Action] = golds[: step_cnt]
-        self.loss.add(-prod[gold_action_idx], gold_symbol, prev_actions)
-
 
 class LSTMStateGold(LSTMState):
-    def __init__(self, aff_sketch_src, aff_detail_src, encoded_src, encoded_col, encoded_tab, init_state, col_tab_dic, gold, sketch_gold):
-        LSTMState.__init__(self, aff_sketch_src, aff_detail_src, encoded_src, encoded_col, encoded_tab, init_state, col_tab_dic)
+    def __init__(
+        self,
+        aff_sketch_src,
+        aff_detail_src,
+        encoded_src,
+        encoded_col,
+        encoded_tab,
+        init_state,
+        col_tab_dic,
+        gold,
+        sketch_gold,
+    ):
+        LSTMState.__init__(
+            self,
+            aff_sketch_src,
+            aff_detail_src,
+            encoded_src,
+            encoded_col,
+            encoded_tab,
+            init_state,
+            col_tab_dic,
+        )
         self.gold: List[Action] = gold
         self.sketch_gold: List[Action] = sketch_gold
         self.loss = SemQL_Loss_New()
@@ -125,23 +153,40 @@ class LSTMStateGold(LSTMState):
     def combine_loss(cls, states: List["LSTMStateGold"]) -> SemQL_Loss_New:
         return sum([state.loss for state in states])
 
-    def get_prev_sketch(self) -> Action:
-        if self.sketch_step_cnt:
-            return self.sketch_gold[self.sketch_step_cnt-1]
-        else:
-            return []
+    def get_prev_sketches(self):
+        return self.sketch_gold[: self.sketch_step_cnt]
 
-    def get_prev_action(self) -> Action:
-        if self.step_cnt:
-            return self.gold[self.step_cnt-1]
+    def get_prev_sketch(self) -> Optional[Action]:
+        if self.sketch_step_cnt:
+            return self.sketch_gold[self.sketch_step_cnt - 1]
         else:
-            return []
+            return None
+
+    def get_prev_action(self) -> Optional[Action]:
+        if self.step_cnt:
+            return self.gold[self.step_cnt - 1]
+        else:
+            return None
+
+    def get_sketch_current_symbol(self) -> Symbol:
+        return self.sketch_gold[self.sketch_step_cnt][0]
 
     def get_current_symbol(self) -> Symbol:
         return self.gold[self.step_cnt][0]
 
     def get_action_history(self):
-        return self.gold[:self.step_cnt]
+        return self.gold[: self.step_cnt]
+
+    def _apply_loss(self, golds, step_cnt, prod):
+        gold_action = golds[step_cnt]
+        gold_symbol = gold_action[0]
+        if gold_symbol in ["C", "T"]:
+            gold_action_idx = gold_action[1]
+        else:
+            assert_dim([SemQL.semql.get_action_len()], prod)
+            gold_action_idx = SemQL.semql.action_to_aid[gold_action]
+        prev_actions: List[Action] = golds[:step_cnt]
+        self.loss.add(-prod[gold_action_idx], gold_symbol, prev_actions)
 
     def apply_sketch_loss(self, prod: torch.Tensor) -> None:
         self._apply_loss(self.sketch_gold, self.sketch_step_cnt, prod)
@@ -152,8 +197,27 @@ class LSTMStateGold(LSTMState):
 
 
 class LSTMStatePred(LSTMState):
-    def __init__(self, aff_sketch_src, aff_detail_src, encoded_src, encoded_col, encoded_tab, init_state, col_tab_dic, start_symbol: Symbol):
-        LSTMState.__init__(self, aff_sketch_src, aff_detail_src, encoded_src, encoded_col, encoded_tab, init_state, col_tab_dic)
+    def __init__(
+        self,
+        aff_sketch_src,
+        aff_detail_src,
+        encoded_src,
+        encoded_col,
+        encoded_tab,
+        init_state,
+        col_tab_dic,
+        start_symbol: Symbol,
+    ):
+        LSTMState.__init__(
+            self,
+            aff_sketch_src,
+            aff_detail_src,
+            encoded_src,
+            encoded_col,
+            encoded_tab,
+            init_state,
+            col_tab_dic,
+        )
         self.preds: List[Action] = []
         self.preds_sketch: List[Action] = []
         self.nonterminal_symbol_stack: List[Symbol] = [start_symbol]
@@ -164,23 +228,37 @@ class LSTMStatePred(LSTMState):
 
     @classmethod
     def detail_not_done(cls, state) -> bool:
-        return not state.sketch_not_done(state) and state.step_cnt < len(state.preds) and state.step_cnt < MAX_STEP
+        return (
+            not state.sketch_not_done(state)
+            and state.step_cnt < len(state.preds)
+            and state.step_cnt < MAX_STEP
+        )
 
     @classmethod
     def get_preds(cls, states: List["LSTMStatePred"]) -> List[List[Action]]:
         return [state.preds for state in states]
 
+    def get_prev_sketches(self):
+        return self.preds_sketch[: self.sketch_step_cnt]
+
     def get_prev_sketch(self) -> Action:
-        return self.preds_sketch[self.sketch_step_cnt-1] if self.sketch_step_cnt else []
+        return (
+            self.preds_sketch[self.sketch_step_cnt - 1]
+            if self.sketch_step_cnt
+            else None
+        )
 
     def get_prev_action(self):
-        return self.preds[self.step_cnt-1] if self.step_cnt else []
+        return self.preds[self.step_cnt - 1] if self.step_cnt else None
+
+    def get_sketch_current_symbol(self) -> Symbol:
+        return self.nonterminal_symbol_stack[0]
 
     def get_current_symbol(self):
-        return self.nonterminal_symbol_stack[0] if self.sketch_not_done(self) else self.preds[self.step_cnt][0]
+        return self.preds[self.step_cnt][0]
 
     def get_action_history(self):
-        return self.preds[:self.step_cnt]
+        return self.preds[: self.step_cnt]
 
     def save_sketch_pred(self, action: Action):
         self.preds_sketch += [action]
@@ -192,7 +270,9 @@ class LSTMStatePred(LSTMState):
 
         # Pop one and append nonterminal
         self.nonterminal_symbol_stack.pop(0)
-        self.nonterminal_symbol_stack = nonterminal_symbols + self.nonterminal_symbol_stack
+        self.nonterminal_symbol_stack = (
+            nonterminal_symbols + self.nonterminal_symbol_stack
+        )
 
         # Filter out details
         while self.nonterminal_symbol_stack and self.nonterminal_symbol_stack[0] == "A":
@@ -200,5 +280,7 @@ class LSTMStatePred(LSTMState):
             self.preds += [("A", 0), ("C", 0), ("T", 0)]
 
     def edit_pred(self, action: Action):
-        assert self.preds[self.step_cnt][0] == action[0], "Different! {} {} ".format(self.preds[self.step_cnt], action)
+        assert self.preds[self.step_cnt][0] == action[0], "Different! {} {} ".format(
+            self.preds[self.step_cnt], action
+        )
         self.preds[self.step_cnt] = action
