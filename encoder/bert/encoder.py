@@ -19,6 +19,7 @@ MODELS = [
     (RobertaModel, RobertaTokenizer, "roberta-base"),
 ]
 
+
 class BERT(nn.Module):
     def __init__(self, cfg):
         super(BERT, self).__init__()
@@ -89,7 +90,7 @@ class BERT(nn.Module):
             return None, None, None
         for idx, question_len in enumerate(question_lens):
             questions[idx] = questions[idx] + (" " + self.tokenizer.pad_token) * (
-                    max(question_lens) - question_len
+                max(question_lens) - question_len
             )
         encoded_questions = [
             self.tokenizer.encode(question, add_special_tokens=False)
@@ -138,15 +139,15 @@ class BERT(nn.Module):
         )
         for b in range(len(questions)):
             src_encodings[b] += [torch.zeros_like(src_encodings[b][0])] * (
-                    max_src_len - len(src_encodings[b])
+                max_src_len - len(src_encodings[b])
             )
             src_encodings[b] = torch.stack(src_encodings[b])
             table_embedding[b] += [torch.zeros_like(table_embedding[b][0])] * (
-                    max_col_len - len(table_embedding[b])
+                max_col_len - len(table_embedding[b])
             )
             table_embedding[b] = torch.stack(table_embedding[b])
             schema_embedding[b] += [torch.zeros_like(schema_embedding[b][0])] * (
-                    max_tab_len - len(schema_embedding[b])
+                max_tab_len - len(schema_embedding[b])
             )
             schema_embedding[b] = torch.stack(schema_embedding[b])
         src_encodings = torch.stack(src_encodings)

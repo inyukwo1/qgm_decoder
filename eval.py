@@ -121,7 +121,10 @@ def evaluate(cfg):
     indices = [idx for idx, item in enumerate(dev_is_correct) if item == True]
     print(indices)
 
-    utils.analyze_regarding_schema_size(dev_list, dev_is_correct, dev_pred, dev_gold, table_data)
+    utils.analyze_regarding_schema_size(
+        dev_list, dev_is_correct, dev_pred, dev_gold, table_data
+    )
+
 
 if __name__ == "__main__":
     evaluate()

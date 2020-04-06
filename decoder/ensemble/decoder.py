@@ -21,11 +21,19 @@ class EnsembleDecoder(nn.Module):
         key_embs = []
         for idx, model_name in enumerate(self.cfg.model_names):
             path = self.cfg.model_path.format(model_name)
-            pretrained_weights = torch.load(path, map_location=lambda storage, loc: storage)
-            pretrained_encoder = {".".join(key.split(".")[1:]) : item for key, item in pretrained_weights.items() if
-                                  "encoder." in key}
-            pretrained_decoder = {key.replace("decoder.", ""): item for key, item in pretrained_weights.items() if
-                                  "decoder." in key}
+            pretrained_weights = torch.load(
+                path, map_location=lambda storage, loc: storage
+            )
+            pretrained_encoder = {
+                ".".join(key.split(".")[1:]): item
+                for key, item in pretrained_weights.items()
+                if "encoder." in key
+            }
+            pretrained_decoder = {
+                key.replace("decoder.", ""): item
+                for key, item in pretrained_weights.items()
+                if "decoder." in key
+            }
 
             encoder = RA_Transformer_Encoder(self.cfg)
             encoder.load_state_dict(pretrained_encoder)
@@ -47,7 +55,8 @@ class EnsembleDecoder(nn.Module):
             model.cuda()
         return key_embs
 
-    def forward(self,
+    def forward(
+        self,
         srcs,
         cols,
         tabs,
@@ -60,23 +69,44 @@ class EnsembleDecoder(nn.Module):
         relation_matrix,
         col_tab_dic,
         gt,
-        ):
+    ):
         b_size = len(srcs[0])
 
-        states = [EnsembleState(src_len[b_idx], col_len[b_idx], tab_len[b_idx], col_tab_dic[b_idx], gt[b_idx]) for b_idx in range(b_size)]
+        states = [
+            EnsembleState(
+                src_len[b_idx],
+                col_len[b_idx],
+                tab_len[b_idx],
+                col_tab_dic[b_idx],
+                gt[b_idx],
+            )
+            for b_idx in range(b_size)
+        ]
 
         # Encoder
         for idx, encoder in enumerate(self.encoders):
             src = srcs[idx]
             col = cols[idx]
             tab = tabs[idx]
-            encoded_src, encoded_col, encoded_tab = \
-                encoder(src, col, tab, src_len, col_len, tab_len, src_mask, col_mask, tab_mask, relation_matrix)
+            encoded_src, encoded_col, encoded_tab = encoder(
+                src,
+                col,
+                tab,
+                src_len,
+                col_len,
+                tab_len,
+                src_mask,
+                col_mask,
+                tab_mask,
+                relation_matrix,
+            )
             # save into state
             for b_idx in range(b_size):
-                states[b_idx].append_encoded_values(encoded_src[b_idx, : src_len[b_idx]],
+                states[b_idx].append_encoded_values(
+                    encoded_src[b_idx, : src_len[b_idx]],
                     encoded_col[b_idx, : col_len[b_idx]],
-                    encoded_tab[b_idx, : tab_len[b_idx]])
+                    encoded_tab[b_idx, : tab_len[b_idx]],
+                )
 
         def get_individual_model_score(state: EnsembleState, _) -> Dict[str, Tensor]:
             # Pass to individual models and get
@@ -105,7 +135,9 @@ class EnsembleDecoder(nn.Module):
             prev_tensor_dict = {"probs": probs}
             return prev_tensor_dict
 
-        def vote(state: EnsembleState, prev_tensor_dict: Dict[str, Tensor]) -> Dict[str, Tensor]:
+        def vote(
+            state: EnsembleState, prev_tensor_dict: Dict[str, Tensor]
+        ) -> Dict[str, Tensor]:
             # Compute Avg
             scores = prev_tensor_dict["probs"]
 
@@ -132,7 +164,7 @@ class EnsembleDecoder(nn.Module):
                 if soft_voting:
                     pred_idx = torch.argmax(avg).item()
                 # Hard voting
-                #elif False:
+                # elif False:
                 elif len(max_indices) == 3:
                     # Assuming that 3 models are given
                     # pred Same
@@ -149,6 +181,7 @@ class EnsembleDecoder(nn.Module):
                 else:
                     # Hard voting
                     from collections import Counter
+
                     counter = Counter(max_indices)
                     max_num = 0
                     max_list = []
@@ -206,7 +239,9 @@ class EnsembleDecoder(nn.Module):
             prev_tensor_dict.update({"pred_idx": pred_idx})
             return prev_tensor_dict
 
-        def update_state(state: EnsembleState, prev_tensor_dict: Dict[str, Tensor]) -> Dict[str, Tensor]:
+        def update_state(
+            state: EnsembleState, prev_tensor_dict: Dict[str, Tensor]
+        ) -> Dict[str, Tensor]:
             # Find highest and create action and save it
             pred_idx = prev_tensor_dict["pred_idx"]
             symbol = state.get_first_nonterminal()
@@ -223,8 +258,7 @@ class EnsembleDecoder(nn.Module):
             return None
 
         states = SequentialMonad(states)(
-            WhileLogic.While(EnsembleState.is_not_done)
-            .Do(
+            WhileLogic.While(EnsembleState.is_not_done).Do(
                 LogicUnit.If(EnsembleState.is_not_done)
                 .Then(get_individual_model_score)
                 .Then(vote)

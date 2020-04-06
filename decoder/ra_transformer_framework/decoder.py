@@ -21,6 +21,7 @@ from framework.lazy_modules import (
     LazyCalculateSimilarity,
 )
 
+
 class RATransformerDecoder(nn.Module):
     def __init__(self, cfg):
         super(RATransformerDecoder, self).__init__()
@@ -35,13 +36,26 @@ class RATransformerDecoder(nn.Module):
         self.layer_num = layer_num
 
         # Relations
-        relation_keys = ["padding", "identical",
-                "same_iden", "same_ss", "same_dd", "same_ds", "same_sd",
-                "diff_iden", "diff_ss", "diff_dd", "diff_ds", "diff_sd"]
-        self.relation_dic = { item: idx for idx, item in enumerate(relation_keys) }
+        relation_keys = [
+            "padding",
+            "identical",
+            "same_iden",
+            "same_ss",
+            "same_dd",
+            "same_ds",
+            "same_sd",
+            "diff_iden",
+            "diff_ss",
+            "diff_dd",
+            "diff_ds",
+            "diff_sd",
+        ]
+        self.relation_dic = {item: idx for idx, item in enumerate(relation_keys)}
 
         # Inference
-        self.ra_transformer = LazyRATransformerDecoder(dim, nhead, layer_num, len(relation_keys))
+        self.ra_transformer = LazyRATransformerDecoder(
+            dim, nhead, layer_num, len(relation_keys)
+        )
 
         # Decoding forwards
         self.action_affine_layer = LazyLinear(dim, dim)
@@ -59,7 +73,6 @@ class RATransformerDecoder(nn.Module):
         self.col_symbol_id = self.grammar.symbol_to_sid["C"]
         self.tab_symbol_id = self.grammar.symbol_to_sid["T"]
         self.detail_symbols = ["A", "C", "T"]
-
 
     def action_to_embedding(
         self, state: RATransformerState, action: Action
@@ -157,10 +170,13 @@ class RATransformerDecoder(nn.Module):
                 for b_idx in range(b_size)
             ]
 
-        def embed_history_actions(state: RATransformerState, prev_tensor_dic: Dict[str, TensorPromiseOrTensor])\
-                -> Dict[str, TensorPromise]:
+        def embed_history_actions(
+            state: RATransformerState, prev_tensor_dic: Dict[str, TensorPromiseOrTensor]
+        ) -> Dict[str, TensorPromise]:
             history_actions: List[Action] = state.get_history_actions()
-            history_action_embeddings: List[torch.Tensor] = [self.action_to_embedding(state, action) for action in history_actions]
+            history_action_embeddings: List[torch.Tensor] = [
+                self.action_to_embedding(state, action) for action in history_actions
+            ]
             current_action_embedding = self.onedim_zero_tensor()
             history_action_embeddings += [current_action_embedding]
             action_embeddings = torch.stack(history_action_embeddings, dim=0)
@@ -169,8 +185,9 @@ class RATransformerDecoder(nn.Module):
             )
             return {"action_embedding": action_embeddings_promise}
 
-        def embed_history_symbols(state: RATransformerState, prev_tensor_dic: Dict[str, TensorPromiseOrTensor])\
-                -> Dict[str, TensorPromise]:
+        def embed_history_symbols(
+            state: RATransformerState, prev_tensor_dic: Dict[str, TensorPromiseOrTensor]
+        ) -> Dict[str, TensorPromise]:
             history_symbols: List[Symbol] = state.get_history_symbols()
             current_symbol: Symbol = state.get_current_symbol()
             history_symbols += [current_symbol]
@@ -183,7 +200,9 @@ class RATransformerDecoder(nn.Module):
             new_tensor_dict.update({"symbol_embedding": symbol_embeddings_promise})
             return new_tensor_dict
 
-        def combine_embeddings(state: RATransformerState, prev_tensor_dic: Dict[str, TensorPromiseOrTensor]):
+        def combine_embeddings(
+            state: RATransformerState, prev_tensor_dic: Dict[str, TensorPromiseOrTensor]
+        ):
             action_embedding: torch.Tensor = prev_tensor_dic["action_embedding"].result
             symbol_embedding: torch.Tensor = prev_tensor_dic["symbol_embedding"].result
             combined_embedding: torch.Tensor = torch.cat(
@@ -195,22 +214,32 @@ class RATransformerDecoder(nn.Module):
             prev_tensor_dic.update({"combined_embedding": combined_embedding_promise})
             return prev_tensor_dic
 
-        def embed_relations(state: RATransformerState, prev_tensor_dic: Dict[str, TensorPromiseOrTensor]):
+        def embed_relations(
+            state: RATransformerState, prev_tensor_dic: Dict[str, TensorPromiseOrTensor]
+        ):
             actions = state.get_history_actions()
             relation_matrix = self.parse_relation(actions)
             prev_tensor_dic.update({"relation": relation_matrix})
             return prev_tensor_dic
 
-        def pass_ratransformer(state: RATransformerState, prev_tensor_dic: Dict[str, TensorPromiseOrTensor]):
-            combined_embedding: torch.Tensor = prev_tensor_dic["combined_embedding"].result
+        def pass_ratransformer(
+            state: RATransformerState, prev_tensor_dic: Dict[str, TensorPromiseOrTensor]
+        ):
+            combined_embedding: torch.Tensor = prev_tensor_dic[
+                "combined_embedding"
+            ].result
             relation: List[List[int]] = prev_tensor_dic["relation"]
 
             src_embedding: torch.Tensor = state.encoded_src
-            decoder_out_promise: TensorPromise = self.ra_transformer.forward_layer(combined_embedding, src_embedding, relation)
+            decoder_out_promise: TensorPromise = self.ra_transformer.forward_layer(
+                combined_embedding, src_embedding, relation
+            )
             prev_tensor_dic.update({"decoder_out": decoder_out_promise})
             return prev_tensor_dic
 
-        def calc_prod(state: RATransformerState, prev_tensor_dic: Dict[str, TensorPromiseOrTensor]):
+        def calc_prod(
+            state: RATransformerState, prev_tensor_dic: Dict[str, TensorPromiseOrTensor]
+        ):
             def calc_prod_with_idx_and_symbol(idx, symbol):
                 if symbol == "C":
                     prod = self.column_similarity.forward_later(
@@ -225,10 +254,16 @@ class RATransformerDecoder(nn.Module):
                 else:
                     # Get possible actions from nonterminal stack
                     possible_action_ids = SemQL.semql.get_possible_aids(symbol)
-                    impossible_indices = [idx for idx in range(SemQL.semql.get_action_len()) if idx not in possible_action_ids]
+                    impossible_indices = [
+                        idx
+                        for idx in range(SemQL.semql.get_action_len())
+                        if idx not in possible_action_ids
+                    ]
 
                     prod = self.action_similarity.forward_later(
-                        decoder_out[idx], self.grammar.action_emb.weight, impossible_indices
+                        decoder_out[idx],
+                        self.grammar.action_emb.weight,
+                        impossible_indices,
                     )
                 return prod
 
@@ -245,7 +280,9 @@ class RATransformerDecoder(nn.Module):
             prev_tensor_dic.update({"infer_prods": promise_prods})
             return prev_tensor_dic
 
-        def apply_prod(state: RATransformerState, prev_tensor_dic: Dict[str, TensorPromiseOrTensor]):
+        def apply_prod(
+            state: RATransformerState, prev_tensor_dic: Dict[str, TensorPromiseOrTensor]
+        ):
             prev_tensor_list = prev_tensor_dic["infer_prods"]
             if state.is_gold():
                 if prev_tensor_list:
@@ -259,8 +296,7 @@ class RATransformerDecoder(nn.Module):
             return prev_tensor_dic
 
         states = SequentialMonad(states)(
-            WhileLogic.While(state_class.is_not_done)
-            .Do(
+            WhileLogic.While(state_class.is_not_done).Do(
                 LogicUnit.If(state_class.is_not_done)
                 .Then(embed_history_actions)
                 .Then(embed_history_symbols)

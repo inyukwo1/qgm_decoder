@@ -7,7 +7,7 @@ from src.transformer.transformer_decoder import (
     TransformerDecoderLayer,
     TransformerDecoder,
 )
-from src.ra_transformer.ra_transformer_decoder import(
+from src.ra_transformer.ra_transformer_decoder import (
     RATransformerDecoderLayer,
     RATransformerDecoder,
 )
@@ -73,15 +73,18 @@ class LazyLinear(nn.Module, LazyModule):
         tensor_list = [inputs[0] for inputs in self.later_buffer]
         tensor_length = [len(item) for item in tensor_list]
 
-        stacked_tensors = torch.zeros(len(tensor_list), max(tensor_length), tensor_list[0].shape[-1]).cuda()
+        stacked_tensors = torch.zeros(
+            len(tensor_list), max(tensor_length), tensor_list[0].shape[-1]
+        ).cuda()
         for idx, _tensor in enumerate(tensor_list):
-            stacked_tensors[idx][:len(_tensor)] = _tensor
+            stacked_tensors[idx][: len(_tensor)] = _tensor
 
         computed_tensors = self.module(stacked_tensors)
 
         # Split
         self.done_buffer = [
-            computed_tensor[:length] for length, computed_tensor in zip(tensor_length, computed_tensors)
+            computed_tensor[:length]
+            for length, computed_tensor in zip(tensor_length, computed_tensors)
         ]
 
 
@@ -121,7 +124,9 @@ class LazyLSTM(nn.Module, LazyModule):
         LazyModule.__init__(self)
         self.in_dim = in_dim
         self.out_dim = out_dim
-        self.module = nn.LSTM(in_dim, out_dim, batch_first=batch_first, bidirectional=bidirection)
+        self.module = nn.LSTM(
+            in_dim, out_dim, batch_first=batch_first, bidirectional=bidirection
+        )
 
     def assert_intput(self, *inputs):
         pass
@@ -152,7 +157,12 @@ class LazyLSTM(nn.Module, LazyModule):
         last_cell = last_cell[new_indices]
 
         # spread inputs
-        self.done_buffer = [(item1[:length], (item2, item3)) for length, item1, item2, item3 in zip(input_len, encoded_data, last_state, last_cell)]
+        self.done_buffer = [
+            (item1[:length], (item2, item3))
+            for length, item1, item2, item3 in zip(
+                input_len, encoded_data, last_state, last_cell
+            )
+        ]
 
 
 class LazyTransformerDecoder(nn.Module, LazyModule):
@@ -160,9 +170,7 @@ class LazyTransformerDecoder(nn.Module, LazyModule):
         super(LazyTransformerDecoder, self).__init__()
         LazyModule.__init__(self)
         decoder_layer = TransformerDecoderLayer(d_model=in_dim, nhead=nhead)
-        self.module = TransformerDecoder(
-            decoder_layer, num_layers=layer_num
-        )
+        self.module = TransformerDecoder(decoder_layer, num_layers=layer_num)
         self.in_dim = in_dim
         self._init_positional_embedding()
 
@@ -211,15 +219,14 @@ class LazyTransformerDecoder(nn.Module, LazyModule):
             for idx in range(len(self.later_buffer))
         ]
 
+
 class LazyRATransformerDecoder(nn.Module, LazyModule):
     def __init__(self, in_dim, nhead, layer_num, relation_num):
         super(LazyRATransformerDecoder, self).__init__()
         LazyModule.__init__(self)
         self.in_dim = in_dim
         decoder_layer = RATransformerDecoderLayer(d_model=in_dim, nhead=nhead)
-        self.module = RATransformerDecoder(
-            decoder_layer, num_layers=layer_num
-        )
+        self.module = RATransformerDecoder(decoder_layer, num_layers=layer_num)
 
     def assert_input(self, *inputs):
         pass
@@ -237,7 +244,9 @@ class LazyRATransformerDecoder(nn.Module, LazyModule):
         # Stack
         stacked_tgt, tgt_mask = stack_sequential_tensor_with_mask(tgt_list)
         stacked_mem, mem_mask = stack_sequential_tensor_with_mask(mem_list)
-        stacked_relation, relation_mask =  stack_sequential_tensor_with_mask(relation_list)
+        stacked_relation, relation_mask = stack_sequential_tensor_with_mask(
+            relation_list
+        )
 
         # Transpose
         stacked_tgt_batch_second = stacked_tgt.transpose(0, 1)
@@ -245,14 +254,14 @@ class LazyRATransformerDecoder(nn.Module, LazyModule):
 
         # Forward
         out_batch_first = self.module(
-            stacked_tgt_batch_second,
-            stacked_mem_batch_second,
-            stacked_relation,
+            stacked_tgt_batch_second, stacked_mem_batch_second, stacked_relation,
         ).transpose(0, 1)
 
         # Spread
         tgt_len = [len(item) for item in tgt_list]
-        self.done_buffer = [item[:length] for item, length in zip(out_batch_first, tgt_len)]
+        self.done_buffer = [
+            item[:length] for item, length in zip(out_batch_first, tgt_len)
+        ]
 
 
 class LazyCalculateSimilarity(nn.Module, LazyModule):
@@ -328,9 +337,11 @@ class LazyLinearTanhDropout(nn.Module, LazyModule):
         tensor_list = [inputs[0] for inputs in self.later_buffer]
         tensor_length = [len(item) for item in tensor_list]
 
-        stacked_tensors = torch.zeros(len(tensor_list), max(tensor_length), tensor_list[0].shape[-1]).cuda()
+        stacked_tensors = torch.zeros(
+            len(tensor_list), max(tensor_length), tensor_list[0].shape[-1]
+        ).cuda()
         for idx, _tensor in enumerate(tensor_list):
-            stacked_tensors[idx][:len(_tensor)] = _tensor
+            stacked_tensors[idx][: len(_tensor)] = _tensor
 
         computed_tensors = self.module(stacked_tensors)
         computed_tensors = torch.tanh(computed_tensors)
@@ -338,8 +349,10 @@ class LazyLinearTanhDropout(nn.Module, LazyModule):
 
         # Split
         self.done_buffer = [
-            computed_tensor[:length] for length, computed_tensor in zip(tensor_length, computed_tensors)
+            computed_tensor[:length]
+            for length, computed_tensor in zip(tensor_length, computed_tensors)
         ]
+
 
 class LazyActionProb(nn.Module, LazyModule):
     def __init__(self, in_dim, out_dim):
@@ -354,6 +367,7 @@ class LazyActionProb(nn.Module, LazyModule):
 
     def compute(self):
         pass
+
 
 class LazyDotProductAttention(nn.Module, LazyModule):
     def __init__(self, in_dim, out_dim):
@@ -461,10 +475,7 @@ class LazyMemoryPointerNet(nn.Module, LazyModule):
         LazyModule.__init__(self)
         self.in_dim = in_dim
         self.out_dim = out_dim
-        self.pass_gate = nn.Sequential(
-                            nn.Linear(in_dim, 1),
-                            nn.Sigmoid()
-                        )
+        self.pass_gate = nn.Sequential(nn.Linear(in_dim, 1), nn.Sigmoid())
         self.col_linear = nn.Linear(in_dim, out_dim, bias=False)
 
     def assert_input(self, *inputs):

@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 from src.ra_transformer.ra_multi_head_attention import RAMultiheadAttention
 
+
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
@@ -18,7 +19,12 @@ class RATransformerEncoder(nn.Module):
         output = src
 
         for layer in self.layers:
-            output = layer(output, relation, src_mask=mask, src_key_padding_mask=src_key_padding_mask)
+            output = layer(
+                output,
+                relation,
+                src_mask=mask,
+                src_key_padding_mask=src_key_padding_mask,
+            )
 
         if self.norm is not None:
             output = self.norm(output)
@@ -39,7 +45,7 @@ class RATransformerEncoderLayer(nn.Module):
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(dim_feedforward, d_model),
-            nn.Dropout(dropout)
+            nn.Dropout(dropout),
         )
         self.norm2 = nn.LayerNorm(d_model)
 
@@ -53,7 +59,9 @@ class RATransformerEncoderLayer(nn.Module):
         relation_v = self.relation_v_emb(relation) if relation is not None else None
 
         # Zero out pad relations
-        tmp = relation.unsqueeze(-1).expand(-1, -1, -1, self.relation_k_emb.embedding_dim)
+        tmp = relation.unsqueeze(-1).expand(
+            -1, -1, -1, self.relation_k_emb.embedding_dim
+        )
         zeros = torch.zeros_like(relation_k)
         relation_k2 = torch.where(tmp == zeros, zeros, relation_k)
         relation_v2 = torch.where(tmp == zeros, zeros, relation_v)
@@ -61,8 +69,15 @@ class RATransformerEncoderLayer(nn.Module):
         # self Multi-head Attention & Residual & Norm
         POST_LN = True
         if POST_LN:
-            src2 = self.self_attn(src, src, src, relation_k=relation_k2, relation_v=relation_v2, attn_mask=src_mask,
-                                  key_padding_mask=src_key_padding_mask)
+            src2 = self.self_attn(
+                src,
+                src,
+                src,
+                relation_k=relation_k2,
+                relation_v=relation_v2,
+                attn_mask=src_mask,
+                key_padding_mask=src_key_padding_mask,
+            )
             src = src + self.dropout(src2)
             src = self.norm1(src)
 
@@ -74,8 +89,15 @@ class RATransformerEncoderLayer(nn.Module):
         else:
             # Self Multi-head attention & Residual & Norm
             src = self.norm1(src)
-            src2 = self.self_attn(src, src, src, relation_k=relation_k2, relation_v=relation_v2, attn_mask=src_mask,
-                                  key_padding_mask=src_key_padding_mask)
+            src2 = self.self_attn(
+                src,
+                src,
+                src,
+                relation_k=relation_k2,
+                relation_v=relation_v2,
+                attn_mask=src_mask,
+                key_padding_mask=src_key_padding_mask,
+            )
             src = src + self.dropout(src2)
 
             # FeedForward & Residual & Norm

@@ -63,7 +63,7 @@ class TransformerDecoderFramework(nn.Module):
         self.arbitray_transformer = LazyTransformerDecoder(dim, nhead, layer_num)
         self.arbitray_action_affine_layer = LazyLinear(dim, dim)
         self.arbitray_symbol_affine_layer = LazyLinear(dim, dim)
-        self.arbitray_tgt_linear_layer = LazyLinear(dim, dim)
+        self.arbitray_tgt_linear_layer = LazyLinear(dim * 2, dim)
         self.arbitray_out_linear_layer = LazyLinear(dim, dim)
         self.arbitray_action_similarity = LazyCalculateSimilarity(dim, dim)
         self.arbitray_column_similarity = LazyCalculateSimilarity(dim, dim)
@@ -411,7 +411,7 @@ class TransformerDecoderFramework(nn.Module):
                 for action in history_actions
             ]
             action_embeddings = torch.stack(history_action_embeddings, dim=0)
-            action_embeddings_promise: TensorPromise = self.refine_action_affine_layer.forward_later(
+            action_embeddings_promise: TensorPromise = self.arbitray_action_affine_layer.forward_later(
                 action_embeddings
             )
             prev_tensor_dict.update({"action_embedding": action_embeddings_promise})
@@ -425,7 +425,7 @@ class TransformerDecoderFramework(nn.Module):
             symbol_embeddings = self.symbol_list_to_embedding(
                 history_symbols, grammar_idx=2
             )
-            symbol_embeddings_promise: TensorPromise = self.refine_symbol_affine_layer.forward_later(
+            symbol_embeddings_promise: TensorPromise = self.arbitray_symbol_affine_layer.forward_later(
                 symbol_embeddings
             )
             prev_tensor_dict.update({"symbol_embedding": symbol_embeddings_promise})
@@ -438,7 +438,7 @@ class TransformerDecoderFramework(nn.Module):
             action_embedding: torch.Tensor = prev_tensor_dict["action_embedding"].result
             symbol_embedding: torch.Tensor = prev_tensor_dict["symbol_embedding"].result
             combined_embedding = torch.cat((action_embedding, symbol_embedding), dim=-1)
-            combined_embedding_promise: TensorPromise = self.refine_tgt_linear_layer.forward_later(
+            combined_embedding_promise: TensorPromise = self.arbitray_tgt_linear_layer.forward_later(
                 combined_embedding
             )
             prev_tensor_dict.update({"combined_embedding": combined_embedding_promise})
@@ -452,7 +452,7 @@ class TransformerDecoderFramework(nn.Module):
                 "combined_embedding"
             ].result
             src_embedding: torch.Tensor = state.encoded_src
-            arbitrate_out_promise: TensorPromise = self.refine_transformer.forward_later(
+            arbitrate_out_promise: TensorPromise = self.arbitray_transformer.forward_later(
                 combined_embedding, src_embedding
             )
             prev_tensor_dict.update({"arbitrate_out": arbitrate_out_promise})
@@ -463,7 +463,7 @@ class TransformerDecoderFramework(nn.Module):
             prev_tensor_dict: Dict[str, Union[List[TensorPromise], TensorPromise]],
         ):
             arbitrate_out: torch.Tensor = prev_tensor_dict["arbitrate_out"].result
-            arbitrate_out_promise: TensorPromise = self.refine_out_linear_layer.forward_later(
+            arbitrate_out_promise: TensorPromise = self.arbitray_out_linear_layer.forward_later(
                 arbitrate_out
             )
             prev_tensor_dict.update({"arbitrate_out": arbitrate_out_promise})
@@ -475,11 +475,11 @@ class TransformerDecoderFramework(nn.Module):
         ):
             def calc_prod_with_idx_and_symbol(idx, symbol):
                 if symbol == "C":
-                    prod = self.refine_column_similarity.forward_later(
+                    prod = self.arbitray_column_similarity.forward_later(
                         decoder_out[idx], state.encoded_col, None
                     )
                 elif symbol == "T":
-                    prod = self.refine_table_similarity.forward_later(
+                    prod = self.arbitray_table_similarity.forward_later(
                         decoder_out[idx],
                         state.encoded_tab,
                         state.impossible_table_indices(idx),
@@ -492,7 +492,7 @@ class TransformerDecoderFramework(nn.Module):
                         if idx not in possible_action_ids
                     ]
 
-                    prod = self.refine_action_similarity.forward_later(
+                    prod = self.arbitray_action_similarity.forward_later(
                         decoder_out[idx],
                         self.grammar.action_emb.weight,
                         impossible_indices,
@@ -544,10 +544,11 @@ class TransformerDecoderFramework(nn.Module):
                             idx, prev_tensor_dict["arbitrate_prods"][idx].result
                         )
             else:
+                assert isinstance(state, TransformerStatePred)
                 for idx in range(state.refine_step_cnt, len(prev_tensor_list)):
                     ori_action = history_actions[idx]
 
-                    if ori_action in ["T", "C"]:
+                    if ori_action[0] in ["T", "C"]:
                         ori_pred_idx = ori_action[1]
 
                         # Refine pred
@@ -556,6 +557,9 @@ class TransformerDecoderFramework(nn.Module):
 
                         # Arbitrator's prediction
                         arbitrate_prod = prev_tensor_dict["arbitrate_prods"][idx].result
+
+                        refine_action: Action = (ori_action[0], refine_pred_idx)
+                        state.refine_pred(refine_action, idx)
 
                         # Compare (change C T only)
                         if ori_pred_idx != refine_pred_idx:
@@ -567,17 +571,19 @@ class TransformerDecoderFramework(nn.Module):
                             else:
                                 final_pred_idx = ori_pred_idx
 
-                            final_action = (ori_action[0], final_pred_idx)
+                            final_action: Action = (ori_action[0], final_pred_idx)
+                            state.arbitrate_pred(final_action, idx)
 
                             # alter pred history, step cnt
                             state.step_cnt = idx + 1
-                            state.preds = state.preds[:idx] + [final_action]
 
                             # roll back nonterminal
                             state.nonterminal_symbol_stack = roll_back_nonterminal_stack(
-                                state.preds
+                                state.arbitrated_preds[: idx + 1]
                             )
                             break
+                        else:
+                            state.arbitrate_pred(refine_action, idx)
             state.refine_step_cnt = idx + 1
 
         states = SequentialMonad(states)(

@@ -127,6 +127,8 @@ class TransformerStatePred(TransformerState):
         self.target_step = target_step
         self.probs = []
         self.preds: List[Action] = []
+        self.refined_preds: List[Action] = []
+        self.arbitrated_preds: List[Action] = []
         self.nonterminal_symbol_stack: List[Symbol] = [start_symbol]
 
     @classmethod
@@ -145,8 +147,14 @@ class TransformerStatePred(TransformerState):
         )
 
     @classmethod
-    def get_preds(cls, states: List["TransformerStatePred"]) -> List[List[Action]]:
-        return [state.preds for state in states]
+    def get_preds(
+        cls, states: List["TransformerStatePred"]
+    ) -> Dict[str, List[List[Action]]]:
+        return {
+            "preds": [state.preds for state in states],
+            "refined_preds": [state.refined_preds for state in states],
+            "arbitrated_preds": [state.arbitrated_preds for state in states],
+        }
 
     def get_probs(self) -> List[List[Tensor]]:
         return self.probs[self.target_step]
@@ -197,3 +205,17 @@ class TransformerStatePred(TransformerState):
             new_nonterminal_symbols + self.nonterminal_symbol_stack
         )
         self.preds.append(action)
+
+    def refine_pred(self, action: Action, idx: int):
+        if len(self.refined_preds) < len(self.preds):
+            self.refined_preds[len(self.refined_preds) : len(self.preds)] = self.preds[
+                len(self.refined_preds) : len(self.preds)
+            ]
+        self.refined_preds[idx] = action
+
+    def arbitrate_pred(self, action: Action, idx: int):
+        if len(self.arbitrated_preds) < len(self.preds):
+            self.arbitrated_preds[
+                len(self.arbitrated_preds) : len(self.preds)
+            ] = self.preds[len(self.arbitrated_preds) : len(self.preds)]
+        self.arbitrated_preds[idx] = action

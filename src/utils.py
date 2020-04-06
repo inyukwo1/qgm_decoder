@@ -482,7 +482,10 @@ def epoch_acc(
 ):
     model.eval()
     perm = list(range(len(sql_data)))
-    pred = []
+    if model_name == "transformer":
+        pred = {"preds": [], "refined_preds": [], "arbitrated_preds": []}
+    else:
+        pred = []
     gold = []
     example_list = []
     for st in tqdm(range(0, len(sql_data), batch_size)):
@@ -493,9 +496,12 @@ def epoch_acc(
         example_list += examples
         if model_name == "transformer":
             tmp, _ = model.parse(examples)
-            pred += tmp
+            pred["preds"] += tmp["preds"]
+            pred["refined_preds"] += tmp["refined_preds"]
+            pred["arbitrated_preds"] += tmp["arbitrated_preds"]
         else:
             pred += model.parse(examples)
+
         if model_name == "lstm":
             tmp = [
                 model.decoder.grammar.create_data(example.qgm) for example in examples
@@ -551,6 +557,18 @@ def epoch_acc(
         total_acc, is_correct_list = model.decoder.decoders[0].grammar.cal_acc(
             pred, gold
         )
+    elif model_name == "transformer":
+        total_acc_pred, is_correct_list_pred = model.decoder.grammar.cal_acc(
+            pred["preds"], gold
+        )
+        total_acc_refined, is_correct_list_refined = model.decoder.grammar.cal_acc(
+            pred["refined_preds"], gold
+        )
+        (
+            total_acc_arbitrated,
+            is_correct_list_arbitrated,
+        ) = model.decoder.grammar.cal_acc(pred["arbitrated_preds"], gold)
+        return total_acc_pred, total_acc_refined, total_acc_arbitrated
     else:
         total_acc, is_correct_list = model.decoder.grammar.cal_acc(pred, gold)
 

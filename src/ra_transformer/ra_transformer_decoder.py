@@ -4,6 +4,7 @@ import torch.nn as nn
 from src.transformer.multi_head_attention import MultiheadAttention
 from src.ra_transformer.ra_multi_head_attention import RAMultiheadAttention
 
+
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
@@ -15,11 +16,28 @@ class RATransformerDecoder(nn.Module):
         self.num_layers = num_layers
         self.norm = norm
 
-    def forward(self, tgt, memory, relation=None, tgt_mask=None, memory_mask=None, tgt_key_padding_mask=None, memory_key_padding_mask=None):
+    def forward(
+        self,
+        tgt,
+        memory,
+        relation=None,
+        tgt_mask=None,
+        memory_mask=None,
+        tgt_key_padding_mask=None,
+        memory_key_padding_mask=None,
+    ):
         output = tgt
 
         for mod in self.layers:
-            output = mod(output, memory, relation, tgt_mask=tgt_mask, memory_pamsk=memory_mask, tgt_key_padding_mask=tgt_key_padding_mask, memory_key_padding_mask=memory_key_padding_mask)
+            output = mod(
+                output,
+                memory,
+                relation,
+                tgt_mask=tgt_mask,
+                memory_pamsk=memory_mask,
+                tgt_key_padding_mask=tgt_key_padding_mask,
+                memory_key_padding_mask=memory_key_padding_mask,
+            )
 
         if self.norm is not None:
             output = self.norm(output)
@@ -49,26 +67,53 @@ class RATransformerDecoderLayer(nn.Module):
         self.relation_k_emb = nn.Embedding(nrelation, self.self_attn.head_dim)
         self.relation_v_emb = nn.Embedding(nrelation, self.self_attn.head_dim)
 
-    def forward(self, tgt, memory, tgt_relation=None, tgt_mask=None, memory_mask=None,
-                tgt_key_padding_mask=None, memory_key_padding_mask=None):
+    def forward(
+        self,
+        tgt,
+        memory,
+        tgt_relation=None,
+        tgt_mask=None,
+        memory_mask=None,
+        tgt_key_padding_mask=None,
+        memory_key_padding_mask=None,
+    ):
         # Relation Embedding
-        relation_k = self.relation_k_emb(tgt_relation) if tgt_relation is not None else None
-        relation_v = self.relation_v_emb(tgt_relation) if tgt_relation is not None else None
+        relation_k = (
+            self.relation_k_emb(tgt_relation) if tgt_relation is not None else None
+        )
+        relation_v = (
+            self.relation_v_emb(tgt_relation) if tgt_relation is not None else None
+        )
 
         # Zero out pad relations
-        tmp = tgt_relation.unsqueeze(-1).expand(-1, -1, -1, self.relation_k_emb.embedding_dim)
+        tmp = tgt_relation.unsqueeze(-1).expand(
+            -1, -1, -1, self.relation_k_emb.embedding_dim
+        )
         zeros = torch.zeros_like(relation_k)
         relation_k2 = torch.where(tmp == zeros, zeros, relation_k)
         relation_v2 = torch.where(tmp == zeros, zeros, relation_v)
 
         # Self Attention
-        tgt2 = self.self_attn(tgt, tgt, tgt, relation_k=relation_k2, relation_v=relation_v2, attn_mask=tgt_mask,
-                              key_padding_mask=tgt_key_padding_mask)
+        tgt2 = self.self_attn(
+            tgt,
+            tgt,
+            tgt,
+            relation_k=relation_k2,
+            relation_v=relation_v2,
+            attn_mask=tgt_mask,
+            key_padding_mask=tgt_key_padding_mask,
+        )
         tgt = tgt + self.dropout1(tgt2)
         tgt = self.norm1(tgt)
 
         # Multihead Attention
-        tgt2, _ = self.multihead_attn(tgt, memory, memory, attn_mask=memory_mask, key_padding_mask=memory_key_padding_mask)
+        tgt2, _ = self.multihead_attn(
+            tgt,
+            memory,
+            memory,
+            attn_mask=memory_mask,
+            key_padding_mask=memory_key_padding_mask,
+        )
         tgt = tgt + self.dropout2(tgt2)
         tgt = self.norm2(tgt)
 
@@ -78,4 +123,3 @@ class RATransformerDecoderLayer(nn.Module):
         tgt = self.norm3(tgt)
 
         return tgt
-
