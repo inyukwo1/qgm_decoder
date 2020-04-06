@@ -558,18 +558,26 @@ class TransformerDecoderFramework(nn.Module):
                 assert isinstance(state, TransformerStatePred)
                 for idx in range(state.refine_step_cnt, len(prev_tensor_list)):
                     ori_action = history_actions[idx]
+                    ori_pred_idx = (
+                        ori_action[1]
+                        if ori_action[0] in ["T", "C"]
+                        else SemQL.semql.action_to_aid(ori_action)
+                    )
 
-                    if ori_action[0] in ["T", "C"]:
-                        ori_pred_idx = ori_action[1]
+                    # Refine pred
+                    refine_prod = prev_tensor_list[idx].result
+                    refine_pred_idx = torch.argmax(refine_prod).item()
+                    refine_action = (
+                        (ori_action[0], refine_pred_idx)
+                        if ori_action[0] in ["T", "C"]
+                        else SemQL.semql.aid_to_action[refine_pred_idx]
+                    )
 
-                        # Refine pred
-                        refine_prod = prev_tensor_list[idx].result
-                        refine_pred_idx = torch.argmax(refine_prod).item()
-
+                    # get pred_action
+                    if ori_action[0] in ["T", "C"] and ori_action != refine_action:
                         # Arbitrator's prediction
                         arbitrate_prod = prev_tensor_dict["arbitrate_prods"][idx].result
 
-                        refine_action: Action = (ori_action[0], refine_pred_idx)
                         state.refine_pred(refine_action, idx)
 
                         # Compare (change C T only)
@@ -585,7 +593,15 @@ class TransformerDecoderFramework(nn.Module):
                             else:
                                 final_pred_idx = refine_pred_idx
 
-                            final_action: Action = (ori_action[0], final_pred_idx)
+                            final_action: Action = (
+                                ori_action[0],
+                                final_pred_idx,
+                            ) if ori_action[0] in [
+                                "T",
+                                "C",
+                            ] else SemQL.semql.aid_to_action[
+                                final_pred_idx
+                            ]
                             state.arbitrate_pred(final_action, idx)
 
                             # alter pred history, step cnt
