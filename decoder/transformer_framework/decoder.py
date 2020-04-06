@@ -36,6 +36,8 @@ class TransformerDecoderFramework(nn.Module):
         self.dim = dim
         self.nhead = nhead
         self.layer_num = layer_num
+        self.use_ct_loss = cfg.use_ct_loss
+        self.use_arbitrator = cfg.use_arbitrator
 
         # For inference
         self.infer_transformer = LazyTransformerDecoder(dim, nhead, layer_num)
@@ -539,8 +541,7 @@ class TransformerDecoderFramework(nn.Module):
                 symbols = state.get_history_symbols()
                 assert len(symbols) == len(prev_tensor_list)
                 for idx, item in enumerate(prev_tensor_list):
-                    loss_ct_only = True
-                    if loss_ct_only:
+                    if self.use_ct_loss:
                         if symbols[idx] in ["C", "T"]:
                             probs = item.result
                             state.apply_loss(idx, probs)
@@ -573,8 +574,7 @@ class TransformerDecoderFramework(nn.Module):
 
                         # Compare (change C T only)
                         if ori_pred_idx != refine_pred_idx:
-                            use_arbitrator = False
-                            if use_arbitrator:
+                            if self.use_arbitrator:
                                 if (
                                     arbitrate_prod[refine_pred_idx]
                                     > arbitrate_prod[ori_pred_idx]
