@@ -35,6 +35,15 @@ class TransformerState(State):
     def step(self):
         self.step_cnt += 1
 
+    def get_encoded_src(self, idx=0):
+        return self.encoded_src[idx]
+
+    def get_encoded_col(self, idx=0):
+        return self.encoded_col[idx]
+
+    def get_encoded_tab(self, idx=0):
+        return self.encoded_tab[idx]
+
     def get_history_actions(self) -> List[Action]:
         pass
 

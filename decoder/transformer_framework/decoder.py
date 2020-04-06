@@ -84,10 +84,10 @@ class TransformerDecoderFramework(nn.Module):
             grammar = self.grammar3
         if action[0] == "C":
             col_idx = action[1]
-            return state.encoded_col[col_idx]
+            return state.get_encoded_col(grammar_idx)[col_idx]
         elif action[0] == "T":
             tab_idx = action[1]
-            return state.encoded_tab[tab_idx]
+            return state.get_encoded_tab(grammar_idx)[tab_idx]
         else:
             action_idx = torch.tensor(grammar.action_to_aid[action]).long().cuda()
             return grammar.action_emb(action_idx)
@@ -125,7 +125,7 @@ class TransformerDecoderFramework(nn.Module):
         target_step=100,
         states=None,
     ):
-        b_size = len(encoded_src)
+        b_size = len(encoded_src[0])
 
         # Create states
         if states:
@@ -136,9 +136,9 @@ class TransformerDecoderFramework(nn.Module):
             state_class = TransformerStateGold
             states = [
                 TransformerStateGold(
-                    encoded_src[b_idx, : src_lens[b_idx]],
-                    encoded_col[b_idx, : col_lens[b_idx]],
-                    encoded_tab[b_idx, : tab_lens[b_idx]],
+                    [item[b_idx, : src_lens[b_idx]] for item in encoded_src],
+                    [item[b_idx, : col_lens[b_idx]] for item in encoded_col],
+                    [item[b_idx, : tab_lens[b_idx]] for item in encoded_tab],
                     col_tab_dic[b_idx],
                     golds[b_idx],
                 )
@@ -148,9 +148,9 @@ class TransformerDecoderFramework(nn.Module):
             state_class = TransformerStatePred
             states = [
                 TransformerStatePred(
-                    encoded_src[b_idx, : src_lens[b_idx]],
-                    encoded_col[b_idx, : col_lens[b_idx]],
-                    encoded_tab[b_idx, : tab_lens[b_idx]],
+                    [item[b_idx, : src_lens[b_idx]] for item in encoded_src],
+                    [item[b_idx, : col_lens[b_idx]] for item in encoded_col],
+                    [item[b_idx, : tab_lens[b_idx]] for item in encoded_tab],
                     col_tab_dic[b_idx],
                     self.grammar.start_symbol,
                     target_step,
@@ -211,7 +211,7 @@ class TransformerDecoderFramework(nn.Module):
             combined_embedding: torch.Tensor = prev_tensor_dict[
                 "combined_embedding"
             ].result
-            src_embedding: torch.Tensor = state.encoded_src
+            src_embedding: torch.Tensor = state.get_encoded_src(0)
             decoder_out_promise: TensorPromise = self.infer_transformer.forward_later(
                 combined_embedding, src_embedding
             )
@@ -234,12 +234,12 @@ class TransformerDecoderFramework(nn.Module):
             def calc_prod_with_idx_and_symbol(idx, symbol):
                 if symbol == "C":
                     prod = self.infer_column_similarity.forward_later(
-                        decoder_out[idx], state.encoded_col, None
+                        decoder_out[idx], state.get_encoded_col(0), None
                     )
                 elif symbol == "T":
                     prod = self.infer_table_similarity.forward_later(
                         decoder_out[idx],
-                        state.encoded_tab,
+                        state.get_encoded_tab(0),
                         state.impossible_table_indices(idx),
                     )
                 else:
@@ -341,7 +341,7 @@ class TransformerDecoderFramework(nn.Module):
             combined_embedding: torch.Tensor = prev_tensor_dict[
                 "combined_embedding"
             ].result
-            src_embedding: torch.Tensor = state.encoded_src
+            src_embedding: torch.Tensor = state.get_encoded_src(1)
             refine_out_promise: TensorPromise = self.refine_transformer.forward_later(
                 combined_embedding, src_embedding
             )
@@ -365,12 +365,12 @@ class TransformerDecoderFramework(nn.Module):
             def calc_prod_with_idx_and_symbol(idx, symbol):
                 if symbol == "C":
                     prod = self.refine_column_similarity.forward_later(
-                        decoder_out[idx], state.encoded_col, None
+                        decoder_out[idx], state.get_encoded_col(1), None
                     )
                 elif symbol == "T":
                     prod = self.refine_table_similarity.forward_later(
                         decoder_out[idx],
-                        state.encoded_tab,
+                        state.get_encoded_tab(1),
                         state.impossible_table_indices(idx),
                     )
                 else:
@@ -453,8 +453,13 @@ class TransformerDecoderFramework(nn.Module):
             combined_embedding: torch.Tensor = prev_tensor_dict[
                 "combined_embedding"
             ].result
+<<<<<<< Updated upstream
             src_embedding: torch.Tensor = state.encoded_src
             arbitrate_out_promise: TensorPromise = self.arbitray_transformer.forward_later(
+=======
+            src_embedding: torch.Tensor = state.get_encoded_src(2)
+            arbitrate_out_promise: TensorPromise = self.refine_transformer.forward_later(
+>>>>>>> Stashed changes
                 combined_embedding, src_embedding
             )
             prev_tensor_dict.update({"arbitrate_out": arbitrate_out_promise})
@@ -477,13 +482,18 @@ class TransformerDecoderFramework(nn.Module):
         ):
             def calc_prod_with_idx_and_symbol(idx, symbol):
                 if symbol == "C":
+<<<<<<< Updated upstream
                     prod = self.arbitray_column_similarity.forward_later(
                         decoder_out[idx], state.encoded_col, None
+=======
+                    prod = self.refine_column_similarity.forward_later(
+                        decoder_out[idx], state.get_encoded_col(2), None
+>>>>>>> Stashed changes
                     )
                 elif symbol == "T":
                     prod = self.arbitray_table_similarity.forward_later(
                         decoder_out[idx],
-                        state.encoded_tab,
+                        state.get_encoded_tab(2),
                         state.impossible_table_indices(idx),
                     )
                 else:
@@ -539,7 +549,15 @@ class TransformerDecoderFramework(nn.Module):
                 symbols = state.get_history_symbols()
                 assert len(symbols) == len(prev_tensor_list)
                 for idx, item in enumerate(prev_tensor_list):
-                    if symbols[idx] in ["C", "T"]:
+                    loss_ct_only = True
+                    if loss_ct_only:
+                        if symbols[idx] in ["C", "T"]:
+                            probs = item.result
+                            state.apply_loss(idx, probs)
+                            state.apply_loss(
+                                idx, prev_tensor_dict["arbitrate_prods"][idx].result
+                            )
+                    else:
                         probs = item.result
                         state.apply_loss(idx, probs)
                         state.apply_loss(
@@ -565,13 +583,17 @@ class TransformerDecoderFramework(nn.Module):
 
                         # Compare (change C T only)
                         if ori_pred_idx != refine_pred_idx:
-                            if (
-                                arbitrate_prod[refine_pred_idx]
-                                > arbitrate_prod[ori_pred_idx]
-                            ):
-                                final_pred_idx = refine_pred_idx
+                            use_arbitrator = False
+                            if use_arbitrator:
+                                if (
+                                    arbitrate_prod[refine_pred_idx]
+                                    > arbitrate_prod[ori_pred_idx]
+                                ):
+                                    final_pred_idx = refine_pred_idx
+                                else:
+                                    final_pred_idx = ori_pred_idx
                             else:
-                                final_pred_idx = ori_pred_idx
+                                final_pred_idx = refine_pred_idx
 
                             final_action: Action = (ori_action[0], final_pred_idx)
                             state.arbitrate_pred(final_action, idx)
