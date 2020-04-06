@@ -379,7 +379,7 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed, is_col_set=True):
             qgm=process_dict["qgm"],
             # qgm_action=process_dict["rule_label"],
             qgm_action=rule_label,
-            relation=sql['relation'] if 'relation' in sql else None,
+            relation=sql["relation"] if "relation" in sql else None,
             gt=sql["gt"],
         )
 
@@ -548,7 +548,9 @@ def epoch_acc(
 
     # Calculate acc
     if model_name == "ensemble":
-        total_acc, is_correct_list = model.decoder.decoders[0].grammar.cal_acc(pred, gold)
+        total_acc, is_correct_list = model.decoder.decoders[0].grammar.cal_acc(
+            pred, gold
+        )
     else:
         total_acc, is_correct_list = model.decoder.grammar.cal_acc(pred, gold)
 
@@ -601,7 +603,9 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type):
     val_data = load_data_new(val_path, is_toy, is_bert, query_type)
 
     # Create relations
-    train_data = [relation.create_relation(item, table_data, True) for item in train_data]
+    train_data = [
+        relation.create_relation(item, table_data, True) for item in train_data
+    ]
     val_data = [relation.create_relation(item, table_data, True) for item in val_data]
 
     # Show dataset length
@@ -676,7 +680,10 @@ def write_eval_result_as(
                 try:
                     q_type = " ".join(sql_json["question_arg_type"][idx])
                 except:
-                    q_type = " ".join([sql_json["question_arg_type"][idx][0]] + sql_json["question_arg_type"][idx][1])
+                    q_type = " ".join(
+                        [sql_json["question_arg_type"][idx][0]]
+                        + sql_json["question_arg_type"][idx][1]
+                    )
                 q_pad_len = max(len(q), len(q_type)) - len(q)
                 q_type_pad_len = max(len(q), len(q_type)) - len(q_type)
                 q_pad = " " * (q_pad_len // 2)
@@ -760,9 +767,12 @@ def set_random_seed(seed):
 def append_ground_truth(grammar, data_list):
     for idx, data in enumerate(data_list):
         gt_str = grammar.create_data(data["qgm"])
-        data_list[idx]["gt"] = [grammar.str_to_action(item) for item in gt_str.split(" ")]
+        data_list[idx]["gt"] = [
+            grammar.str_to_action(item) for item in gt_str.split(" ")
+        ]
 
     return data_list
+
 
 def analyze_regarding_schema_size(examples, is_correct, preds, golds, table_data):
     tab_acc_dic = {}
@@ -844,7 +854,11 @@ def analyze_regarding_schema_size(examples, is_correct, preds, golds, table_data
         action_acc = 1 - col_cnt_act_dic[key] / cnt
         col_acc = 1 - col_cnt_col_dic[key] / cnt
         tab_acc = 1 - col_cnt_tab_dic[key] / cnt
-        print("Column size: {}  cnt: {}  Total Acc: {}  Action Acc: {}  Column Acc: {}  Table Acc: {}".format(key, cnt, acc, action_acc, col_acc, tab_acc))
+        print(
+            "Column size: {}  cnt: {}  Total Acc: {}  Action Acc: {}  Column Acc: {}  Table Acc: {}".format(
+                key, cnt, acc, action_acc, col_acc, tab_acc
+            )
+        )
     print("")
     for key, item in sorted(tab_acc_dic.items()):
         cnt = tab_cnt_dic[key]
@@ -852,7 +866,11 @@ def analyze_regarding_schema_size(examples, is_correct, preds, golds, table_data
         action_acc = 1 - tab_cnt_act_dic[key] / cnt
         col_acc = 1 - tab_cnt_col_dic[key] / cnt
         tab_acc = 1 - tab_cnt_tab_dic[key] / cnt
-        print("Table size: {}  cnt: {}  Total Acc: {}  Action Acc: {}  Column Acc: {}  Table Acc: {}".format(key, cnt, acc, action_acc, col_acc, tab_acc))
+        print(
+            "Table size: {}  cnt: {}  Total Acc: {}  Action Acc: {}  Column Acc: {}  Table Acc: {}".format(
+                key, cnt, acc, action_acc, col_acc, tab_acc
+            )
+        )
 
     tab_cnt_col_cnt = {}
     for col_len in sorted(col_cnt_tab_cnt.keys()):

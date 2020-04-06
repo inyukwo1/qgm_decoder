@@ -65,7 +65,9 @@ class TransformerStateGold(TransformerState):
 
     @classmethod
     def is_to_refine(cls, state) -> bool:
-        return state.step_cnt == len(state.gold) and state.refine_step_cnt < len(state.gold)
+        return state.step_cnt == len(state.gold) and state.refine_step_cnt < len(
+            state.gold
+        )
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
@@ -117,7 +119,7 @@ class TransformerStatePred(TransformerState):
         encoded_tab,
         col_tab_dic,
         start_symbol: Symbol,
-        target_step = 100,
+        target_step=100,
     ):
         TransformerState.__init__(
             self, encoded_src, encoded_col, encoded_tab, col_tab_dic
@@ -129,11 +131,18 @@ class TransformerStatePred(TransformerState):
 
     @classmethod
     def is_to_refine(cls, state) -> bool:
-        return state.nonterminal_symbol_stack == [] and state.refine_step_cnt < state.step_cnt
+        return (
+            state.nonterminal_symbol_stack == []
+            and state.refine_step_cnt < state.step_cnt
+        )
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
-        return state.nonterminal_symbol_stack and state.step_cnt < 50 and state.step_cnt <= state.target_step
+        return (
+            state.nonterminal_symbol_stack
+            and state.step_cnt < 50
+            and state.step_cnt <= state.target_step
+        )
 
     @classmethod
     def get_preds(cls, states: List["TransformerStatePred"]) -> List[List[Action]]:

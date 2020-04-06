@@ -12,7 +12,8 @@ from torch.utils.tensorboard import SummaryWriter
 from src import utils
 from rule.semql.semql import SemQL
 from models.wrapper_model import EncoderDecoderModel
-#from models.LSTMEncoderQGMTransformerDecoder import LSTMEncoderQGMTransformerDecoder
+
+# from models.LSTMEncoderQGMTransformerDecoder import LSTMEncoderQGMTransformerDecoder
 
 log = logging.getLogger(__name__)
 
