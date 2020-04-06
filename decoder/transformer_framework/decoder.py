@@ -90,9 +90,7 @@ class TransformerDecoderFramework(nn.Module):
             return state.encoded_tab[tab_idx]
         else:
             action_idx = torch.tensor(grammar.action_to_aid[action]).long().cuda()
-            # action_idx = torch.tensor(self.grammar.action_to_aid[action]).long().cuda()
             return grammar.action_emb(action_idx)
-            return self.grammar.action_emb(action_idx)
 
     def symbol_list_to_embedding(
         self, symbol_list: List[Symbol], grammar_idx=0
@@ -299,8 +297,10 @@ class TransformerDecoderFramework(nn.Module):
         ) -> Dict[str, TensorPromise]:
             history_actions: List[Action] = state.get_history_actions()
             history_action_embeddings: List[torch.Tensor] = [
-                self.action_to_embedding(state, action, grammar_idx=1)
-                for action in history_actions
+                self.onedim_zero_tensor()
+                if idx == state.refine_step_cnt
+                else self.action_to_embedding(state, action, grammar_idx=1)
+                for idx, action in enumerate(history_actions)
             ]
             action_embeddings = torch.stack(history_action_embeddings, dim=0)
             action_embeddings_promise: TensorPromise = self.refine_action_affine_layer.forward_later(
@@ -407,8 +407,10 @@ class TransformerDecoderFramework(nn.Module):
         ):
             history_actions: List[Action] = state.get_history_actions()
             history_action_embeddings: List[torch.Tensor] = [
-                self.action_to_embedding(state, action, grammar_idx=2)
-                for action in history_actions
+                self.onedim_zero_tensor()
+                if idx == state.refine_step_cnt
+                else self.action_to_embedding(state, action, grammar_idx=2)
+                for idx, action in enumerate(history_actions)
             ]
             action_embeddings = torch.stack(history_action_embeddings, dim=0)
             action_embeddings_promise: TensorPromise = self.arbitray_action_affine_layer.forward_later(
