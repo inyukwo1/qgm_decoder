@@ -52,7 +52,7 @@ class TransformerDecoderFramework(nn.Module):
         self.refine_transformer = LazyTransformerDecoder(dim, nhead, layer_num)
         self.refine_action_affine_layer = LazyLinear(dim, dim)
         self.refine_symbol_affine_layer = LazyLinear(dim, dim)
-        self.refine_tgt_linear_layer = LazyLinear(dim, dim)
+        self.refine_tgt_linear_layer = LazyLinear(dim * 2, dim)
         self.refine_out_linear_layer = LazyLinear(dim, dim)
         self.refine_action_similarity = LazyCalculateSimilarity(dim, dim)
         self.refine_column_similarity = LazyCalculateSimilarity(dim, dim)
@@ -301,19 +301,15 @@ class TransformerDecoderFramework(nn.Module):
             symbol_embeddings_promise: TensorPromise = self.refine_symbol_affine_layer.forward_later(
                 symbol_embeddings
             )
-            new_tensor_dict: Dict[str, TensorPromiseOrTensor] = dict()
-            new_tensor_dict.update(prev_tensor_dict)
-            new_tensor_dict.update({"symbol_embedding": symbol_embeddings_promise})
-            return new_tensor_dict
+            prev_tensor_dict.update({"symbol_embedding": symbol_embeddings_promise})
+            return prev_tensor_dict
 
         def combine_embeddings_for_refine(
             state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
         ) -> Dict[str, TensorPromise]:
-            #action_embedding: torch.Tensor = prev_tensor_dict["action_embedding"].result
+            action_embedding: torch.Tensor = prev_tensor_dict["action_embedding"].result
             symbol_embedding: torch.Tensor = prev_tensor_dict["symbol_embedding"].result
-            #hidden_vectors: torch.Tensor = prev_tensor_dict["decoder_out"].result
-            #combined_embedding = torch.cat((symbol_embedding, hidden_vectors), dim=-1)
-            combined_embedding = symbol_embedding
+            combined_embedding = torch.cat((action_embedding, symbol_embedding), dim=-1)
             combined_embedding_promise: TensorPromise = self.refine_tgt_linear_layer.forward_later(
                 combined_embedding
             )
@@ -381,6 +377,92 @@ class TransformerDecoderFramework(nn.Module):
             prev_tensor_dict.update({"refine_prods": promise_prods})
             return prev_tensor_dict
 
+        def embed_history_actions_for_arbitrate(state: TransformerState,
+                                                prev_tensor_dict: Dict[str, Union[List[TensorPromise], TensorPromise]]):
+            history_actions: List[Action] = state.get_history_actions()
+            history_action_embeddings: List[torch.Tensor] = [self.action_to_embedding(state, action, grammar_idx=2) for action in history_actions]
+            action_embeddings = torch.stack(history_action_embeddings, dim=0)
+            action_embeddings_promise: TensorPromise = self.refine_action_affine_layer.forward_later(action_embeddings)
+            prev_tensor_dict.update({"action_embedding": action_embeddings_promise})
+            return prev_tensor_dict
+
+        def embed_history_symbols_for_arbitrate(state: TransformerState,
+                                                prev_tensor_dict: Dict[str, Union[List[TensorPromise], TensorPromise]]):
+            history_symbols: List[Symbol] = state.get_history_symbols()
+            symbol_embeddings = self.symbol_list_to_embedding(history_symbols, grammar_idx=2)
+            symbol_embeddings_promise: TensorPromise = self.refine_symbol_affine_layer.forward_later(
+                symbol_embeddings
+            )
+            prev_tensor_dict.update({"symbol_embedding": symbol_embeddings_promise})
+            return prev_tensor_dict
+
+        def combine_embeddings_for_arbitrate(state: TransformerState,
+                                             prev_tensor_dict: Dict[str, Union[List[TensorPromise], TensorPromise]]):
+            action_embedding: torch.Tensor = prev_tensor_dict["action_embedding"].result
+            symbol_embedding: torch.Tensor = prev_tensor_dict["symbol_embedding"].result
+            combined_embedding = torch.cat((action_embedding, symbol_embedding), dim=-1)
+            combined_embedding_promise: TensorPromise = self.refine_tgt_linear_layer.forward_later(
+                combined_embedding
+            )
+            prev_tensor_dict.update({"combined_embedding": combined_embedding_promise})
+            return prev_tensor_dict
+
+        def pass_arbitrate_transformer(state: TransformerState,
+                                       prev_tensor_dict: Dict[str, Union[List[TensorPromise], TensorPromise]]):
+            combined_embedding: torch.Tensor = prev_tensor_dict[
+                "combined_embedding"
+            ].result
+            src_embedding: torch.Tensor = state.encoded_src
+            arbitrate_out_promise: TensorPromise = self.refine_transformer.forward_later(
+                combined_embedding, src_embedding
+            )
+            prev_tensor_dict.update({"arbitrate_out": arbitrate_out_promise})
+            return prev_tensor_dict
+
+        def pass_arbitrate_out_linear(state: TransformerState,
+                                      prev_tensor_dict: Dict[str, Union[List[TensorPromise], TensorPromise]]):
+            arbitrate_out: torch.Tensor = prev_tensor_dict["arbitrate_out"].result
+            arbitrate_out_promise: TensorPromise = self.refine_out_linear_layer.forward_later(
+                arbitrate_out
+            )
+            prev_tensor_dict.update({"arbitrate_out": arbitrate_out_promise})
+            return prev_tensor_dict
+
+        def calc_prod_for_arbitrate(state: TransformerState,
+                                    prev_tensor_dict: Dict[str, Union[List[TensorPromise], TensorPromise]]):
+            def calc_prod_with_idx_and_symbol(idx, symbol):
+                if symbol == "C":
+                    prod = self.refine_column_similarity.forward_later(
+                        decoder_out[idx], state.encoded_col, None
+                    )
+                elif symbol == "T":
+                    prod = self.refine_table_similarity.forward_later(
+                        decoder_out[idx],
+                        state.encoded_tab,
+                        state.impossible_table_indices(idx),
+                    )
+                else:
+                    possible_action_ids = SemQL.semql.get_possible_aids(symbol)
+                    impossible_indices = [idx for idx in range(SemQL.semql.get_action_len()) if idx not in possible_action_ids]
+
+                    prod = self.refine_action_similarity.forward_later(
+                        decoder_out[idx], self.grammar.action_emb.weight, impossible_indices
+                    )
+                return prod
+
+            decoder_out: torch.Tensor = prev_tensor_dict["arbitrate_out"].result
+            promise_prods: List[TensorPromise] = []
+
+            history_symbols: List[Symbol] = state.get_history_symbols()
+            current_symbol: Symbol = state.get_current_symbol()
+            if current_symbol:
+                history_symbols += [current_symbol]
+            for idx, symbol in enumerate(history_symbols):
+                prod = calc_prod_with_idx_and_symbol(idx, symbol)
+                promise_prods.append(prod)
+            prev_tensor_dict.update({"arbitrate_prods": promise_prods})
+            return prev_tensor_dict
+
         def apply_prod_for_refine(
             state: TransformerState,
             prev_tensor_dict: Dict[str, Union[List[TensorPromise], TensorPromise]],
@@ -402,32 +484,44 @@ class TransformerDecoderFramework(nn.Module):
             history_actions: List[Action] = state.get_history_actions()
             prev_tensor_list = prev_tensor_dict["refine_prods"]
             if state.is_gold():
-                # Loss for C T only?
+                # Loss for C T (?)
                 symbols = state.get_history_symbols()
                 assert len(symbols) == len(prev_tensor_list)
                 for idx, item in enumerate(prev_tensor_list):
                     if symbols[idx] in ["C", "T"]:
                         probs = item.result
                         state.apply_loss(idx, probs)
+                        state.apply_loss(idx, prev_tensor_dict["arbitrate_prods"][idx].result)
             else:
                 for idx in range(state.refine_step_cnt, len(prev_tensor_list)):
                     ori_action = history_actions[idx]
-                    prod = prev_tensor_list[idx].result
-                    pred_idx = torch.argmax(prod).item()
-                    if ori_action[0] in ["T", "C"]:
-                        new_action = (ori_action[0], pred_idx)
-                    else:
-                        new_action = SemQL.semql.aid_to_action[pred_idx]
 
-                    # Compare (change C T only)
-                    if ori_action != new_action and ori_action[0] in ["T", "C"]:
-                        # alter pred history, step cnt
-                        state.step_cnt = idx+1
-                        state.preds = state.preds[:idx] + [new_action]
+                    if ori_action in ["T", "C"]:
+                        ori_pred_idx = ori_action[1]
 
-                        # roll back nonterminal
-                        state.nonterminal_symbol_stack = roll_back_nonterminal_stack(state.preds)
-                        break
+                        # Refine pred
+                        refine_prod = prev_tensor_list[idx].result
+                        refine_pred_idx = torch.argmax(refine_prod).item()
+
+                        # Arbitrator's prediction
+                        arbitrate_prod = prev_tensor_dict["arbitrate_prods"][idx].result
+
+                        # Compare (change C T only)
+                        if ori_pred_idx != refine_pred_idx:
+                            if arbitrate_prod[refine_pred_idx] > arbitrate_prod[ori_pred_idx]:
+                                final_pred_idx = refine_pred_idx
+                            else:
+                                final_pred_idx = ori_pred_idx
+
+                            final_action = (ori_action[0], final_pred_idx)
+
+                            # alter pred history, step cnt
+                            state.step_cnt = idx+1
+                            state.preds = state.preds[:idx] + [final_action]
+
+                            # roll back nonterminal
+                            state.nonterminal_symbol_stack = roll_back_nonterminal_stack(state.preds)
+                            break
             state.refine_step_cnt = idx+1
 
         states = SequentialMonad(states)(
@@ -450,14 +544,15 @@ class TransformerDecoderFramework(nn.Module):
                 .Then(pass_refine_transformer)
                 .Then(pass_refine_out_linear)
                 .Then(calc_prod_for_refine)
+                .Then(embed_history_actions_for_arbitrate)
+                .Then(embed_history_symbols_for_arbitrate)
+                .Then(combine_embeddings_for_arbitrate)
+                .Then(pass_arbitrate_transformer)
+                .Then(pass_arbitrate_out_linear)
+                .Then(calc_prod_for_arbitrate)
                 .Then(apply_prod_for_refine)
             )
         ).states
-
-        # Arbitrator는
-        # Logic unit 추가해서 is_to_refine 일 때 실행 되도록.
-        # model 1, 2 가 서로 같게 예측해도 실행이 되야 함. 학습할 때 실행 되어야 하니까
-        # NL까지 처음부터 인코딩을 해야하는가????
 
         if golds:
             return TransformerStateGold.combine_loss(states)

@@ -323,24 +323,23 @@ class EncoderDecoderModel(nn.Module):
         with torch.no_grad():
             batch = Batch(examples, is_cuda=self.is_cuda)
             if self.encoder_name == "ra_transformer":
-                # src = self.gen_x_batch(batch.src_sents)
-                # col = self.gen_x_batch(batch.table_sents)
-                # tab = self.gen_x_batch(batch.table_names)
-                #
-                # src_len = batch.src_sents_len
-                # col_len = [len(item) for item in batch.table_sents]
-                # tab_len = [len(item) for item in batch.table_names]
-                #
-                # src_mask = batch.src_token_mask
-                # col_mask = batch.table_token_mask
-                # tab_mask = batch.schema_token_mask
-                #
-                # relation_matrix = relation.create_batch(batch.relation)
-                #
-                # src_encodings, table_embeddings, schema_embeddings = \
-                #     self.encoder(src, col, tab, src_len, col_len, tab_len, src_mask, col_mask, tab_mask,
-                #                  relation_matrix)
-                pass
+                src = self.gen_x_batch(batch.src_sents)
+                col = self.gen_x_batch(batch.table_sents)
+                tab = self.gen_x_batch(batch.table_names)
+
+                src_len = batch.src_sents_len
+                col_len = [len(item) for item in batch.table_sents]
+                tab_len = [len(item) for item in batch.table_names]
+
+                src_mask = batch.src_token_mask
+                col_mask = batch.table_token_mask
+                tab_mask = batch.schema_token_mask
+
+                relation_matrix = relation.create_batch(batch.relation)
+
+                src_encodings, table_embeddings, schema_embeddings = \
+                    self.encoder(src, col, tab, src_len, col_len, tab_len, src_mask, col_mask, tab_mask,
+                                 relation_matrix)
             elif self.encoder_name == "transformer":
                 (
                     src_encodings,
