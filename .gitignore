@@ -11,4 +11,5 @@ saved_model/
 *d.txt
 web/build/
 web/node_modules/
-.out
+*.out
+*.pyc

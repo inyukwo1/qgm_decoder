@@ -453,13 +453,8 @@ class TransformerDecoderFramework(nn.Module):
             combined_embedding: torch.Tensor = prev_tensor_dict[
                 "combined_embedding"
             ].result
-<<<<<<< Updated upstream
-            src_embedding: torch.Tensor = state.encoded_src
-            arbitrate_out_promise: TensorPromise = self.arbitray_transformer.forward_later(
-=======
             src_embedding: torch.Tensor = state.get_encoded_src(2)
             arbitrate_out_promise: TensorPromise = self.refine_transformer.forward_later(
->>>>>>> Stashed changes
                 combined_embedding, src_embedding
             )
             prev_tensor_dict.update({"arbitrate_out": arbitrate_out_promise})
@@ -482,13 +477,8 @@ class TransformerDecoderFramework(nn.Module):
         ):
             def calc_prod_with_idx_and_symbol(idx, symbol):
                 if symbol == "C":
-<<<<<<< Updated upstream
-                    prod = self.arbitray_column_similarity.forward_later(
-                        decoder_out[idx], state.encoded_col, None
-=======
                     prod = self.refine_column_similarity.forward_later(
                         decoder_out[idx], state.get_encoded_col(2), None
->>>>>>> Stashed changes
                     )
                 elif symbol == "T":
                     prod = self.arbitray_table_similarity.forward_later(
