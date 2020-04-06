@@ -1,3 +1,4 @@
 encoder_name: ra_transformer
 layer_num: 3
 nhead: 6
+use_separate_encoder: true

@@ -19,7 +19,7 @@ lr: 1e-3
 is_bert: false
 batch_size: 64
 lr_scheduler: true
-lr_scheduler_gamma: 5e-1
+lr_scheduler_gamma: 1e-1
 milestones: [40, 70]
 optimizer: radam
 query_type: simple

@@ -31,6 +31,7 @@ class EncoderDecoderModel(nn.Module):
         self.use_col_set = cfg.is_col_set
         self.encoder_name = cfg.encoder_name
         self.decoder_name = cfg.decoder_name
+        self.use_separate_encoder = cfg.use_separate_encoder
         self.embed_size = 1024 if self.is_bert else 300
 
         # Decoder
@@ -162,23 +163,38 @@ class EncoderDecoderModel(nn.Module):
 
             relation_matrix = relation.create_batch(batch.relation)
 
-            outs = [
-                (
-                    item(
-                        src,
-                        col,
-                        tab,
-                        src_len,
-                        col_len,
-                        tab_len,
-                        src_mask,
-                        col_mask,
-                        tab_mask,
-                        relation_matrix,
+            if self.use_separate_encoder:
+                outs = [
+                    (
+                        item(
+                            src,
+                            col,
+                            tab,
+                            src_len,
+                            col_len,
+                            tab_len,
+                            src_mask,
+                            col_mask,
+                            tab_mask,
+                            relation_matrix,
+                        )
                     )
+                    for item in self.encoder
+                ]
+            else:
+                out = self.encoder[0](
+                    src,
+                    col,
+                    tab,
+                    src_len,
+                    col_len,
+                    tab_len,
+                    src_mask,
+                    col_mask,
+                    tab_mask,
+                    relation_matrix,
                 )
-                for item in self.encoder
-            ]
+                outs = [out, out, out]
 
             src_encodings = [item[0] for item in outs]
             table_embeddings = [item[1] for item in outs]
@@ -367,23 +383,38 @@ class EncoderDecoderModel(nn.Module):
 
                 relation_matrix = relation.create_batch(batch.relation)
 
-                outs = [
-                    (
-                        item(
-                            src,
-                            col,
-                            tab,
-                            src_len,
-                            col_len,
-                            tab_len,
-                            src_mask,
-                            col_mask,
-                            tab_mask,
-                            relation_matrix,
+                if self.use_separate_encoder:
+                    outs = [
+                        (
+                            item(
+                                src,
+                                col,
+                                tab,
+                                src_len,
+                                col_len,
+                                tab_len,
+                                src_mask,
+                                col_mask,
+                                tab_mask,
+                                relation_matrix,
+                            )
                         )
+                        for item in self.encoder
+                    ]
+                else:
+                    out = self.encoder[0](
+                        src,
+                        col,
+                        tab,
+                        src_len,
+                        col_len,
+                        tab_len,
+                        src_mask,
+                        col_mask,
+                        tab_mask,
+                        relation_matrix,
                     )
-                    for item in self.encoder
-                ]
+                    outs = [out, out, out]
 
                 src_encodings = [item[0] for item in outs]
                 table_embeddings = [item[1] for item in outs]
