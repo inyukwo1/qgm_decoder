@@ -69,7 +69,9 @@ class EncoderDecoderModel(nn.Module):
             raise RuntimeError("Unsupported encoder name")
 
         # Key embeddings
-        self.key_embs = [nn.Embedding(4, 300).double().cuda() for _ in range(8)]
+        self.key_embs = nn.ModuleList(
+            [nn.Embedding(4, 300).double().cuda() for _ in range(8)]
+        )
 
         if self.encoder_name != "bert":
             self.without_bert_params = list(self.parameters(recurse=True))
