@@ -265,33 +265,24 @@ class TransformerDecoderFramework(nn.Module):
                 return prod
 
             decoder_out: torch.Tensor = prev_tensor_dict["decoder_out"].result
-            promise_prods: List[TensorPromise] = []
 
-            history_symbols: List[Symbol] = state.get_history_symbols()
             current_symbol: Symbol = state.get_current_symbol()
-            if current_symbol:
-                history_symbols += [current_symbol]
-            for idx, symbol in enumerate(history_symbols):
-                prod = calc_prod_with_idx_and_symbol(idx, symbol)
-                promise_prods.append(prod)
-            prev_tensor_dict.update({"infer_prods": promise_prods})
+            assert current_symbol != None
+            promise_prod: TensorPromise = calc_prod_with_idx_and_symbol(
+                state.step_cnt, current_symbol
+            )
+            prev_tensor_dict.update({"infer_prod": promise_prod})
             return prev_tensor_dict
 
         def apply_prod(
             state: TransformerState,
             prev_tensor_dict: Dict[str, Union[List[TensorPromise], TensorPromise]],
         ):
-            prev_tensor_list = prev_tensor_dict["infer_prods"]
+            prod = prev_tensor_dict["infer_prod"].result
             if state.is_gold():
-                # for idx, prod_promise in enumerate(prev_tensor_list):
-                #    prod = prod_promise.result
-                if prev_tensor_list:
-                    idx = len(prev_tensor_list) - 1
-                    prod = prev_tensor_list[-1].result
-                    state.apply_loss(idx, prod)
+                state.apply_loss(state.step_cnt, prod)
             else:
                 assert isinstance(state, TransformerStatePred)
-                prod = prev_tensor_list[-1].result
                 state.save_probs(prod)
                 state.apply_pred(prod)
             state.step()
@@ -406,16 +397,15 @@ class TransformerDecoderFramework(nn.Module):
                 return prod
 
             decoder_out: torch.Tensor = prev_tensor_dict["refine_out"].result
-            promise_prods: List[TensorPromise] = []
+
+            assert state.get_current_symbol() == None
 
             history_symbols: List[Symbol] = state.get_history_symbols()
-            current_symbol: Symbol = state.get_current_symbol()
-            if current_symbol:
-                history_symbols += [current_symbol]
-            for idx, symbol in enumerate(history_symbols):
-                prod = calc_prod_with_idx_and_symbol(idx, symbol)
-                promise_prods.append(prod)
-            prev_tensor_dict.update({"refine_prods": promise_prods})
+            target_symbol = history_symbols[state.refine_step_cnt]
+            promise_prod: TensorPromise = calc_prod_with_idx_and_symbol(
+                state.refine_step_cnt, target_symbol
+            )
+            prev_tensor_dict.update({"refine_prods": promise_prod})
             return prev_tensor_dict
 
         def embed_history_actions_for_arbitrate(
@@ -519,16 +509,15 @@ class TransformerDecoderFramework(nn.Module):
                 return prod
 
             decoder_out: torch.Tensor = prev_tensor_dict["arbitrate_out"].result
-            promise_prods: List[TensorPromise] = []
+
+            assert state.get_current_symbol() == None
 
             history_symbols: List[Symbol] = state.get_history_symbols()
-            current_symbol: Symbol = state.get_current_symbol()
-            if current_symbol:
-                history_symbols += [current_symbol]
-            for idx, symbol in enumerate(history_symbols):
-                prod = calc_prod_with_idx_and_symbol(idx, symbol)
-                promise_prods.append(prod)
-            prev_tensor_dict.update({"arbitrate_prods": promise_prods})
+            target_symbol = history_symbols[state.refine_step_cnt]
+            promise_prod: TensorPromise = calc_prod_with_idx_and_symbol(
+                state.refine_step_cnt, target_symbol
+            )
+            prev_tensor_dict.update({"arbitrate_prods": promise_prod})
             return prev_tensor_dict
 
         def apply_prod_for_refine(
@@ -550,29 +539,18 @@ class TransformerDecoderFramework(nn.Module):
                 return stack
 
             history_actions: List[Action] = state.get_history_actions()
-            prev_tensor_list = prev_tensor_dict["refine_prods"]
+            symbol = history_actions[state.refine_step_cnt]
+            refine_prod = prev_tensor_dict["refine_prods"].result
+            arbitrate_prod = prev_tensor_dict["arbitrate_prods"].result
+            cur_refine_step = state.refine_step_cnt
             if state.is_gold():
                 # Loss for C T (?)
-                symbols = state.get_history_symbols()
-                assert len(symbols) == len(prev_tensor_list)
-                for idx, item in enumerate(prev_tensor_list):
-                    if self.use_ct_loss:
-                        if symbols[idx] in ["C", "T"]:
-                            probs = item.result
-                            state.apply_loss(idx, probs)
-                            state.apply_loss(
-                                idx, prev_tensor_dict["arbitrate_prods"][idx].result
-                            )
-                    else:
-                        probs = item.result
-                        state.apply_loss(idx, probs)
-                        state.apply_loss(
-                            idx, prev_tensor_dict["arbitrate_prods"][idx].result
-                        )
+                if not self.use_ct_loss or symbol in ["C", "T"]:
+                    state.apply_loss(cur_refine_step, refine_prod)
+                    state.apply_loss(cur_refine_step, arbitrate_prod)
             else:
                 assert isinstance(state, TransformerStatePred)
-                idx = state.refine_step_cnt
-                ori_action = history_actions[idx]
+                ori_action = history_actions[cur_refine_step]
                 ori_pred_idx = (
                     ori_action[1]
                     if ori_action[0] in ["T", "C"]
@@ -580,7 +558,6 @@ class TransformerDecoderFramework(nn.Module):
                 )
 
                 # Refine pred
-                refine_prod = prev_tensor_list[idx].result
                 refine_pred_idx = torch.argmax(refine_prod).item()
                 refine_action = (
                     (ori_action[0], refine_pred_idx)
@@ -591,11 +568,6 @@ class TransformerDecoderFramework(nn.Module):
                 # get pred_action
                 if ori_action != refine_action:
                     if self.refine_all or ori_action[0] in ["C", "T"]:
-                        # Arbitrator's prediction
-                        arbitrate_prod = prev_tensor_dict["arbitrate_prods"][idx].result
-
-                        state.refine_pred(refine_action, idx)
-
                         # Compare (change C T only)
                         if ori_pred_idx != refine_pred_idx:
                             if self.use_arbitrator:
@@ -618,21 +590,24 @@ class TransformerDecoderFramework(nn.Module):
                             ] else SemQL.semql.aid_to_action[
                                 final_pred_idx
                             ]
-                            state.arbitrate_pred(final_action, idx)
+
+                            # Save refiner and arbitrator's inference
+                            state.refine_pred(refine_action, cur_refine_step)
+                            state.arbitrate_pred(final_action, cur_refine_step)
 
                             if ori_action != final_action:
                                 # alter pred history, step cnt
-                                state.step_cnt = idx + 1
-                                state.infer_pred(final_action, idx)
+                                state.step_cnt = cur_refine_step + 1
+                                state.infer_pred(final_action, cur_refine_step)
 
                                 # roll back nonterminal
                                 state.nonterminal_symbol_stack = roll_back_nonterminal_stack(
-                                    state.arbitrated_preds[: idx + 1]
+                                    state.arbitrated_preds[: cur_refine_step + 1]
                                 )
                 else:
-                    state.refine_pred(refine_action, idx)
-                    state.arbitrate_pred(refine_action, idx)
-            state.refine_step_cnt = idx + 1
+                    state.refine_pred(refine_action, cur_refine_step)
+                    state.arbitrate_pred(refine_action, cur_refine_step)
+            state.refine_step_cnt = cur_refine_step + 1
 
         states = SequentialMonad(states)(
             WhileLogic.While(state_class.is_not_done)
