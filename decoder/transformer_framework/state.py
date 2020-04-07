@@ -215,16 +215,21 @@ class TransformerStatePred(TransformerState):
         )
         self.preds.append(action)
 
-    def refine_pred(self, action: Action, idx: int):
-        if len(self.refined_preds) < len(self.preds):
-            self.refined_preds[len(self.refined_preds) : len(self.preds)] = self.preds[
-                len(self.refined_preds) : len(self.preds)
-            ]
-        self.refined_preds[idx] = action
+    def refine_pred(self, action: Action, idx: int = 0):
+        # if len(self.refined_preds) < len(self.preds):
+        #     self.refined_preds[len(self.refined_preds) : len(self.preds)] = self.preds[
+        #         len(self.refined_preds) : len(self.preds)
+        #     ]
+        # self.refined_preds[idx] = action
+        self.refined_preds += [action]
 
-    def arbitrate_pred(self, action: Action, idx: int):
-        if len(self.arbitrated_preds) < len(self.preds):
-            self.arbitrated_preds[
-                len(self.arbitrated_preds) : len(self.preds)
-            ] = self.preds[len(self.arbitrated_preds) : len(self.preds)]
-        self.arbitrated_preds[idx] = action
+    def arbitrate_pred(self, action: Action, idx: int = 0):
+        # if len(self.arbitrated_preds) < len(self.preds):
+        #     self.arbitrated_preds[
+        #         len(self.arbitrated_preds) : len(self.preds)
+        #     ] = self.preds[len(self.arbitrated_preds) : len(self.preds)]
+        # self.arbitrated_preds[idx] = action
+        self.arbitrated_preds += [action]
+
+    def infer_pred(self, action: Action, idx: int = 0):
+        self.preds = self.preds[:idx] + [action]

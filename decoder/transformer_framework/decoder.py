@@ -38,6 +38,9 @@ class TransformerDecoderFramework(nn.Module):
         self.layer_num = layer_num
         self.use_ct_loss = cfg.use_ct_loss
         self.use_arbitrator = cfg.use_arbitrator
+        self.refine_all = cfg.refine_all
+        if self.refine_all:
+            assert self.use_ct_loss == False, "Should be false"
 
         # For inference
         self.infer_transformer = LazyTransformerDecoder(dim, nhead, layer_num)
@@ -308,8 +311,8 @@ class TransformerDecoderFramework(nn.Module):
             action_embeddings_promise: TensorPromise = self.refine_action_affine_layer.forward_later(
                 action_embeddings
             )
-            prev_tensor_dict.update({"action_embedding": action_embeddings_promise})
-            return prev_tensor_dict
+            new_tensor_dict = {"action_embedding": action_embeddings_promise}
+            return new_tensor_dict
 
         def embed_history_symbols_for_refine(
             state: TransformerState, prev_tensor_dict: Dict
@@ -556,25 +559,26 @@ class TransformerDecoderFramework(nn.Module):
                         )
             else:
                 assert isinstance(state, TransformerStatePred)
-                for idx in range(state.refine_step_cnt, len(prev_tensor_list)):
-                    ori_action = history_actions[idx]
-                    ori_pred_idx = (
-                        ori_action[1]
-                        if ori_action[0] in ["T", "C"]
-                        else SemQL.semql.action_to_aid(ori_action)
-                    )
+                idx = state.refine_step_cnt
+                ori_action = history_actions[idx]
+                ori_pred_idx = (
+                    ori_action[1]
+                    if ori_action[0] in ["T", "C"]
+                    else SemQL.semql.action_to_aid[ori_action]
+                )
 
-                    # Refine pred
-                    refine_prod = prev_tensor_list[idx].result
-                    refine_pred_idx = torch.argmax(refine_prod).item()
-                    refine_action = (
-                        (ori_action[0], refine_pred_idx)
-                        if ori_action[0] in ["T", "C"]
-                        else SemQL.semql.aid_to_action[refine_pred_idx]
-                    )
+                # Refine pred
+                refine_prod = prev_tensor_list[idx].result
+                refine_pred_idx = torch.argmax(refine_prod).item()
+                refine_action = (
+                    (ori_action[0], refine_pred_idx)
+                    if ori_action[0] in ["T", "C"]
+                    else SemQL.semql.aid_to_action[refine_pred_idx]
+                )
 
-                    # get pred_action
-                    if ori_action[0] in ["T", "C"] and ori_action != refine_action:
+                # get pred_action
+                if ori_action != refine_action:
+                    if self.refine_all or ori_action[0] in ["C", "T"]:
                         # Arbitrator's prediction
                         arbitrate_prod = prev_tensor_dict["arbitrate_prods"][idx].result
 
@@ -604,16 +608,18 @@ class TransformerDecoderFramework(nn.Module):
                             ]
                             state.arbitrate_pred(final_action, idx)
 
-                            # alter pred history, step cnt
-                            state.step_cnt = idx + 1
+                            if ori_action != final_action:
+                                # alter pred history, step cnt
+                                state.step_cnt = idx + 1
+                                state.infer_pred(final_action, idx)
 
-                            # roll back nonterminal
-                            state.nonterminal_symbol_stack = roll_back_nonterminal_stack(
-                                state.arbitrated_preds[: idx + 1]
-                            )
-                            break
-                        else:
-                            state.arbitrate_pred(refine_action, idx)
+                                # roll back nonterminal
+                                state.nonterminal_symbol_stack = roll_back_nonterminal_stack(
+                                    state.arbitrated_preds[: idx + 1]
+                                )
+                else:
+                    state.refine_pred(refine_action, idx)
+                    state.arbitrate_pred(refine_action, idx)
             state.refine_step_cnt = idx + 1
 
         states = SequentialMonad(states)(
