@@ -1,4 +1,5 @@
 from typing import List, Dict, Union
+import copy
 import torch
 import torch.nn as nn
 from rule.semql.semql import SemQL
@@ -296,6 +297,17 @@ class TransformerDecoderFramework(nn.Module):
             state.step()
             return prev_tensor_dict
 
+        def save_initial_pred(
+            state: TransformerState,
+            prev_tensor_dict: Dict[str, Union[List[TensorPromise], TensorPromise]],
+        ):
+            if isinstance(state, TransformerStatePred):
+                actions = copy.deepcopy(state.get_history_actions())
+                assert len(actions) == len(state.preds), "Diff: {} {}".format(
+                    len(actions), len(state.preds)
+                )
+                state.save_init_preds(actions)
+
         # Functions for refinement stage
         def embed_history_actions_for_refine(
             state: TransformerState, prev_tensor_dict: Dict
@@ -459,7 +471,7 @@ class TransformerDecoderFramework(nn.Module):
                 "combined_embedding"
             ].result
             src_embedding: torch.Tensor = state.get_encoded_src(2)
-            arbitrate_out_promise: TensorPromise = self.refine_transformer.forward_later(
+            arbitrate_out_promise: TensorPromise = self.arbitray_transformer.forward_later(
                 combined_embedding, src_embedding
             )
             prev_tensor_dict.update({"arbitrate_out": arbitrate_out_promise})
@@ -482,7 +494,7 @@ class TransformerDecoderFramework(nn.Module):
         ):
             def calc_prod_with_idx_and_symbol(idx, symbol):
                 if symbol == "C":
-                    prod = self.refine_column_similarity.forward_later(
+                    prod = self.arbitray_column_similarity.forward_later(
                         decoder_out[idx], state.get_encoded_col(2), None
                     )
                 elif symbol == "T":
@@ -634,6 +646,7 @@ class TransformerDecoderFramework(nn.Module):
                 .Then(calc_prod)
                 .Then(apply_prod)
             )
+            .Do(LogicUnit.If(state_class.is_initial_pred).Then(save_initial_pred))
             .Do(
                 LogicUnit.If(state_class.is_to_refine)
                 .Then(embed_history_actions_for_refine)

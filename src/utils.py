@@ -483,7 +483,12 @@ def epoch_acc(
     model.eval()
     perm = list(range(len(sql_data)))
     if model_name == "transformer":
-        pred = {"preds": [], "refined_preds": [], "arbitrated_preds": []}
+        pred = {
+            "preds": [],
+            "refined_preds": [],
+            "arbitrated_preds": [],
+            "initial_preds": [],
+        }
     else:
         pred = []
     gold = []
@@ -499,6 +504,7 @@ def epoch_acc(
             pred["preds"] += tmp["preds"]
             pred["refined_preds"] += tmp["refined_preds"]
             pred["arbitrated_preds"] += tmp["arbitrated_preds"]
+            pred["initial_preds"] += tmp["initial_preds"]
         else:
             pred += model.parse(examples)
 
@@ -568,7 +574,16 @@ def epoch_acc(
             total_acc_arbitrated,
             is_correct_list_arbitrated,
         ) = model.decoder.grammar.cal_acc(pred["arbitrated_preds"], gold)
-        return total_acc_pred, total_acc_refined, total_acc_arbitrated
+        (
+            total_acc_init_pred,
+            is_correct_list_init_pred,
+        ) = model.decoder.grammar.cal_acc(pred["initial_preds"], gold)
+        return (
+            total_acc_pred,
+            total_acc_refined,
+            total_acc_arbitrated,
+            total_acc_init_pred,
+        )
     else:
         total_acc, is_correct_list = model.decoder.grammar.cal_acc(pred, gold)
 

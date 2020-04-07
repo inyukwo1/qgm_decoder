@@ -146,6 +146,7 @@ def train(cfg):
                     train_acc_pred,
                     train_acc_refined,
                     train_acc_arbitrated,
+                    train_acc_init_pred,
                 ) = utils.epoch_acc(
                     model,
                     cfg.batch_size,
@@ -154,7 +155,12 @@ def train(cfg):
                     cfg.decoder_name,
                     cfg.is_col_set,
                 )
-                (val_acc_pred, val_acc_refined, val_acc_arbitrated,) = utils.epoch_acc(
+                (
+                    val_acc_pred,
+                    val_acc_refined,
+                    val_acc_arbitrated,
+                    val_acc_init_pred,
+                ) = utils.epoch_acc(
                     model,
                     cfg.batch_size,
                     val_data,
@@ -183,6 +189,12 @@ def train(cfg):
                 )
                 utils.logging_to_tensorboard(
                     summary_writer,
+                    "{}_train_acc_init_pred/".format(dataset_name),
+                    train_acc_init_pred,
+                    epoch,
+                )
+                utils.logging_to_tensorboard(
+                    summary_writer,
                     "{}_val_loss/".format(dataset_name),
                     val_loss,
                     epoch,
@@ -205,25 +217,33 @@ def train(cfg):
                     val_acc_arbitrated,
                     epoch,
                 )
+                utils.logging_to_tensorboard(
+                    summary_writer,
+                    "{}_val_init_pred/".format(dataset_name),
+                    val_acc_init_pred,
+                    epoch,
+                )
                 # Print Accuracy
                 log.info(
-                    "Total Train Acc: {} refined: {} arbitrated: {}".format(
+                    "Total Train Acc: {} refined: {} arbitrated: {} init: {}\n".format(
                         train_acc_pred["total"],
                         train_acc_refined["total"],
                         train_acc_arbitrated["total"],
+                        train_acc_init_pred["total"],
                     )
                 )
                 log.info(
-                    "Total Val Acc: {} refined: {} arbitrated: {}\n".format(
+                    "Total Val Acc: {} refined: {} arbitrated: {} init: {}\n".format(
                         val_acc_pred["total"],
                         val_acc_refined["total"],
                         val_acc_arbitrated["total"],
+                        val_acc_init_pred["total"],
                     )
                 )
 
                 # Save if total_acc is higher
-                if best_val_acc <= val_acc_arbitrated["total"]:
-                    best_val_acc = val_acc_arbitrated["total"]
+                if best_val_acc <= val_acc_pred["total"]:
+                    best_val_acc = val_acc_pred["total"]
                     log.info("Saving new best model with acc: {}".format(best_val_acc))
                     torch.save(
                         model.state_dict(),

@@ -29,6 +29,10 @@ class TransformerState(State):
     def is_to_infer(cls, state) -> bool:
         pass
 
+    @classmethod
+    def is_initial_pred(cls, state) -> bool:
+        pass
+
     def is_gold(self):
         pass
 
@@ -87,6 +91,10 @@ class TransformerStateGold(TransformerState):
     def combine_loss(cls, states: List["TransformerStateGold"]) -> SemQL_Loss_New:
         return sum([state.loss for state in states])
 
+    @classmethod
+    def is_initial_pred(cls, state) -> bool:
+        return False
+
     def is_gold(self):
         return True
 
@@ -136,6 +144,7 @@ class TransformerStatePred(TransformerState):
         self.target_step = target_step
         self.probs = []
         self.preds: List[Action] = []
+        self.init_preds: List[Action] = []
         self.refined_preds: List[Action] = []
         self.arbitrated_preds: List[Action] = []
         self.nonterminal_symbol_stack: List[Symbol] = [start_symbol]
@@ -150,7 +159,7 @@ class TransformerStatePred(TransformerState):
     @classmethod
     def is_to_infer(cls, state) -> bool:
         return (
-            state.nonterminal_symbol_stack
+            state.nonterminal_symbol_stack != []
             and state.step_cnt < 50
             and state.step_cnt <= state.target_step
         )
@@ -163,7 +172,12 @@ class TransformerStatePred(TransformerState):
             "preds": [state.preds for state in states],
             "refined_preds": [state.refined_preds for state in states],
             "arbitrated_preds": [state.arbitrated_preds for state in states],
+            "initial_preds": [state.init_preds for state in states],
         }
+
+    @classmethod
+    def is_initial_pred(cls, state) -> bool:
+        return not state.is_to_infer(state) and state.init_preds == []
 
     def get_probs(self) -> List[List[Tensor]]:
         return self.probs[self.target_step]
@@ -233,3 +247,6 @@ class TransformerStatePred(TransformerState):
 
     def infer_pred(self, action: Action, idx: int = 0):
         self.preds = self.preds[:idx] + [action]
+
+    def save_init_preds(self, actions):
+        self.init_preds = actions
