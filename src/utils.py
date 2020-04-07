@@ -404,9 +404,25 @@ def epoch_train(
     is_train=True,
     optimize_freq=1,
 ):
+
     model.train()
     # shuffle
-    perm = np.random.permutation(len(sql_data))
+    sql_data.sort(key=lambda elem: len(elem["gt"]))
+
+    def chunks(lst, n):
+        for i in range(0, len(lst), n):
+            yield lst[i : i + n]
+
+    new_sql_data = []
+    for sql_data_chunk in chunks(sql_data, batch_size * 3):
+        random.shuffle(sql_data_chunk)
+        new_sql_data += [sql_data_chunk]
+    random.shuffle(new_sql_data)
+    sql_data = []
+    for sql_data_chunk in new_sql_data:
+        sql_data += sql_data_chunk
+
+    perm = list(range(len(sql_data)))
     optimizer.zero_grad()
     if bert_optimizer:
         bert_optimizer.zero_grad()
