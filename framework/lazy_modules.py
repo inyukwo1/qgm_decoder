@@ -225,7 +225,9 @@ class LazyRATransformerDecoder(nn.Module, LazyModule):
         super(LazyRATransformerDecoder, self).__init__()
         LazyModule.__init__(self)
         self.in_dim = in_dim
-        decoder_layer = RATransformerDecoderLayer(d_model=in_dim, nhead=nhead)
+        decoder_layer = RATransformerDecoderLayer(
+            d_model=in_dim, nhead=nhead, nrelation=relation_num
+        )
         self.module = RATransformerDecoder(decoder_layer, num_layers=layer_num)
 
     def assert_input(self, *inputs):
