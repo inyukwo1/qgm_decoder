@@ -391,7 +391,7 @@ class TransformerDecoderFramework(nn.Module):
 
                     prod = self.refine_action_similarity.forward_later(
                         decoder_out[idx],
-                        self.grammar.action_emb.weight,
+                        self.grammar2.action_emb.weight,
                         impossible_indices,
                     )
                 return prod
@@ -503,7 +503,7 @@ class TransformerDecoderFramework(nn.Module):
 
                     prod = self.arbitray_action_similarity.forward_later(
                         decoder_out[idx],
-                        self.grammar.action_emb.weight,
+                        self.grammar3.action_emb.weight,
                         impossible_indices,
                     )
                 return prod
