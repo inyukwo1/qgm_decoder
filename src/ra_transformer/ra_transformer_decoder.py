@@ -1,6 +1,7 @@
 import copy
 import torch
 import torch.nn as nn
+from torch.nn import functional as F
 from src.transformer.multi_head_attention import MultiheadAttention
 from src.ra_transformer.ra_multi_head_attention import RAMultiheadAttention
 
@@ -34,7 +35,7 @@ class RATransformerDecoder(nn.Module):
                 memory,
                 relation,
                 tgt_mask=tgt_mask,
-                memory_pamsk=memory_mask,
+                memory_mask=memory_mask,
                 tgt_key_padding_mask=tgt_key_padding_mask,
                 memory_key_padding_mask=memory_key_padding_mask,
             )
@@ -46,7 +47,15 @@ class RATransformerDecoder(nn.Module):
 
 
 class RATransformerDecoderLayer(nn.Module):
-    def __init__(self, d_model, nhead, nrelation=0, dim_feedforward=2048, dropout=0.1):
+    def __init__(
+        self,
+        d_model,
+        nhead,
+        nrelation=0,
+        dim_feedforward=2048,
+        dropout=0.1,
+        activation="relu",
+    ):
         super(RATransformerDecoderLayer, self).__init__()
         # Multi-head Attention
         self.self_attn = RAMultiheadAttention(d_model, nhead, dropout=dropout)
@@ -63,9 +72,16 @@ class RATransformerDecoderLayer(nn.Module):
         self.dropout2 = nn.Dropout(dropout)
         self.dropout3 = nn.Dropout(dropout)
 
+        self.activation = _get_activation_fn(activation)
+
         # Relation Embeddings
         self.relation_k_emb = nn.Embedding(nrelation, self.self_attn.head_dim)
         self.relation_v_emb = nn.Embedding(nrelation, self.self_attn.head_dim)
+
+    def __setstate__(self, state):
+        if "activation" not in state:
+            state["activation"] = F.relu
+        super(RATransformerDecoderLayer, self).__setstate__(state)
 
     def forward(
         self,
@@ -123,3 +139,10 @@ class RATransformerDecoderLayer(nn.Module):
         tgt = self.norm3(tgt)
 
         return tgt
+
+
+def _get_activation_fn(activation):
+    if activation == "relu":
+        return F.relu
+    elif activation == "gelu":
+        return F.gelu

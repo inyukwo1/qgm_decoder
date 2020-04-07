@@ -6,3 +6,4 @@ use_mem_pointer: false
 use_ct_loss: false
 use_arbitrator: true
 refine_all: true
+use_relation: true
