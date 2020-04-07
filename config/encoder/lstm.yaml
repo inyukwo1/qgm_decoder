@@ -1,1 +1,2 @@
 encoder_name: lstm
+use_separate_encoder: true

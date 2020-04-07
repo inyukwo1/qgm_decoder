@@ -50,11 +50,6 @@ class TransformerDecoderFramework(nn.Module):
 
         # For inference
         self.infer_transformer = LazyTransformerDecoder(dim, nhead, layer_num)
-        # self.infer_transformer = (
-        #     LazyRATransformerDecoder(dim, nhead, layer_num, len(relation_keys))
-        #     if self.use_relation
-        #     else LazyTransformerDecoder(dim, nhead, layer_num)
-        # )
         self.infer_action_affine_layer = LazyLinear(dim, dim)
         self.infer_symbol_affine_layer = LazyLinear(dim, dim)
         self.infer_tgt_linear_layer = LazyLinear(dim * 2, dim)
@@ -166,9 +161,9 @@ class TransformerDecoderFramework(nn.Module):
             state_class = TransformerStateGold
             states = [
                 TransformerStateGold(
-                    [item[b_idx, : src_lens[b_idx]] for item in encoded_src],
-                    [item[b_idx, : col_lens[b_idx]] for item in encoded_col],
-                    [item[b_idx, : tab_lens[b_idx]] for item in encoded_tab],
+                    [item[b_idx][: src_lens[b_idx]] for item in encoded_src],
+                    [item[b_idx][: col_lens[b_idx]] for item in encoded_col],
+                    [item[b_idx][: tab_lens[b_idx]] for item in encoded_tab],
                     col_tab_dic[b_idx],
                     golds[b_idx],
                 )
@@ -178,9 +173,9 @@ class TransformerDecoderFramework(nn.Module):
             state_class = TransformerStatePred
             states = [
                 TransformerStatePred(
-                    [item[b_idx, : src_lens[b_idx]] for item in encoded_src],
-                    [item[b_idx, : col_lens[b_idx]] for item in encoded_col],
-                    [item[b_idx, : tab_lens[b_idx]] for item in encoded_tab],
+                    [item[b_idx][: src_lens[b_idx]] for item in encoded_src],
+                    [item[b_idx][: col_lens[b_idx]] for item in encoded_col],
+                    [item[b_idx][: tab_lens[b_idx]] for item in encoded_tab],
                     col_tab_dic[b_idx],
                     self.grammar.start_symbol,
                     target_step,
@@ -242,10 +237,6 @@ class TransformerDecoderFramework(nn.Module):
                 "combined_embedding"
             ].result
             src_embedding: torch.Tensor = state.get_encoded_src(0)
-            # # Create relation matrix
-            # relation = self.create_relation_matrix(
-            #     state.get_history_actions(), use_padding=True
-            # )
             decoder_out_promise: TensorPromise = self.infer_transformer.forward_later(
                 combined_embedding, src_embedding
             )
@@ -331,6 +322,7 @@ class TransformerDecoderFramework(nn.Module):
         def embed_history_actions_for_refine(
             state: TransformerState, prev_tensor_dict: Dict
         ) -> Dict[str, TensorPromise]:
+
             history_actions: List[Action] = state.get_history_actions()
             history_action_embeddings: List[torch.Tensor] = [
                 self.onedim_zero_tensor()

@@ -1,4 +1,7 @@
 import torch
+from typing import List, Dict, Union
+from rule.grammar import Action, Symbol, SymbolId
+from rule.semql.semql import SemQL
 
 
 def array_to_tensor(batch_array):
@@ -58,3 +61,14 @@ def filter_action(qgm_action, target_symbol, prev_symbols):
                 ]:
                     actions += [action]
     return actions
+
+
+def create_random_actions(actions: List[Action], cur_idx: int) -> List[Action]:
+    nonterminals = []
+    new_actions = actions[:cur_idx]
+    for action in new_actions:
+        aid = SemQL.semql.action_to_aid[action]
+        symbol = action[0]
+        # Parse nonterminals
+
+    pass

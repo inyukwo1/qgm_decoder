@@ -56,7 +56,8 @@ class EncoderDecoderModel(nn.Module):
         if self.encoder_name == "bert":
             self.encoder = BERT(cfg)
         elif self.encoder_name == "lstm":
-            self.encoder = LSTMEncoder(cfg)
+            self.encoder = nn.ModuleList([LSTMEncoder(cfg) for _ in range(3)])
+            # self.encoder = LSTMEncoder(cfg)
             # self.encoder = IRNetLSTMEncoder(cfg)
         elif self.encoder_name == "transformer":
             self.encoder = Transformer_Encoder(cfg)
@@ -242,12 +243,25 @@ class EncoderDecoderModel(nn.Module):
                 return None, None
             enc_last_cell = last_cell
         elif self.encoder_name == "lstm":
-            encoded_out = self.encoder(batch)
+            if self.use_separate_encoder:
+                outs = [encoder(batch) for encoder in self.encoder]
+            else:
+                out = self.encoder[0](batch)
+                outs = [out, out, out]
+
+            # encoded_out = self.encoder(batch)
             # encoded_out = self.encoder(examples)
-            src_encodings = [item["src_encoding"] for item in encoded_out]
-            table_embeddings = [item["col_encoding"] for item in encoded_out]
-            schema_embeddings = [item["tab_encoding"] for item in encoded_out]
-            enc_last_cell = torch.stack([item["last_cell"] for item in encoded_out])
+            src_encodings = [
+                [item["src_encoding"] for item in encoded_out] for encoded_out in outs
+            ]
+            table_embeddings = [
+                [item["col_encoding"] for item in encoded_out] for encoded_out in outs
+            ]
+            schema_embeddings = [
+                [item["tab_encoding"] for item in encoded_out] for encoded_out in outs
+            ]
+            # enc_last_cell = torch.stack([item["last_cell"] for item in encoded_out])
+            enc_last_cell = None
         else:
             raise RuntimeError("Unsupported encoder name")
 
@@ -463,12 +477,28 @@ class EncoderDecoderModel(nn.Module):
                     return None, None
                 enc_last_cell = last_cell
             elif self.encoder_name == "lstm":
-                encoded_out = self.encoder(batch)
+                if self.use_separate_encoder:
+                    outs = [(encoder(batch) for encoder in self.encoder)]
+                else:
+                    out = self.encoder[0](batch)
+                    outs = [out, out, out]
+
+                # encoded_out = self.encoder(batch)
                 # encoded_out = self.encoder(examples)
-                src_encodings = [item["src_encoding"] for item in encoded_out]
-                table_embeddings = [item["col_encoding"] for item in encoded_out]
-                schema_embeddings = [item["tab_encoding"] for item in encoded_out]
-                enc_last_cell = torch.stack([item["last_cell"] for item in encoded_out])
+                src_encodings = [
+                    [item["src_encoding"] for item in encoded_out]
+                    for encoded_out in outs
+                ]
+                table_embeddings = [
+                    [item["col_encoding"] for item in encoded_out]
+                    for encoded_out in outs
+                ]
+                schema_embeddings = [
+                    [item["tab_encoding"] for item in encoded_out]
+                    for encoded_out in outs
+                ]
+                # enc_last_cell = torch.stack([item["last_cell"] for item in encoded_out])
+                enc_last_cell = None
             else:
                 raise RuntimeError("Unsupported encoder name")
 
