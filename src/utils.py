@@ -469,7 +469,10 @@ def epoch_train(
             raise RuntimeError("Unsupported model")
 
         if is_train:
-            loss.backward()
+            if not loss.requires_grad:
+                loss.backward()
+            else:
+                print("nothing to backward")
             if idx % optimize_freq == 0:
                 if clip_grad > 0.0:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
