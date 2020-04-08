@@ -56,11 +56,11 @@ class TransformerState(State):
     def get_encoded_tab(self, mode):
         return self.encoded_tab[mode]
 
-    def get_history_actions(self, mode) -> List[Action]:
+    def get_history_actions(self, mode, left_only) -> List[Action]:
         pass
 
-    def get_history_symbols(self, mode) -> List[Symbol]:
-        return [action[0] for action in self.get_history_actions(mode)]
+    def get_history_symbols(self, mode, left_only) -> List[Symbol]:
+        return [action[0] for action in self.get_history_actions(mode, left_only)]
 
     def get_current_symbol(self) -> Symbol:
         pass
@@ -129,8 +129,8 @@ class TransformerStateGold(TransformerState):
     def is_gold(self):
         return True
 
-    def get_history_actions(self, mode) -> List[Action]:
-        if mode == "infer":
+    def get_history_actions(self, mode, left_only) -> List[Action]:
+        if mode == "infer" or not left_only:
             return self.gold[: self.step_cnt]
         else:
             return self.gold[: self.refine_step_cnt + 1]
@@ -219,8 +219,8 @@ class TransformerStatePred(TransformerState):
     def is_gold(self):
         return False
 
-    def get_history_actions(self, mode) -> List[Action]:
-        if mode == "infer":
+    def get_history_actions(self, mode, left_only) -> List[Action]:
+        if mode == "infer" or not left_only:
             return self.preds[: self.step_cnt]
         else:
             return self.preds[: self.refine_step_cnt + 1]

@@ -208,7 +208,9 @@ class TransformerDecoderFramework(nn.Module):
             def embed_history_actions(
                 state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
             ) -> Dict[str, TensorPromise]:
-                history_actions: List[Action] = state.get_history_actions(mode)
+                history_actions: List[Action] = state.get_history_actions(
+                    mode, self.look_left_only
+                )
                 history_action_embeddings: List[torch.Tensor] = [
                     self.action_to_embedding(state, action, mode)
                     for action in history_actions
@@ -232,7 +234,9 @@ class TransformerDecoderFramework(nn.Module):
             def embed_history_symbols(
                 state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
             ) -> Dict[str, TensorPromise]:
-                history_symbols: List[Symbol] = state.get_history_symbols(mode)
+                history_symbols: List[Symbol] = state.get_history_symbols(
+                    mode, self.look_left_only
+                )
                 if mode == "infer":
                     current_symbol: Symbol = state.get_current_symbol()
                     history_symbols += [current_symbol]
@@ -278,7 +282,8 @@ class TransformerDecoderFramework(nn.Module):
                 src_embedding: torch.Tensor = state.get_encoded_src(mode)
                 if self.decoders[mode].use_relation:
                     relation = self.create_relation_matrix(
-                        state.get_history_actions(mode), cur_idx=state.refine_step_cnt
+                        state.get_history_actions(mode, self.look_left_only),
+                        cur_idx=state.refine_step_cnt,
                     )
                     decoder_out_promise: TensorPromise = self.decoders[
                         mode
@@ -345,7 +350,9 @@ class TransformerDecoderFramework(nn.Module):
                     assert target_symbol is not None
                 else:
                     assert state.get_current_symbol() is None
-                    history_symbols: List[Symbol] = state.get_history_symbols(mode)
+                    history_symbols: List[Symbol] = state.get_history_symbols(
+                        mode, self.look_left_only
+                    )
                     target_symbol = history_symbols[state.refine_step_cnt]
                     target_cnt = state.refine_step_cnt
 
@@ -376,7 +383,9 @@ class TransformerDecoderFramework(nn.Module):
             prev_tensor_dict: Dict[str, Union[List[TensorPromise], TensorPromise]],
         ):
             if isinstance(state, TransformerStatePred):
-                actions = copy.deepcopy(state.get_history_actions("infer"))
+                actions = copy.deepcopy(
+                    state.get_history_actions("infer", self.look_left_only)
+                )
                 assert len(actions) == len(state.preds), "Diff: {} {}".format(
                     len(actions), len(state.preds)
                 )
@@ -401,7 +410,9 @@ class TransformerDecoderFramework(nn.Module):
                     stack = symbols + stack
                 return stack
 
-            history_actions: List[Action] = state.get_history_actions("refine")
+            history_actions: List[Action] = state.get_history_actions(
+                "refine", self.look_left_only
+            )
             cur_refine_step = state.refine_step_cnt
             symbol = history_actions[cur_refine_step]
             if isinstance(state, TransformerStateGold):
