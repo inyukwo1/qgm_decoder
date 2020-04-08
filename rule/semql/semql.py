@@ -7,13 +7,13 @@ import rule.utils as utils
 
 SKETCH_SYMBOLS = ["A", "C", "T"]
 
+
 # Singleton
 class SemQL(Grammar):
     semql: "SemQL" = None
 
-    def __init__(self, emb_dim=300):
-        super(SemQL, self).__init__("./rule/semql/semql.manifesto", emb_dim)
-        SemQL.semql = self
+    def __init__(self):
+        super(SemQL, self).__init__("./rule/semql/semql.manifesto")
 
     def create_loss_object(self):
         return SemQL_Loss(self.symbol_to_sid)
@@ -170,3 +170,6 @@ class SemQL(Grammar):
             acc[key] = acc[key] / len(gold_actions)
 
         return acc, is_correct_list
+
+
+SemQL.semql = SemQL()

@@ -21,7 +21,7 @@ Action = NewType("Action", Tuple[Symbol, LocalActionId])
 
 
 class Grammar(nn.Module):
-    def __init__(self, grammar_path, emb_dim=300):
+    def __init__(self, grammar_path):
         super(Grammar, self).__init__()
         # Symbol
         self.symbols = []
@@ -38,15 +38,6 @@ class Grammar(nn.Module):
         self.terminals = [
             symbol for symbol in self.symbols if symbol not in self.actions.keys()
         ]
-
-        # Embeddings
-        self.key_emb = nn.Embedding(1, emb_dim)
-        self.symbol_emb = nn.Embedding(len(self.symbols), emb_dim)
-        self.action_emb = nn.Embedding(len(self.action_to_aid), emb_dim)
-
-        nn.init.xavier_normal_(self.action_emb.weight.data)
-        nn.init.xavier_normal_(self.symbol_emb.weight.data)
-        nn.init.xavier_normal_(self.key_emb.weight.data)
 
     def _create_grammar(self, manifesto_path):
         cur_line = 0
@@ -194,6 +185,9 @@ class Grammar(nn.Module):
 
     def get_action_len(self):
         return len(self.action_to_aid)
+
+    def get_symbol_len(self):
+        return len(self.symbols)
 
     def get_key_emb(self):
         return self.key_emb.weight.data.squeeze(0)

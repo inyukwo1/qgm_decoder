@@ -47,20 +47,20 @@ class TransformerState(State):
     def step(self):
         self.step_cnt += 1
 
-    def get_encoded_src(self, idx=0):
-        return self.encoded_src[idx]
+    def get_encoded_src(self, mode):
+        return self.encoded_src[mode]
 
-    def get_encoded_col(self, idx=0):
-        return self.encoded_col[idx]
+    def get_encoded_col(self, mode):
+        return self.encoded_col[mode]
 
-    def get_encoded_tab(self, idx=0):
-        return self.encoded_tab[idx]
+    def get_encoded_tab(self, mode):
+        return self.encoded_tab[mode]
 
-    def get_history_actions(self) -> List[Action]:
+    def get_history_actions(self, mode) -> List[Action]:
         pass
 
-    def get_history_symbols(self) -> List[Symbol]:
-        pass
+    def get_history_symbols(self, mode) -> List[Symbol]:
+        return [action[0] for action in self.get_history_actions(mode)]
 
     def get_current_symbol(self) -> Symbol:
         pass
@@ -77,7 +77,6 @@ class TransformerStateGold(TransformerState):
         encoded_tab,
         col_tab_dic: Dict[int, List[int]],
         gold: List[Action],
-        random_training: bool = None,
     ):
         TransformerState.__init__(
             self, encoded_src, encoded_col, encoded_tab, col_tab_dic
@@ -91,9 +90,9 @@ class TransformerStateGold(TransformerState):
 
     def _set_state_to_skip_training(self):
         # Skip inference model
-        self.skip_infer = self.encoded_src[0] == None
-        self.skip_refinement = self.encoded_src[1] == None
-        self.skip_arbitrator = self.encoded_src[2] == None
+        self.skip_infer = self.encoded_src["infer"] is None
+        self.skip_refinement = self.encoded_src["refine"] is None
+        self.skip_arbitrator = self.encoded_src["arbitrate"] is None
 
         if self.skip_infer:
             self.step_cnt = len(self.gold)
@@ -126,12 +125,11 @@ class TransformerStateGold(TransformerState):
     def is_gold(self):
         return True
 
-    def get_history_actions(self) -> List[Action]:
-        return self.gold[: self.step_cnt]
-
-    def get_history_symbols(self) -> List[Symbol]:
-        symbol_list = [action[0] for action in self.gold]
-        return symbol_list[: self.step_cnt]
+    def get_history_actions(self, mode) -> List[Action]:
+        if mode == "infer":
+            return self.gold[: self.step_cnt]
+        else:
+            return self.gold[: self.refine_step_cnt + 1]
 
     def get_current_symbol(self) -> Symbol:
         return self.gold[self.step_cnt][0] if self.step_cnt < len(self.gold) else None
@@ -217,12 +215,11 @@ class TransformerStatePred(TransformerState):
     def is_gold(self):
         return False
 
-    def get_history_actions(self) -> List[Action]:
-        return self.preds[: self.step_cnt]
-
-    def get_history_symbols(self) -> List[Symbol]:
-        symbol_list = [action[0] for action in self.preds]
-        return symbol_list[: self.step_cnt]
+    def get_history_actions(self, mode) -> List[Action]:
+        if mode == "infer":
+            return self.preds[: self.step_cnt]
+        else:
+            return self.preds[: self.refine_step_cnt + 1]
 
     def get_current_symbol(self) -> Symbol:
         return (

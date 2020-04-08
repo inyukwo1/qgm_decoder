@@ -89,7 +89,7 @@ class WhileLogic:
 
     def bind(self, state_iter):
         state_list = [state for state in state_iter]
-        prev_return = [None] * len(state_iter)
+        prev_return = [dict() for _ in state_iter]
 
         def is_not_done():
             check_results = [self.stop_if_all_false(state) for state in state_list]
