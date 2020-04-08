@@ -42,6 +42,7 @@ class TransformerDecoderFramework(nn.Module):
         self.use_arbitrator = cfg.use_arbitrator
         self.refine_all = cfg.refine_all
         self.use_relation = cfg.use_relation
+        self.look_left_only = cfg.look_left_only
 
         if self.refine_all:
             assert self.use_ct_loss == False, "Should be false"
@@ -324,6 +325,8 @@ class TransformerDecoderFramework(nn.Module):
         ) -> Dict[str, TensorPromise]:
 
             history_actions: List[Action] = state.get_history_actions()
+            if self.look_left_only:
+                history_actions = history_actions[: state.refine_step_cnt + 1]
             history_action_embeddings: List[torch.Tensor] = [
                 self.onedim_zero_tensor()
                 if idx == state.refine_step_cnt
@@ -341,6 +344,8 @@ class TransformerDecoderFramework(nn.Module):
             state: TransformerState, prev_tensor_dict: Dict
         ):
             history_symbols: List[Symbol] = state.get_history_symbols()
+            if self.look_left_only:
+                history_symbols = history_symbols[: state.refine_step_cnt + 1]
             symbol_embeddings = self.symbol_list_to_embedding(
                 history_symbols, grammar_idx=1
             )
@@ -441,6 +446,8 @@ class TransformerDecoderFramework(nn.Module):
             prev_tensor_dict: Dict[str, Union[List[TensorPromise], TensorPromise]],
         ):
             history_actions: List[Action] = state.get_history_actions()
+            if self.look_left_only:
+                history_actions = history_actions[: state.refine_step_cnt + 1]
             history_action_embeddings: List[torch.Tensor] = [
                 self.onedim_zero_tensor()
                 if idx == state.refine_step_cnt
@@ -459,6 +466,8 @@ class TransformerDecoderFramework(nn.Module):
             prev_tensor_dict: Dict[str, Union[List[TensorPromise], TensorPromise]],
         ):
             history_symbols: List[Symbol] = state.get_history_symbols()
+            if self.look_left_only:
+                history_symbols = history_symbols[: state.refine_step_cnt + 1]
             symbol_embeddings = self.symbol_list_to_embedding(
                 history_symbols, grammar_idx=2
             )
