@@ -469,7 +469,7 @@ def epoch_train(
             raise RuntimeError("Unsupported model")
 
         if is_train:
-            if not loss.requires_grad:
+            if loss.requires_grad:
                 loss.backward()
             else:
                 print("nothing to backward")
