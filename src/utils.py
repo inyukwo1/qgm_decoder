@@ -471,8 +471,6 @@ def epoch_train(
         if is_train:
             if loss.requires_grad:
                 loss.backward()
-            else:
-                print("nothing to backward")
             if idx % optimize_freq == 0:
                 if clip_grad > 0.0:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
