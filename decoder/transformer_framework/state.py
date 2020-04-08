@@ -7,8 +7,6 @@ from rule.semql.semql import SemQL
 from rule.grammar import SymbolId, Symbol, Action
 from rule.semql.semql_loss import SemQL_Loss_New
 
-import random
-
 
 class TransformerState(State):
     def __init__(self, encoded_src, encoded_col, encoded_tab, col_tab_dic):
@@ -34,6 +32,14 @@ class TransformerState(State):
     @classmethod
     def is_initial_pred(cls, state) -> bool:
         pass
+
+    @classmethod
+    def is_to_arbitrate(cls, state) -> bool:
+        pass
+
+    @classmethod
+    def is_to_apply(cls, state) -> bool:
+        return state.is_to_refine(state) or state.is_to_arbitrate(state)
 
     def is_gold(self):
         pass
@@ -78,30 +84,36 @@ class TransformerStateGold(TransformerState):
         )
         self.gold: List[Action] = gold
         self.loss = SemQL_Loss_New()
+        self.skip_infer = False
         self.skip_refinement = False
         self.skip_arbitrator = False
-        if random_training:
-            self._set_state_to_skip_training()
+        self._set_state_to_skip_training()
 
     def _set_state_to_skip_training(self):
         # Skip inference model
-        if random.randint(0, 2) == 1:
-            self.step_cnt = len(self.gold)
-        # Skip refiner
-        self.skip_refinement = random.randint(0, 2) == 1
-        # Skip arbitrator
-        self.skip_arbitrator = random.randint(0, 2) == 1
+        self.skip_infer = self.encoded_src[0] == None
+        self.skip_refinement = self.encoded_src[1] == None
+        self.skip_arbitrator = self.encoded_src[2] == None
 
-    @classmethod
-    def is_to_refine(cls, state) -> bool:
-        return state.step_cnt == len(state.gold) and state.refine_step_cnt < len(
-            state.gold
-        )
+        if self.skip_infer:
+            self.step_cnt = len(self.gold)
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
         assert state.step_cnt <= len(state.gold)
         return state.step_cnt < len(state.gold)
+
+    @classmethod
+    def is_to_refine(cls, state) -> bool:
+        return (
+            not state.is_to_infer(state)
+            and state.refine_step_cnt < len(state.gold)
+            and not state.skip_refinement
+        )
+
+    @classmethod
+    def is_to_arbitrate(cls, state) -> bool:
+        return not state.is_to_infer(state) and not state.skip_arbitrator
 
     @classmethod
     def combine_loss(cls, states: List["TransformerStateGold"]) -> SemQL_Loss_New:
@@ -166,6 +178,14 @@ class TransformerStatePred(TransformerState):
         self.nonterminal_symbol_stack: List[Symbol] = [start_symbol]
 
     @classmethod
+    def is_to_infer(cls, state) -> bool:
+        return (
+            state.nonterminal_symbol_stack != []
+            and state.step_cnt < 50
+            and state.step_cnt <= state.target_step
+        )
+
+    @classmethod
     def is_to_refine(cls, state) -> bool:
         return (
             state.nonterminal_symbol_stack == []
@@ -173,12 +193,8 @@ class TransformerStatePred(TransformerState):
         )
 
     @classmethod
-    def is_to_infer(cls, state) -> bool:
-        return (
-            state.nonterminal_symbol_stack != []
-            and state.step_cnt < 50
-            and state.step_cnt <= state.target_step
-        )
+    def is_to_arbitrate(cls, state) -> bool:
+        return state.is_to_refine(state)
 
     @classmethod
     def get_preds(
@@ -246,19 +262,9 @@ class TransformerStatePred(TransformerState):
         self.preds.append(action)
 
     def refine_pred(self, action: Action, idx: int = 0):
-        # if len(self.refined_preds) < len(self.preds):
-        #     self.refined_preds[len(self.refined_preds) : len(self.preds)] = self.preds[
-        #         len(self.refined_preds) : len(self.preds)
-        #     ]
-        # self.refined_preds[idx] = action
         self.refined_preds += [action]
 
     def arbitrate_pred(self, action: Action, idx: int = 0):
-        # if len(self.arbitrated_preds) < len(self.preds):
-        #     self.arbitrated_preds[
-        #         len(self.arbitrated_preds) : len(self.preds)
-        #     ] = self.preds[len(self.arbitrated_preds) : len(self.preds)]
-        # self.arbitrated_preds[idx] = action
         self.arbitrated_preds += [action]
 
     def infer_pred(self, action: Action, idx: int = 0):

@@ -1,5 +1,6 @@
 import numpy as np
 
+import random
 import torch
 import torch.nn as nn
 import torch.nn.utils
@@ -33,6 +34,7 @@ class EncoderDecoderModel(nn.Module):
         self.encoder_name = cfg.encoder_name
         self.decoder_name = cfg.decoder_name
         self.use_separate_encoder = cfg.use_separate_encoder
+        self.random_training = cfg.random_training
         self.embed_size = 1024 if self.is_bert else 300
 
         # Decoder
@@ -157,6 +159,14 @@ class EncoderDecoderModel(nn.Module):
         return val_emb_array
 
     def forward(self, examples):
+        # Train or not
+        if self.random_training:
+            train_infer_model = random.randint(0, 2) == 0
+            train_refine_model = random.randint(0, 2) == 0
+            train_arbitrate_model = random.randint(0, 2) == 0
+        else:
+            train_infer_model = train_refine_model = train_arbitrate_model = T
+
         # now should implement the examples
         batch = Batch(examples, is_cuda=self.is_cuda)
         if self.encoder_name == "ra_transformer":
@@ -252,7 +262,44 @@ class EncoderDecoderModel(nn.Module):
             enc_last_cell = last_cell
         elif self.encoder_name == "lstm":
             if self.use_separate_encoder:
-                outs = [encoder(batch) for encoder in self.encoder]
+                outs = []
+                for idx, encoder in enumerate(self.encoder):
+                    if idx == 0:
+                        if train_infer_model:
+                            out = encoder(batch)
+                        else:
+                            out = [
+                                {
+                                    "src_encoding": None,
+                                    "col_encoding": None,
+                                    "tab_encoding": None,
+                                }
+                            ]
+                    elif idx == 1:
+                        if train_refine_model:
+                            out = encoder(batch)
+                        else:
+                            out = [
+                                {
+                                    "src_encoding": None,
+                                    "col_encoding": None,
+                                    "tab_encoding": None,
+                                }
+                            ]
+                    elif idx == 2:
+                        if train_arbitrate_model:
+                            out = encoder(batch)
+                        else:
+                            out = [
+                                {
+                                    "src_encoding": None,
+                                    "col_encoding": None,
+                                    "tab_encoding": None,
+                                }
+                            ]
+                    else:
+                        raise RuntimeError("Should not be here")
+                    outs += [out]
             else:
                 out = self.encoder[0](batch)
                 outs = [out, out, out]
@@ -316,7 +363,9 @@ class EncoderDecoderModel(nn.Module):
         elif self.decoder_name == "transformer":
             col_tab_dic = batch.col_table_dict
             golds = batch.gt
+            b_size = len(golds)
             losses = self.decoder(
+                b_size,
                 src_encodings,
                 table_embeddings,
                 schema_embeddings,
@@ -551,6 +600,7 @@ class EncoderDecoderModel(nn.Module):
             elif self.decoder_name == "transformer":
                 col_tab_dic = batch.col_table_dict
                 pred = self.decoder(
+                    len(src_encodings[0]),
                     src_encodings,
                     table_embeddings,
                     schema_embeddings,

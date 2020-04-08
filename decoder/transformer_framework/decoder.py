@@ -43,7 +43,6 @@ class TransformerDecoderFramework(nn.Module):
         self.refine_all = cfg.refine_all
         self.use_relation = cfg.use_relation
         self.look_left_only = cfg.look_left_only
-        self.random_training = cfg.random_training
 
         if self.refine_all:
             assert self.use_ct_loss == False, "Should be false"
@@ -141,6 +140,7 @@ class TransformerDecoderFramework(nn.Module):
 
     def forward(
         self,
+        b_size,
         encoded_src,
         encoded_col,
         encoded_tab,
@@ -152,8 +152,6 @@ class TransformerDecoderFramework(nn.Module):
         target_step=100,
         states=None,
     ):
-        b_size = len(encoded_src[0])
-
         # Create states
         if states:
             state_class = type(states[0])
@@ -163,12 +161,20 @@ class TransformerDecoderFramework(nn.Module):
             state_class = TransformerStateGold
             states = [
                 TransformerStateGold(
-                    [item[b_idx][: src_lens[b_idx]] for item in encoded_src],
-                    [item[b_idx][: col_lens[b_idx]] for item in encoded_col],
-                    [item[b_idx][: tab_lens[b_idx]] for item in encoded_tab],
+                    [
+                        item[b_idx][: src_lens[b_idx]] if item != [None] else None
+                        for item in encoded_src
+                    ],
+                    [
+                        item[b_idx][: col_lens[b_idx]] if item != [None] else None
+                        for item in encoded_col
+                    ],
+                    [
+                        item[b_idx][: tab_lens[b_idx]] if item != [None] else None
+                        for item in encoded_tab
+                    ],
                     col_tab_dic[b_idx],
                     golds[b_idx],
-                    self.random_training,
                 )
                 for b_idx in range(b_size)
             ]
@@ -240,6 +246,7 @@ class TransformerDecoderFramework(nn.Module):
                 "combined_embedding"
             ].result
             src_embedding: torch.Tensor = state.get_encoded_src(0)
+
             decoder_out_promise: TensorPromise = self.infer_transformer.forward_later(
                 combined_embedding, src_embedding
             )
@@ -336,6 +343,7 @@ class TransformerDecoderFramework(nn.Module):
                 for idx, action in enumerate(history_actions)
             ]
             action_embeddings = torch.stack(history_action_embeddings, dim=0)
+
             action_embeddings_promise: TensorPromise = self.refine_action_affine_layer.forward_later(
                 action_embeddings
             )
@@ -567,7 +575,7 @@ class TransformerDecoderFramework(nn.Module):
             prev_tensor_dict.update({"arbitrate_prods": promise_prod})
             return prev_tensor_dict
 
-        def apply_prod_for_refine(
+        def apply_prod_final(
             state: TransformerState,
             prev_tensor_dict: Dict[str, Union[List[TensorPromise], TensorPromise]],
         ):
@@ -587,17 +595,19 @@ class TransformerDecoderFramework(nn.Module):
 
             history_actions: List[Action] = state.get_history_actions()
             symbol = history_actions[state.refine_step_cnt]
-            refine_prod = prev_tensor_dict["refine_prods"].result
-            arbitrate_prod = prev_tensor_dict["arbitrate_prods"].result
             cur_refine_step = state.refine_step_cnt
             if state.is_gold():
                 # Loss for C T (?)
                 if not self.use_ct_loss or symbol in ["C", "T"]:
                     if not state.skip_refinement:
+                        refine_prod = prev_tensor_dict["refine_prods"].result
                         state.apply_loss(cur_refine_step, refine_prod)
                     if not state.skip_arbitrator:
+                        arbitrate_prod = prev_tensor_dict["arbitrate_prods"].result
                         state.apply_loss(cur_refine_step, arbitrate_prod)
             else:
+                refine_prod = prev_tensor_dict["refine_prods"].result
+                arbitrate_prod = prev_tensor_dict["arbitrate_prods"].result
                 assert isinstance(state, TransformerStatePred)
                 ori_action = history_actions[cur_refine_step]
                 ori_pred_idx = (
@@ -678,14 +688,17 @@ class TransformerDecoderFramework(nn.Module):
                 .Then(pass_refine_transformer)
                 .Then(pass_refine_out_linear)
                 .Then(calc_prod_for_refine)
+            )
+            .Do(
+                LogicUnit.If(state_class.is_to_arbitrate)
                 .Then(embed_history_actions_for_arbitrate)
                 .Then(embed_history_symbols_for_arbitrate)
                 .Then(combine_embeddings_for_arbitrate)
                 .Then(pass_arbitrate_transformer)
                 .Then(pass_arbitrate_out_linear)
                 .Then(calc_prod_for_arbitrate)
-                .Then(apply_prod_for_refine)
             )
+            .Do(LogicUnit.If(state_class.is_to_apply).Then(apply_prod_final))
         ).states
 
         if golds:
