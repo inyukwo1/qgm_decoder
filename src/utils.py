@@ -17,6 +17,7 @@ from preprocess.rule.semQL import *
 from decoder.qgm.utils import filter_datas
 import src.relation as relation
 from src.dataset import Batch
+from rule.semql.semql import SemQL
 
 
 wordnet_lemmatizer = WordNetLemmatizer()
@@ -540,16 +541,11 @@ def epoch_acc(
             tmp = tmp2
             gold += tmp
         elif model_name == "transformer":
-            tmp = [
-                model.decoder.grammar.create_data(example.qgm) for example in examples
-            ]
+            tmp = [SemQL.semql.create_data(example.qgm) for example in examples]
             tmp2 = []
             for item in tmp:
                 tmp2 += [
-                    [
-                        model.decoder.grammar.str_to_action(value)
-                        for value in item.split(" ")
-                    ]
+                    [SemQL.semql.str_to_action(value) for value in item.split(" ")]
                 ]
             tmp = tmp2
             gold += tmp
@@ -581,20 +577,16 @@ def epoch_acc(
             pred, gold
         )
     elif model_name == "transformer":
-        total_acc_pred, is_correct_list_pred = model.decoder.grammar.cal_acc(
-            pred["preds"], gold
-        )
-        total_acc_refined, is_correct_list_refined = model.decoder.grammar.cal_acc(
+        total_acc_pred, is_correct_list_pred = SemQL.semql.cal_acc(pred["preds"], gold)
+        total_acc_refined, is_correct_list_refined = SemQL.semql.cal_acc(
             pred["refined_preds"], gold
         )
-        (
-            total_acc_arbitrated,
-            is_correct_list_arbitrated,
-        ) = model.decoder.grammar.cal_acc(pred["arbitrated_preds"], gold)
-        (
-            total_acc_init_pred,
-            is_correct_list_init_pred,
-        ) = model.decoder.grammar.cal_acc(pred["initial_preds"], gold)
+        (total_acc_arbitrated, is_correct_list_arbitrated,) = SemQL.semql.cal_acc(
+            pred["arbitrated_preds"], gold
+        )
+        (total_acc_init_pred, is_correct_list_init_pred,) = SemQL.semql.cal_acc(
+            pred["initial_preds"], gold
+        )
         return (
             total_acc_pred,
             total_acc_refined,

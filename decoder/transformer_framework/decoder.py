@@ -113,8 +113,8 @@ class TransformerDecoderFramework(nn.Module):
 
     def create_relation_matrix(self, actions, cur_idx=None):
         relation = torch.ones(len(actions), len(actions)).cuda().long()
-        for idx in range(cur_idx + 1):
-            relation[idx][: cur_idx + 1] = 2
+        for idx in range(cur_idx):
+            relation[idx][:cur_idx] = 2
         return relation
 
     def forward(
@@ -198,7 +198,7 @@ class TransformerDecoderFramework(nn.Module):
                         "arbitrate": encoded_tab[2][b_idx][: tab_lens[b_idx]],
                     },
                     col_tab_dic[b_idx],
-                    self.grammar.start_symbol,
+                    SemQL.semql.start_symbol,
                     target_step,
                 )
                 for b_idx in range(b_size)
