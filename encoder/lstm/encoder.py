@@ -22,7 +22,11 @@ class LSTMEncoder(nn.Module):
             self.embed_size, self.hidden_size // 2, bidirectional=True, batch_first=True
         )
 
-        self._import_word_emb()
+        self.word_emb = None
+        # self._import_word_emb()
+
+    def set_word_emb(self, word_emb):
+        self.word_emb = word_emb
 
     def _import_word_emb(self):
         self.word_emb = utils.load_word_emb(self.cfg.glove_embed_path)

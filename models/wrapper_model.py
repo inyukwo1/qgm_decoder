@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.utils
 
+from src import utils
 from src.dataset import Batch
 from decoder.qgm.qgm_decoder import QGM_Decoder
 
@@ -76,6 +77,13 @@ class EncoderDecoderModel(nn.Module):
 
         if self.encoder_name != "bert":
             self.without_bert_params = list(self.parameters(recurse=True))
+
+    def load_word_emb(self):
+        if not self.cfg.is_bert:
+            self.word_emb = utils.load_word_emb(self.cfg.glove_embed_path)
+            if self.encoder_name == "lstm":
+                for encoder in self.encoder:
+                    encoder.word_emb = self.word_emb
 
     def load_model(self):
         key_embs = self.decoder.load_model()
@@ -478,7 +486,7 @@ class EncoderDecoderModel(nn.Module):
                 enc_last_cell = last_cell
             elif self.encoder_name == "lstm":
                 if self.use_separate_encoder:
-                    outs = [(encoder(batch) for encoder in self.encoder)]
+                    outs = [encoder(batch) for encoder in self.encoder]
                 else:
                     out = self.encoder[0](batch)
                     outs = [out, out, out]

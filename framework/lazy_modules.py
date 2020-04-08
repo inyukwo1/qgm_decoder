@@ -241,7 +241,7 @@ class LazyRATransformerDecoder(nn.Module, LazyModule):
         for tgt, mem, relation in self.later_buffer:
             tgt_list.append(tgt)
             mem_list.append(mem)
-            relation_list.append(relation)
+            relation_list.append(relation.unsqueeze(-1))
 
         # Stack
         stacked_tgt, tgt_mask = stack_sequential_tensor_with_mask(tgt_list)
@@ -249,6 +249,7 @@ class LazyRATransformerDecoder(nn.Module, LazyModule):
         stacked_relation, relation_mask = stack_sequential_tensor_with_mask(
             relation_list
         )
+        stacked_relation = stacked_relation.squeeze(-1)
 
         # Transpose
         stacked_tgt_batch_second = stacked_tgt.transpose(0, 1)

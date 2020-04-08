@@ -82,7 +82,8 @@ def train(cfg):
 
         model.load_state_dict(pretrained_modeled)
 
-    model.word_emb = None if cfg.is_bert else utils.load_word_emb(cfg.glove_embed_path)
+    model.load_word_emb()
+    # model.word_emb = None if cfg.is_bert else utils.load_word_emb(cfg.glove_embed_path)
 
     # Log path
     log_model_path = os.path.join(log_path, "model")

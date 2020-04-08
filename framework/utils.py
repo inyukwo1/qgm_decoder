@@ -43,6 +43,31 @@ def stack_sequential_tensor_with_mask(
             padded_tensor_list.append(padded_tensor)
             mask[idx, : len(tensor)] = 0
         stacked_tensor = torch.stack(padded_tensor_list, dim=0)
+    elif len(first_tensor.size()) == 3:
+        _, _, embed_dim = list(first_tensor.size())
+        max_length_dim0 = max_length
+        max_length_dim1 = max([len(tensor[0]) for tensor in sequential_tensor_list])
+        all_padded_tensor_list = []
+        for idx, tensor_3d in enumerate(sequential_tensor_list):
+            padded_tensor_list = []
+            for idx, tensor_2d in enumerate(tensor_3d):
+                padding = torch.zeros(
+                    (max_length_dim1 - len(tensor_2d), embed_dim),
+                    dtype=tensor_2d.dtype,
+                    device=tensor_2d.device,
+                )
+                padded_tensor = torch.cat((tensor_2d, padding), dim=0)
+                padded_tensor_list.append(padded_tensor)
+            stacked_tensor = torch.stack(padded_tensor_list, dim=0)
+
+            padding = torch.zeros(
+                (max_length_dim0 - len(stacked_tensor), max_length_dim1, embed_dim),
+                dtype=stacked_tensor.dtype,
+                device=stacked_tensor.device,
+            )
+            padded_tensor = torch.cat((stacked_tensor, padding), dim=0)
+            all_padded_tensor_list.append(padded_tensor)
+        stacked_tensor = torch.stack(all_padded_tensor_list, dim=0)
     else:
         raise NotImplementedError
 
