@@ -17,7 +17,7 @@ clip_grad: 5
 # Default training setup
 lr: 1e-3
 is_bert: false
-batch_size: 64
+batch_size: 16
 lr_scheduler: true
 lr_scheduler_gamma: 1e-1
 milestones: [40, 70]
@@ -25,7 +25,7 @@ optimizer: radam
 query_type: simple
 max_epoch: 100
 eval_freq: 1
-optimize_freq: 1
+optimize_freq: 8
 random_training: false
 
 #
@@ -34,4 +34,3 @@ load_model: false
 toy: false
 debugging: false
 tag: tag
-

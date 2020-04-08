@@ -161,11 +161,11 @@ class EncoderDecoderModel(nn.Module):
     def forward(self, examples):
         # Train or not
         if self.random_training:
-            train_infer_model = random.randint(0, 2) == 0
-            train_refine_model = random.randint(0, 2) == 0
-            train_arbitrate_model = random.randint(0, 2) == 0
+            train_infer_model = random.randint(0, 2) != 0
+            train_refine_model = random.randint(0, 2) != 0
+            train_arbitrate_model = random.randint(0,) != 0
         else:
-            train_infer_model = train_refine_model = train_arbitrate_model = T
+            train_infer_model = train_refine_model = train_arbitrate_model = True
 
         # now should implement the examples
         batch = Batch(examples, is_cuda=self.is_cuda)

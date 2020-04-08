@@ -468,7 +468,11 @@ class TransformerDecoderFramework(nn.Module):
             action_embeddings_promise: TensorPromise = self.arbitrate_action_affine_layer.forward_later(
                 action_embeddings
             )
-            prev_tensor_dict.update({"action_embedding": action_embeddings_promise})
+            if prev_tensor_dict:
+                prev_tensor_dict.update({"action_embedding": action_embeddings_promise})
+            else:
+                prev_tensor_dict = {}
+                prev_tensor_dict.update({"action_embedding": action_embeddings_promise})
             return prev_tensor_dict
 
         def embed_history_symbols_for_arbitrate(
