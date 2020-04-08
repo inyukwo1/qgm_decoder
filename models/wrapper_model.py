@@ -185,23 +185,59 @@ class EncoderDecoderModel(nn.Module):
             relation_matrix = relation.create_batch(batch.relation)
 
             if self.use_separate_encoder:
-                outs = [
-                    (
-                        item(
-                            src,
-                            col,
-                            tab,
-                            src_len,
-                            col_len,
-                            tab_len,
-                            src_mask,
-                            col_mask,
-                            tab_mask,
-                            relation_matrix,
-                        )
-                    )
-                    for item in self.encoder
-                ]
+                outs = []
+                for idx, encoder in enumerate(self.encoder):
+                    if idx == 0:
+                        if train_infer_model:
+                            out = encoder(
+                                src,
+                                col,
+                                tab,
+                                src_len,
+                                col_len,
+                                tab_len,
+                                src_mask,
+                                col_mask,
+                                tab_mask,
+                                relation_matrix,
+                            )
+                        else:
+                            out = [[None], [None], [None]]
+                    elif idx == 1:
+                        if train_refine_model:
+                            out = encoder(
+                                src,
+                                col,
+                                tab,
+                                src_len,
+                                col_len,
+                                tab_len,
+                                src_mask,
+                                col_mask,
+                                tab_mask,
+                                relation_matrix,
+                            )
+                        else:
+                            out = [[None], [None], [None]]
+                    elif idx == 2:
+                        if train_arbitrate_model:
+                            out = encoder(
+                                src,
+                                col,
+                                tab,
+                                src_len,
+                                col_len,
+                                tab_len,
+                                src_mask,
+                                col_mask,
+                                tab_mask,
+                                relation_matrix,
+                            )
+                        else:
+                            out = [[None], [None], [None]]
+                    else:
+                        raise RuntimeError("Should not be here")
+                    outs += [out]
             else:
                 out = self.encoder[0](
                     src,
