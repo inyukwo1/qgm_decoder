@@ -570,12 +570,14 @@ class TransformerDecoderFramework(nn.Module):
             decoder_out: torch.Tensor = prev_tensor_dict["arbitrate_out"].result
 
             assert state.get_current_symbol() == None
-
-            history_symbols: List[Symbol] = state.get_history_symbols()
-            target_symbol = history_symbols[state.refine_step_cnt]
-            promise_prod: TensorPromise = calc_prod_with_idx_and_symbol(
-                state.refine_step_cnt, target_symbol
-            )
+            try:
+                history_symbols: List[Symbol] = state.get_history_symbols()
+                target_symbol = history_symbols[state.refine_step_cnt]
+                promise_prod: TensorPromise = calc_prod_with_idx_and_symbol(
+                    state.refine_step_cnt, target_symbol
+                )
+            except:
+                stop = 1
             prev_tensor_dict.update({"arbitrate_prods": promise_prod})
             return prev_tensor_dict
 

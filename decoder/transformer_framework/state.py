@@ -113,7 +113,11 @@ class TransformerStateGold(TransformerState):
 
     @classmethod
     def is_to_arbitrate(cls, state) -> bool:
-        return not state.is_to_infer(state) and not state.skip_arbitrator
+        return (
+            not state.is_to_infer(state)
+            and state.refine_step_cnt < len(state.gold)
+            and not state.skip_arbitrator
+        )
 
     @classmethod
     def combine_loss(cls, states: List["TransformerStateGold"]) -> SemQL_Loss_New:
