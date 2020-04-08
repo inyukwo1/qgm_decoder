@@ -42,45 +42,45 @@ class Example:
         db_id=None,
     ):
         self.src_sent = src_sent
-        self.tokenized_src_sent = tokenized_src_sent
-        self.vis_seq = vis_seq
         self.tab_cols = tab_cols
-        self.tab_iter = tab_iter
         self.col_num = col_num
         self.sql = sql
-        self.one_hot_type = one_hot_type
-        self.col_hot_type = col_hot_type
-        self.tab_hot_type = tab_hot_type
-        self.schema_len = schema_len
-        self.tab_ids = tab_ids
         self.table_names = table_names
         self.table_len = table_len
         self.col_table_dict = col_table_dict
         self.cols = cols
-        self.table_col_name = table_col_name
-        self.table_col_len = table_col_len
-        self.col_pred = col_pred
         self.tgt_actions = tgt_actions
-        self.truth_actions = (
-            copy.deepcopy(tgt_actions)
-            if tgt_actions
-            else copy.deepcopy(qgm_action).split(" ")
-        )
         self.qgm = qgm
-        self.qgm_action = qgm_action
-        self.sketch = list()
         self.relation = relation
         self.gt = gt
         self.db_id = db_id
-        if self.truth_actions:
-            for ta in self.truth_actions:
-                if (
-                    isinstance(ta, define_rule.C)
-                    or isinstance(ta, define_rule.T)
-                    or isinstance(ta, define_rule.A)
-                ):
-                    continue
-                self.sketch.append(ta)
+        # self.tokenized_src_sent = tokenized_src_sent
+        # self.vis_seq = vis_seq
+        # self.tab_iter = tab_iter
+        # self.one_hot_type = one_hot_type
+        # self.col_hot_type = col_hot_type
+        # self.tab_hot_type = tab_hot_type
+        # self.schema_len = schema_len
+        # self.tab_ids = tab_ids
+        # self.table_col_name = table_col_name
+        # self.table_col_len = table_col_len
+        # self.col_pred = col_pred
+        # self.truth_actions = (
+        #     copy.deepcopy(tgt_actions)
+        #     if tgt_actions
+        #     else copy.deepcopy(qgm_action).split(" ")
+        # )
+        # self.qgm_action = qgm_action
+        # self.sketch = list()
+        # if self.truth_actions:
+        #     for ta in self.truth_actions:
+        #         if (
+        #             isinstance(ta, define_rule.C)
+        #             or isinstance(ta, define_rule.T)
+        #             or isinstance(ta, define_rule.A)
+        #         ):
+        #             continue
+        #         self.sketch.append(ta)
 
 
 class cached_property(object):
@@ -106,39 +106,37 @@ class Batch(object):
     def __init__(self, examples, grammar=None, is_cuda=False):
         self.examples = examples
 
-        if examples[0].tgt_actions:
-            self.max_action_num = max(len(e.tgt_actions) for e in self.examples)
-            self.max_sketch_num = max(len(e.sketch) for e in self.examples)
+        # if examples[0].tgt_actions:
+        #     self.max_action_num = max(len(e.tgt_actions) for e in self.examples)
+        #     self.max_sketch_num = max(len(e.sketch) for e in self.examples)
         self.src_sents = [e.src_sent for e in self.examples]
         self.src_sents_len = [len(e.src_sent) for e in self.examples]
-        #self.tokenized_src_sents = [e.tokenized_src_sent for e in self.examples]
-        #self.tokenized_src_sents_len = [len(e.tokenized_src_sent) for e in examples]
-        self.src_sents_word = [e.src_sent for e in self.examples]
-        self.table_sents_word = [
-            [" ".join(x) for x in e.tab_cols] for e in self.examples
-        ]
-
-        self.schema_sents_word = [
-            [" ".join(x) for x in e.table_names] for e in self.examples
-        ]
-
-        self.src_type = [e.one_hot_type for e in self.examples]
-        self.col_hot_type = [e.col_hot_type for e in self.examples]
-        self.tab_hot_type = [e.tab_hot_type for e in self.examples]
         self.table_sents = [e.tab_cols for e in self.examples]
-        self.table_names_iter = [e.tab_iter for e in self.examples]
         self.col_num = [e.col_num for e in self.examples]
-        self.tab_ids = [e.tab_ids for e in self.examples]
         self.table_names = [e.table_names for e in self.examples]
         self.table_len = [e.table_len for e in examples]
         self.col_table_dict = [e.col_table_dict for e in examples]
-        self.table_col_name = [e.table_col_name for e in examples]
-        self.table_col_len = [e.table_col_len for e in examples]
-        self.col_pred = [e.col_pred for e in examples]
         self.qgm = [e.qgm for e in examples]
-        self.qgm_action = [e.qgm_action for e in examples]
         self.relation = [e.relation for e in examples]
         self.gt = [e.gt for e in examples]
+        #self.tokenized_src_sents = [e.tokenized_src_sent for e in self.examples]
+        #self.tokenized_src_sents_len = [len(e.tokenized_src_sent) for e in examples]
+        # self.src_sents_word = [e.src_sent for e in self.examples]
+        # self.table_sents_word = [
+        #     [" ".join(x) for x in e.tab_cols] for e in self.examples
+        # ]
+        # self.schema_sents_word = [
+        #     [" ".join(x) for x in e.table_names] for e in self.examples
+        # ]
+        # self.src_type = [e.one_hot_type for e in self.examples]
+        # self.col_hot_type = [e.col_hot_type for e in self.examples]
+        # self.tab_hot_type = [e.tab_hot_type for e in self.examples]
+        # self.table_names_iter = [e.tab_iter for e in self.examples]
+        # self.tab_ids = [e.tab_ids for e in self.examples]
+        # self.table_col_name = [e.table_col_name for e in examples]
+        # self.table_col_len = [e.table_col_len for e in examples]
+        # self.col_pred = [e.col_pred for e in examples]
+        # self.qgm_action = [e.qgm_action for e in examples]
 
         self.grammar = grammar
         self.cuda = is_cuda
