@@ -39,6 +39,7 @@ class Example:
         qgm_action=None,
         relation=None,
         gt=None,
+        db_id=None,
     ):
         self.src_sent = src_sent
         self.tokenized_src_sent = tokenized_src_sent
@@ -70,6 +71,7 @@ class Example:
         self.sketch = list()
         self.relation = relation
         self.gt = gt
+        self.db_id = db_id
         if self.truth_actions:
             for ta in self.truth_actions:
                 if (
@@ -109,8 +111,8 @@ class Batch(object):
             self.max_sketch_num = max(len(e.sketch) for e in self.examples)
         self.src_sents = [e.src_sent for e in self.examples]
         self.src_sents_len = [len(e.src_sent) for e in self.examples]
-        self.tokenized_src_sents = [e.tokenized_src_sent for e in self.examples]
-        self.tokenized_src_sents_len = [len(e.tokenized_src_sent) for e in examples]
+        #self.tokenized_src_sents = [e.tokenized_src_sent for e in self.examples]
+        #self.tokenized_src_sents_len = [len(e.tokenized_src_sent) for e in examples]
         self.src_sents_word = [e.src_sent for e in self.examples]
         self.table_sents_word = [
             [" ".join(x) for x in e.tab_cols] for e in self.examples

@@ -198,7 +198,7 @@ class TransformerDecoderFramework(nn.Module):
                         "arbitrate": encoded_tab[2][b_idx][: tab_lens[b_idx]],
                     },
                     col_tab_dic[b_idx],
-                    self.grammar.start_symbol,
+                    SemQL.semql.start_symbol,
                     target_step,
                 )
                 for b_idx in range(b_size)

@@ -39,10 +39,6 @@ def train(cfg):
         cfg.toy, cfg.is_bert, cfg.dataset.path, cfg.query_type
     )
 
-    # Append anw
-    train_data = utils.append_ground_truth(SemQL, train_data)
-    val_data = utils.append_ground_truth(SemQL, val_data)
-
     # Set optimizer
     optimizer_cls = (
         RAdam if cfg.optimizer == "radam" else eval("torch.optim.%s" % cfg.optimizer)
@@ -113,10 +109,8 @@ def train(cfg):
             bert_optimizer,
             cfg.batch_size,
             train_data,
-            table_data,
             cfg.clip_grad,
             cfg.decoder_name,
-            is_col_set=cfg.is_col_set,
             optimize_freq=cfg.optimize_freq,
         )
 
@@ -135,10 +129,8 @@ def train(cfg):
                 bert_optimizer,
                 cfg.batch_size,
                 val_data,
-                table_data,
                 cfg.clip_grad,
                 cfg.decoder_name,
-                is_col_set=cfg.is_col_set,
                 is_train=False,
                 optimize_freq=cfg.optimize_freq,
             )
@@ -152,7 +144,6 @@ def train(cfg):
                     model,
                     cfg.batch_size,
                     train_data,
-                    table_data,
                     cfg.decoder_name,
                     cfg.is_col_set,
                 )
@@ -165,7 +156,6 @@ def train(cfg):
                     model,
                     cfg.batch_size,
                     val_data,
-                    table_data,
                     cfg.decoder_name,
                     cfg.is_col_set,
                 )
@@ -261,7 +251,6 @@ def train(cfg):
                     model,
                     cfg.batch_size,
                     train_data,
-                    table_data,
                     cfg.decoder_name,
                     cfg.is_col_set,
                 )
@@ -269,7 +258,6 @@ def train(cfg):
                     model,
                     cfg.batch_size,
                     val_data,
-                    table_data,
                     cfg.decoder_name,
                     cfg.is_col_set,
                 )
