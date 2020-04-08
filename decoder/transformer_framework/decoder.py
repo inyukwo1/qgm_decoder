@@ -43,6 +43,7 @@ class TransformerDecoderFramework(nn.Module):
         self.refine_all = cfg.refine_all
         self.use_relation = cfg.use_relation
         self.look_left_only = cfg.look_left_only
+        self.random_training = cfg.random_training
 
         if self.refine_all:
             assert self.use_ct_loss == False, "Should be false"
@@ -167,6 +168,7 @@ class TransformerDecoderFramework(nn.Module):
                     [item[b_idx][: tab_lens[b_idx]] for item in encoded_tab],
                     col_tab_dic[b_idx],
                     golds[b_idx],
+                    self.random_training,
                 )
                 for b_idx in range(b_size)
             ]

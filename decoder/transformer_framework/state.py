@@ -71,6 +71,7 @@ class TransformerStateGold(TransformerState):
         encoded_tab,
         col_tab_dic: Dict[int, List[int]],
         gold: List[Action],
+        random_training: bool = None,
     ):
         TransformerState.__init__(
             self, encoded_src, encoded_col, encoded_tab, col_tab_dic
@@ -79,7 +80,8 @@ class TransformerStateGold(TransformerState):
         self.loss = SemQL_Loss_New()
         self.skip_refinement = False
         self.skip_arbitrator = False
-        self._set_state_to_skip_training()
+        if random_training:
+            self._set_state_to_skip_training()
 
     def _set_state_to_skip_training(self):
         # Skip inference model
