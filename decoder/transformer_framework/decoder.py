@@ -186,7 +186,7 @@ class TransformerDecoderFramework(nn.Module):
                     [item[b_idx][: col_lens[b_idx]] for item in encoded_col],
                     [item[b_idx][: tab_lens[b_idx]] for item in encoded_tab],
                     col_tab_dic[b_idx],
-                    self.grammar.start_symbol,
+                    SemQL.semql.start_symbol,
                     target_step,
                 )
                 for b_idx in range(b_size)

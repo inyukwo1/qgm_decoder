@@ -17,6 +17,7 @@ from preprocess.rule.semQL import *
 from decoder.qgm.utils import filter_datas
 import src.relation as relation
 from src.dataset import Batch
+from rule.semql.semql import SemQL
 
 
 wordnet_lemmatizer = WordNetLemmatizer()
@@ -117,10 +118,9 @@ def get_table_colNames(tab_ids, tab_cols):
     return result
 
 
-def get_col_table_dict(tab_cols, tab_ids, sql, is_col_set=True):
+def get_col_table_dict(tab_cols, tab_ids, sql):
     table_dict = {}
-    cols = sql["col_set"] if is_col_set else sql["col"]
-    for c_id, c_v in enumerate(cols):
+    for c_id, c_v in enumerate(sql["col_set"]):
         for cor_id, cor_val in enumerate(tab_cols):
             if c_v == cor_val:
                 table_dict[tab_ids[cor_id]] = table_dict.get(tab_ids[cor_id], []) + [
@@ -132,13 +132,6 @@ def get_col_table_dict(tab_cols, tab_ids, sql, is_col_set=True):
         for value in value_item:
             col_table_dict[value] = col_table_dict.get(value, []) + [key_item]
     col_table_dict[0] = [x for x in range(len(table_dict) - 1)]
-
-    # Modify
-    if not is_col_set:
-        col_table_dict = {
-            idx: [item] if item != -1 else list(range(max(tab_ids) + 1))
-            for idx, item in enumerate(tab_ids)
-        }
 
     return col_table_dict
 
@@ -223,24 +216,22 @@ def schema_linking(
                             col_set_type[col_set_idx][3] += 1
 
 
-def process(sql, table, is_col_set=True):
-
+def process(sql, db_data):
     process_dict = {}
 
     origin_sql = sql["question_toks"]
     table_names = [
         [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
-        for x in table["table_names"]
+        for x in db_data["table_names"]
     ]
 
     sql["pre_sql"] = copy.deepcopy(sql)
 
-    tab_cols = [col[1] for col in table["column_names"]]
-    tab_ids = [col[0] for col in table["column_names"]]
+    tab_cols = [col[1] for col in db_data["column_names"]]
+    tab_ids = [col[0] for col in db_data["column_names"]]
 
-    cols = sql["col_set"] if is_col_set else sql["col"]
     col_set_iter = [
-        [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")] for x in cols
+        [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")] for x in sql["col_set"]
     ]
     tab_set_iter = [
         [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
@@ -262,8 +253,8 @@ def process(sql, table, is_col_set=True):
         indices = [i for i, x in enumerate(col_iter) if x == col_name]
         assert len(indices) > 0
         if len(indices) == 1:
-            foreigns = [f for f, p in table["foreign_keys"]]
-            primaries = [p for f, p in table["foreign_keys"]]
+            foreigns = [f for f, p in db_data["foreign_keys"]]
+            primaries = [p for f, p in db_data["foreign_keys"]]
             if indices[0] in primaries:
                 col_set_type[col_set_idx, 5] = 1
             if indices[0] in foreigns:
@@ -271,20 +262,19 @@ def process(sql, table, is_col_set=True):
         else:
             col_set_type[col_set_idx, 7] = 1
 
-    process_dict["col_set_iter"] = col_set_iter
+    process_dict["col_set_iter"] = col_set_iter         # for col encoding
     process_dict["q_iter_small"] = q_iter_small
     process_dict["col_set_type"] = col_set_type
     process_dict["tab_set_type"] = tab_set_type
-    process_dict["question_arg"] = question_arg
+    process_dict["question_arg"] = question_arg         # for src encoding
     process_dict["question_arg_type"] = question_arg_type
     process_dict["one_hot_type"] = one_hot_type
     process_dict["tab_cols"] = tab_cols
     process_dict["tab_ids"] = tab_ids
     process_dict["col_iter"] = col_iter
     process_dict["table_names"] = table_names
-    process_dict["tab_set_iter"] = tab_set_iter
+    process_dict["tab_set_iter"] = tab_set_iter         # for tab encoding
     process_dict["qgm"] = sql["qgm"]
-    # process_dict["qgm_action"] = sql["qgm_action"]
 
     return process_dict
 
@@ -308,14 +298,13 @@ def is_valid(rule_label, col_set_table_dict, sql):
     return flag is False
 
 
-def to_batch_seq(sql_data, table_data, idxes, st, ed, is_col_set=True):
+def to_batch_seq(data_list, table_data):
     examples = []
-    for i in range(st, ed):
-        sql = sql_data[idxes[i]]
-        table = table_data[sql["db_id"]]
+    for data in data_list:
+        db_data = table_data[data["db_id"]]
 
-        process_dict = process(sql, table, is_col_set=is_col_set)
-
+        # Process dict
+        process_dict = process(data, db_data)
         for c_id, col_ in enumerate(process_dict["col_set_iter"]):
             for q_id, ori in enumerate(process_dict["q_iter_small"]):
                 if ori in col_:
@@ -325,7 +314,6 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed, is_col_set=True):
             for q_id, ori in enumerate(process_dict["q_iter_small"]):
                 if ori in tab_:
                     process_dict["tab_set_type"][t_id][0] += 1
-
         schema_linking(
             process_dict["question_arg"],
             process_dict["question_arg_type"],
@@ -334,60 +322,52 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed, is_col_set=True):
             process_dict["col_set_iter"],
             process_dict["tab_set_type"],
             process_dict["table_names"],
-            sql,
+            data,
         )
-
         col_table_dict = get_col_table_dict(
-            process_dict["tab_cols"], process_dict["tab_ids"], sql, is_col_set
+            process_dict["tab_cols"], process_dict["tab_ids"], data
         )
-        table_col_name = get_table_colNames(
-            process_dict["tab_ids"], process_dict["col_iter"]
-        )
-
         process_dict["col_set_iter"][0] = ["count", "number", "many"]
 
+        # Get rule label
         rule_label = None
-        if "rule_label" in sql:
+        if "rule_label" in data:
             # handle the subquery on From cause
-            if "from" in sql["rule_label"]:
+            if "from" in data["rule_label"]:
                 continue
-            rule_label = [eval(x) for x in sql["rule_label"].strip().split(" ")]
+            rule_label = [eval(x) for x in data["rule_label"].strip().split(" ")]
             if (
-                is_valid(rule_label, col_set_table_dict=col_table_dict, sql=sql)
+                is_valid(rule_label, col_set_table_dict=col_table_dict, sql=data)
                 is False
             ):
                 continue
 
+        # Append ground truth
+        gt_str = SemQL.create_data(data["qgm"])
+        gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
+
         example = Example(
-            src_sent=process_dict["question_arg"],
-            col_num=len(process_dict["col_set_iter"]),
-            vis_seq=(sql["question"], process_dict["col_set_iter"], sql["query"]),
+            src_sent=process_dict["question_arg"], # src encoding (length as well)
             tab_cols=process_dict["col_set_iter"],  # col for encoding
-            tab_iter=process_dict["tab_set_iter"],  # tab for encoding
-            sql=sql["query"],
+            col_num=len(process_dict["col_set_iter"]),  # col length
+            table_names=process_dict["table_names"],  # tab encoding
+            table_len=len(process_dict["table_names"]),  # tab length
+            sql=data["query"],
             one_hot_type=process_dict["one_hot_type"],
             col_hot_type=process_dict["col_set_type"],
             tab_hot_type=process_dict["tab_set_type"],
-            table_names=process_dict["table_names"],
-            table_len=len(process_dict["table_names"]),
             col_table_dict=col_table_dict,
-            cols=process_dict["tab_cols"],
-            table_col_name=table_col_name,
-            table_col_len=len(table_col_name),
-            tokenized_src_sent=process_dict["col_set_type"],
             tgt_actions=rule_label,
             qgm=process_dict["qgm"],
-            # qgm_action=process_dict["rule_label"],
-            qgm_action=rule_label,
-            relation=sql["relation"] if "relation" in sql else None,
-            gt=sql["gt"],
+            relation=data["relation"] if "relation" in data else None,
+            gt=gt,
+            db_id = data["db_id"]
         )
 
-        example.sql_json = copy.deepcopy(sql)
-        example.db_id = sql["db_id"]
+        example.sql_json = copy.deepcopy(data)
         examples.append(example)
 
-    examples.sort(key=lambda e: -len(e.src_sent))
+    examples.sort(key=lambda elem: len(elem.gt))
     return examples
 
 
@@ -397,18 +377,14 @@ def epoch_train(
     bert_optimizer,
     batch_size,
     sql_data,
-    table_data,
     clip_grad,
     decoder_name,
-    is_col_set=True,
     is_train=True,
     optimize_freq=1,
 ):
 
     model.train()
     # shuffle
-    sql_data.sort(key=lambda elem: len(elem["gt"]))
-
     def chunks(lst, n):
         for i in range(0, len(lst), n):
             yield lst[i : i + n]
@@ -422,17 +398,15 @@ def epoch_train(
     for sql_data_chunk in new_sql_data:
         sql_data += sql_data_chunk
 
-    perm = list(range(len(sql_data)))
     optimizer.zero_grad()
     if bert_optimizer:
         bert_optimizer.zero_grad()
 
     total_loss = {}
     for idx, st in enumerate(tqdm(range(0, len(sql_data), batch_size))):
-        ed = st + batch_size if st + batch_size < len(perm) else len(perm)
-        examples = to_batch_seq(
-            sql_data, table_data, perm, st, ed, is_col_set=is_col_set
-        )
+        ed = min(st+batch_size, len(sql_data))
+        examples = sql_data[st:ed]
+        examples.sort(key=lambda example: -len(example.src_sent))
 
         result = model.forward(examples)
         if decoder_name == "lstm":
@@ -492,13 +466,10 @@ def epoch_acc(
     model,
     batch_size,
     sql_data,
-    table_data,
     model_name,
-    is_col_set=True,
     return_details=False,
 ):
     model.eval()
-    perm = list(range(len(sql_data)))
     if model_name == "transformer":
         pred = {
             "preds": [],
@@ -511,10 +482,9 @@ def epoch_acc(
     gold = []
     example_list = []
     for st in tqdm(range(0, len(sql_data), batch_size)):
-        ed = st + batch_size if st + batch_size < len(perm) else len(perm)
-        examples = to_batch_seq(
-            sql_data, table_data, perm, st, ed, is_col_set=is_col_set,
-        )
+        ed = min(st+batch_size, len(sql_data))
+        examples = sql_data[st:ed]
+        examples.sort(key=lambda example: -len(example.src_sent))
         example_list += examples
         if model_name == "transformer":
             tmp, _ = model.parse(examples)
@@ -658,11 +628,53 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type):
     ]
     val_data = [relation.create_relation(item, table_data, True) for item in val_data]
 
+    # Narrow schema size
+    train_data = add_sub_schema(train_data, table_data)
+    val_data = add_sub_schema(val_data, table_data)
+
     # Show dataset length
     log.info("Total training set: {}".format(len(train_data)))
     log.info("Total validation set: {}\n".format(len(val_data)))
 
+    # Parse datasets into exampels:
+    train_data = to_batch_seq(train_data, table_data)
+    val_data = to_batch_seq(val_data, table_data)
+
     return train_data, val_data, table_data
+
+
+def add_sub_schema(datas, table_data):
+    for data in datas:
+        selected_table_indices = [
+            item[2:].strip(")")
+            for item in data["rule_label"].split(" ")
+            if item[0] == "T"
+        ]
+        sub_schema, schema_mapping = create_sub_schema(data, selected_table_indices)
+        data["sub_schema"] = sub_schema
+        data["schema_mapping"] = schema_mapping
+    return datas
+
+
+def create_sub_schema(data, selected_table_ids):
+    new_schema = {}
+    mapping = {}
+
+    # Create new schema
+    cols = []
+    for idx, parent_id in enumerate(data["col_table"]):
+        if parent_id in selected_table_ids:
+            column_name = data["col"][idx]
+            if column_name not in cols:
+                # Add to new schema
+                cols += [column_name]
+
+                # Add to Mapping
+                ori_idx = data["col_set"].index(column_name)
+                new_idx = len(cols)
+                mapping[ori_idx] = new_idx
+
+    return new_schema, mapping
 
 
 def save_checkpoint(model, checkpoint_name):
@@ -812,16 +824,6 @@ def set_random_seed(seed):
         torch.cuda.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
-
-
-def append_ground_truth(grammar, data_list):
-    for idx, data in enumerate(data_list):
-        gt_str = grammar.create_data(data["qgm"])
-        data_list[idx]["gt"] = [
-            grammar.str_to_action(item) for item in gt_str.split(" ")
-        ]
-
-    return data_list
 
 
 def analyze_regarding_schema_size(examples, is_correct, preds, golds, table_data):
