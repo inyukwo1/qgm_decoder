@@ -591,8 +591,10 @@ class TransformerDecoderFramework(nn.Module):
             if state.is_gold():
                 # Loss for C T (?)
                 if not self.use_ct_loss or symbol in ["C", "T"]:
-                    state.apply_loss(cur_refine_step, refine_prod)
-                    state.apply_loss(cur_refine_step, arbitrate_prod)
+                    if not state.skip_refinement:
+                        state.apply_loss(cur_refine_step, refine_prod)
+                    if not state.skip_arbitrator:
+                        state.apply_loss(cur_refine_step, arbitrate_prod)
             else:
                 assert isinstance(state, TransformerStatePred)
                 ori_action = history_actions[cur_refine_step]

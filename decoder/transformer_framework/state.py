@@ -7,6 +7,8 @@ from rule.semql.semql import SemQL
 from rule.grammar import SymbolId, Symbol, Action
 from rule.semql.semql_loss import SemQL_Loss_New
 
+import random
+
 
 class TransformerState(State):
     def __init__(self, encoded_src, encoded_col, encoded_tab, col_tab_dic):
@@ -75,6 +77,18 @@ class TransformerStateGold(TransformerState):
         )
         self.gold: List[Action] = gold
         self.loss = SemQL_Loss_New()
+        self.skip_refinement = False
+        self.skip_arbitrator = False
+        self._set_state_to_skip_training()
+
+    def _set_state_to_skip_training(self):
+        # Skip inference model
+        if random.randint(0, 2) == 1:
+            self.step_cnt = len(self.gold)
+        # Skip refiner
+        self.skip_refinement = random.randint(0, 2) == 1
+        # Skip arbitrator
+        self.skip_arbitrator = random.randint(0, 2) == 1
 
     @classmethod
     def is_to_refine(cls, state) -> bool:
