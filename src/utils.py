@@ -231,7 +231,8 @@ def process(sql, db_data):
     tab_ids = [col[0] for col in db_data["column_names"]]
 
     col_set_iter = [
-        [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")] for x in sql["col_set"]
+        [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
+        for x in sql["col_set"]
     ]
     tab_set_iter = [
         [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
@@ -262,17 +263,17 @@ def process(sql, db_data):
         else:
             col_set_type[col_set_idx, 7] = 1
 
-    process_dict["col_set_iter"] = col_set_iter         # for col encoding
+    process_dict["col_set_iter"] = col_set_iter  # for col encoding
     process_dict["q_iter_small"] = q_iter_small
     process_dict["col_set_type"] = col_set_type
     process_dict["tab_set_type"] = tab_set_type
-    process_dict["question_arg"] = question_arg         # for src encoding
+    process_dict["question_arg"] = question_arg  # for src encoding
     process_dict["one_hot_type"] = one_hot_type
     process_dict["tab_cols"] = tab_cols
     process_dict["tab_ids"] = tab_ids
     process_dict["col_iter"] = col_iter
     process_dict["table_names"] = table_names
-    process_dict["tab_set_iter"] = tab_set_iter         # for tab encoding
+    process_dict["tab_set_iter"] = tab_set_iter  # for tab encoding
 
     return process_dict
 
@@ -308,7 +309,8 @@ def to_batch_seq(data_list, table_data):
 
         # column
         col_set_iter = [
-            [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")] for x in data["col_set"]
+            [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
+            for x in data["col_set"]
         ]
         col_set_iter[0] = ["count", "number", "many"]
 
@@ -321,12 +323,10 @@ def to_batch_seq(data_list, table_data):
         # col table dic
         tab_cols = [col[1] for col in data["column_names"]]
         tab_ids = [col[0] for col in data["column_names"]]
-        col_table_dict = get_col_table_dict(
-            tab_cols, tab_ids, data
-        )
+        col_table_dict = get_col_table_dict(tab_cols, tab_ids, data)
 
         example = Example(
-            src_sent=question_arg, # src encoding (length as well)
+            src_sent=question_arg,  # src encoding (length as well)
             tab_cols=col_set_iter,  # col for encoding
             col_num=len(col_set_iter),  # col length
             table_names=table_names,  # tab encoding
@@ -336,7 +336,7 @@ def to_batch_seq(data_list, table_data):
             qgm=data["qgm"],
             relation=data["relation"] if "relation" in data else None,
             gt=data["gt"],
-            db_id = data["db_id"]
+            db_id=data["db_id"],
         )
 
         example.sql_json = copy.deepcopy(data)
@@ -379,7 +379,7 @@ def epoch_train(
 
     total_loss = {}
     for idx, st in enumerate(tqdm(range(0, len(sql_data), batch_size))):
-        ed = min(st+batch_size, len(sql_data))
+        ed = min(st + batch_size, len(sql_data))
         examples = sql_data[st:ed]
         examples.sort(key=lambda example: -len(example.src_sent))
 
@@ -438,11 +438,7 @@ def epoch_train(
 
 
 def epoch_acc(
-    model,
-    batch_size,
-    sql_data,
-    model_name,
-    return_details=False,
+    model, batch_size, sql_data, model_name, return_details=False,
 ):
     model.eval()
     if model_name == "transformer":
@@ -457,7 +453,7 @@ def epoch_acc(
     gold = []
     example_list = []
     for st in tqdm(range(0, len(sql_data), batch_size)):
-        ed = min(st+batch_size, len(sql_data))
+        ed = min(st + batch_size, len(sql_data))
         examples = sql_data[st:ed]
         examples.sort(key=lambda example: -len(example.src_sent))
         example_list += examples
@@ -490,20 +486,16 @@ def epoch_acc(
             pred, gold
         )
     elif model_name == "transformer":
-        total_acc_pred, is_correct_list_pred = SemQL.semql.cal_acc(
-            pred["preds"], gold
-        )
+        total_acc_pred, is_correct_list_pred = SemQL.semql.cal_acc(pred["preds"], gold)
         total_acc_refined, is_correct_list_refined = SemQL.semql.cal_acc(
             pred["refined_preds"], gold
         )
-        (
-            total_acc_arbitrated,
-            is_correct_list_arbitrated,
-        ) = SemQL.semql.cal_acc(pred["arbitrated_preds"], gold)
-        (
-            total_acc_init_pred,
-            is_correct_list_init_pred,
-        ) = SemQL.semql.cal_acc(pred["initial_preds"], gold)
+        (total_acc_arbitrated, is_correct_list_arbitrated,) = SemQL.semql.cal_acc(
+            pred["arbitrated_preds"], gold
+        )
+        (total_acc_init_pred, is_correct_list_init_pred,) = SemQL.semql.cal_acc(
+            pred["initial_preds"], gold
+        )
         return (
             total_acc_pred,
             total_acc_refined,
@@ -519,7 +511,9 @@ def epoch_acc(
         return total_acc
 
 
-def load_data_new(sql_path, table_data, use_small=False, is_bert=False, query_type="simple"):
+def load_data_new(
+    sql_path, table_data, use_small=False, is_bert=False, query_type="simple"
+):
     sql_data = []
     log.info("Loading data from {}".format(sql_path))
 
@@ -536,7 +530,6 @@ def load_data_new(sql_path, table_data, use_small=False, is_bert=False, query_ty
         gt_str = SemQL.create_data(data["qgm"])
         gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
         data["gt"] = gt
-
 
     # Filter some db
     if is_bert:
@@ -556,7 +549,7 @@ def load_data_new(sql_path, table_data, use_small=False, is_bert=False, query_ty
     return sql_data[:10] if use_small else sql_data
 
 
-def load_dataset(is_toy, is_bert, dataset_path, query_type):
+def load_dataset(is_toy, is_bert, dataset_path, query_type, use_down_schema):
     # Get paths
     table_path = os.path.join(dataset_path, "tables.json")
     train_path = os.path.join(dataset_path, "train.json")
@@ -601,8 +594,9 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type):
     log.info("Total validation set: {}\n".format(len(val_data)))
 
     # filter schema using 1-hop scheme
-    train_data = filter_schema(train_data)
-    val_data = filter_schema(val_data)
+    if use_down_schema:
+        train_data = down_schema(train_data)
+        val_data = down_schema(val_data)
 
     # Parse datasets into exampels:
     train_data = to_batch_seq(train_data, table_data)
@@ -611,9 +605,11 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type):
     return train_data, val_data, table_data
 
 
-def filter_schema(datas):
+def down_schema(datas):
     for data in datas:
-        selected_table_indices = list(set([item[1] for item in data["gt"] if item[0] == "T"]))
+        selected_table_indices = list(
+            set([item[1] for item in data["gt"] if item[0] == "T"])
+        )
         # Append neighbor tables
         tmp = copy.deepcopy(selected_table_indices)
         for item in selected_table_indices:
@@ -621,8 +617,9 @@ def filter_schema(datas):
                 tmp += data["db"]["neighbors"][item]
         selected_table_indices = list(set(tmp))
 
-        new_data = create_sub_schema(data, selected_table_indices)
-        # ALter
+        append_sub_schema(data, selected_table_indices)
+
+        # ALter schema
         data["gt"] = data["new_gt"]
         data["col_set"] = data["new_col_set"]
         data["column_names"] = data["new_column_names"]
@@ -645,37 +642,53 @@ def filter_schema(datas):
         if len(qt) == 1:
             stop = 1
         # cq
-        cq = [item for idx, item in enumerate(relation["cq"]) if idx in data["column_mapping"]]
+        cq = [
+            item
+            for idx, item in enumerate(relation["cq"])
+            if idx in data["column_mapping"]
+        ]
 
         # cc
         cc = []
         for idx_1, item in enumerate(relation["cc"]):
             if idx_1 in data["column_mapping"]:
-                tmp = [id for idx, id in enumerate(item) if idx in data["column_mapping"]]
+                tmp = [
+                    id for idx, id in enumerate(item) if idx in data["column_mapping"]
+                ]
                 cc += [tmp]
 
         # ct
         ct = []
         for idx_1, item in enumerate(relation["ct"]):
             if idx_1 in data["column_mapping"]:
-                tmp = [id for idx, id in enumerate(item) if idx in data["table_mapping"]]
+                tmp = [
+                    id for idx, id in enumerate(item) if idx in data["table_mapping"]
+                ]
                 ct += [tmp]
 
         # tq
-        tq = [item for idx, item in enumerate(relation["tq"]) if idx in data["table_mapping"]]
+        tq = [
+            item
+            for idx, item in enumerate(relation["tq"])
+            if idx in data["table_mapping"]
+        ]
 
         # tc
         tc = []
         for idx_1, item in enumerate(relation["tc"]):
             if idx_1 in data["table_mapping"]:
-                tmp = [id for idx, id in enumerate(item) if idx in data["column_mapping"]]
+                tmp = [
+                    id for idx, id in enumerate(item) if idx in data["column_mapping"]
+                ]
                 tc += [tmp]
 
         # tt
         tt = []
         for idx_1, item in enumerate(relation["tt"]):
             if idx_1 in data["table_mapping"]:
-                tmp = [id for idx, id in enumerate(item) if idx in data["table_mapping"]]
+                tmp = [
+                    id for idx, id in enumerate(item) if idx in data["table_mapping"]
+                ]
                 tt += [tmp]
 
         # Replace
@@ -688,11 +701,10 @@ def filter_schema(datas):
         relation["tc"] = tc
         relation["tt"] = tt
 
-
     return datas
 
 
-def create_sub_schema(data, selected_table_ids):
+def append_sub_schema(data, selected_table_ids):
     # New tables
     new_table_names = []
     table_mapping = {}
@@ -742,7 +754,7 @@ def create_sub_schema(data, selected_table_ids):
     data["column_mapping"] = column_mapping
     data["table_mapping"] = table_mapping
 
-    return data
+    return None
 
 
 def save_checkpoint(model, checkpoint_name):

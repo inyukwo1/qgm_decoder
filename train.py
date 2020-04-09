@@ -36,7 +36,7 @@ def train(cfg):
 
     # Load dataset
     train_data, val_data, table_data = utils.load_dataset(
-        cfg.toy, cfg.is_bert, cfg.dataset.path, cfg.query_type
+        cfg.toy, cfg.is_bert, cfg.dataset.path, cfg.query_type, cfg.use_down_schema
     )
 
     # Set optimizer
@@ -141,11 +141,7 @@ def train(cfg):
                     train_acc_arbitrated,
                     train_acc_init_pred,
                 ) = utils.epoch_acc(
-                    model,
-                    cfg.batch_size,
-                    train_data,
-                    cfg.decoder_name,
-                    cfg.is_col_set,
+                    model, cfg.batch_size, train_data, cfg.decoder_name, cfg.is_col_set,
                 )
                 (
                     val_acc_pred,
@@ -153,11 +149,7 @@ def train(cfg):
                     val_acc_arbitrated,
                     val_acc_init_pred,
                 ) = utils.epoch_acc(
-                    model,
-                    cfg.batch_size,
-                    val_data,
-                    cfg.decoder_name,
-                    cfg.is_col_set,
+                    model, cfg.batch_size, val_data, cfg.decoder_name, cfg.is_col_set,
                 )
                 # Logging to tensorboard
                 utils.logging_to_tensorboard(
@@ -248,18 +240,10 @@ def train(cfg):
                         )
             else:
                 train_acc = utils.epoch_acc(
-                    model,
-                    cfg.batch_size,
-                    train_data,
-                    cfg.decoder_name,
-                    cfg.is_col_set,
+                    model, cfg.batch_size, train_data, cfg.decoder_name, cfg.is_col_set,
                 )
                 val_acc = utils.epoch_acc(
-                    model,
-                    cfg.batch_size,
-                    val_data,
-                    cfg.decoder_name,
-                    cfg.is_col_set,
+                    model, cfg.batch_size, val_data, cfg.decoder_name, cfg.is_col_set,
                 )
 
                 # Logging to tensorboard
