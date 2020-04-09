@@ -10,6 +10,7 @@ import numpy as np
 from tqdm import tqdm
 from nltk.stem import WordNetLemmatizer
 import logging
+from rule.semql.semql import SemQL
 
 from src.dataset import Example
 from preprocess.rule import lf
@@ -540,32 +541,22 @@ def epoch_acc(
             tmp = tmp2
             gold += tmp
         elif model_name == "transformer":
-            tmp = [
-                model.decoder.grammar.create_data(example.qgm) for example in examples
-            ]
+            tmp = [SemQL.semql.create_data(example.qgm) for example in examples]
             tmp2 = []
             for item in tmp:
                 tmp2 += [
-                    [
-                        model.decoder.grammar.str_to_action(value)
-                        for value in item.split(" ")
-                    ]
+                    [SemQL.semql.str_to_action(value) for value in item.split(" ")]
                 ]
             tmp = tmp2
             gold += tmp
         elif model_name == "qgm":
             gold += [example.qgm for example in examples]
         elif model_name == "semql":
-            tmp = [
-                model.decoder.grammar.create_data(example.qgm) for example in examples
-            ]
+            tmp = [SemQL.semql.create_data(example.qgm) for example in examples]
             tmp2 = []
             for item in tmp:
                 tmp2 += [
-                    [
-                        model.decoder.grammar.str_to_action(value)
-                        for value in item.split(" ")
-                    ]
+                    [SemQL.semql.str_to_action(value) for value in item.split(" ")]
                 ]
             tmp = tmp2
             gold += tmp
@@ -577,24 +568,18 @@ def epoch_acc(
 
     # Calculate acc
     if model_name == "ensemble":
-        total_acc, is_correct_list = model.decoder.decoders[0].grammar.cal_acc(
-            pred, gold
-        )
+        total_acc, is_correct_list = SemQL.semql.cal_acc(pred, gold)
     elif model_name == "transformer":
-        total_acc_pred, is_correct_list_pred = model.decoder.grammar.cal_acc(
-            pred["preds"], gold
-        )
-        total_acc_refined, is_correct_list_refined = model.decoder.grammar.cal_acc(
+        total_acc_pred, is_correct_list_pred = SemQL.semql.cal_acc(pred["preds"], gold)
+        total_acc_refined, is_correct_list_refined = SemQL.semql.cal_acc(
             pred["refined_preds"], gold
         )
-        (
-            total_acc_arbitrated,
-            is_correct_list_arbitrated,
-        ) = model.decoder.grammar.cal_acc(pred["arbitrated_preds"], gold)
-        (
-            total_acc_init_pred,
-            is_correct_list_init_pred,
-        ) = model.decoder.grammar.cal_acc(pred["initial_preds"], gold)
+        (total_acc_arbitrated, is_correct_list_arbitrated,) = SemQL.semql.cal_acc(
+            pred["arbitrated_preds"], gold
+        )
+        (total_acc_init_pred, is_correct_list_init_pred,) = SemQL.semql.cal_acc(
+            pred["initial_preds"], gold
+        )
         return (
             total_acc_pred,
             total_acc_refined,
@@ -602,7 +587,7 @@ def epoch_acc(
             total_acc_init_pred,
         )
     else:
-        total_acc, is_correct_list = model.decoder.grammar.cal_acc(pred, gold)
+        total_acc, is_correct_list = SemQL.semql.cal_acc(pred, gold)
 
     if return_details:
         return total_acc, is_correct_list, pred, gold, example_list

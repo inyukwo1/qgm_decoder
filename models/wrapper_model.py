@@ -65,9 +65,7 @@ class EncoderDecoderModel(nn.Module):
         elif self.encoder_name == "transformer":
             self.encoder = Transformer_Encoder(cfg)
         elif self.encoder_name == "ra_transformer":
-            self.encoder = nn.ModuleList(
-                [RA_Transformer_Encoder(cfg) for _ in range(3)]
-            )
+            self.encoder = RA_Transformer_Encoder(cfg)
             # self.encoder = RA_Transformer_Encoder(cfg)
         else:
             raise RuntimeError("Unsupported encoder name")
@@ -184,55 +182,23 @@ class EncoderDecoderModel(nn.Module):
 
             relation_matrix = relation.create_batch(batch.relation)
 
-            if self.use_separate_encoder:
-                outs = [
-                    (
-                        item(
-                            src,
-                            col,
-                            tab,
-                            src_len,
-                            col_len,
-                            tab_len,
-                            src_mask,
-                            col_mask,
-                            tab_mask,
-                            relation_matrix,
-                        )
-                    )
-                    for item in self.encoder
-                ]
-            else:
-                out = self.encoder[0](
-                    src,
-                    col,
-                    tab,
-                    src_len,
-                    col_len,
-                    tab_len,
-                    src_mask,
-                    col_mask,
-                    tab_mask,
-                    relation_matrix,
-                )
-                outs = [out, out, out]
+            outs = self.encoder(
+                src,
+                col,
+                tab,
+                src_len,
+                col_len,
+                tab_len,
+                src_mask,
+                col_mask,
+                tab_mask,
+                relation_matrix,
+            )
 
-            src_encodings = [item[0] for item in outs]
-            table_embeddings = [item[1] for item in outs]
-            schema_embeddings = [item[2] for item in outs]
+            src_encodings = outs[0]
+            table_embeddings = outs[1]
+            schema_embeddings = outs[2]
 
-            # src_encodings, table_embeddings, schema_embeddings = self.encoder(
-            #     src,
-            #     col,
-            #     tab,
-            #     src_len,
-            #     col_len,
-            #     tab_len,
-            #     src_mask,
-            #     col_mask,
-            #     tab_mask,
-            #     relation_matrix,
-            # )
             enc_last_cell = None
         elif self.encoder_name == "transformer":
             (src_encodings, table_embeddings, schema_embeddings, _,) = self.lstm_encode(
@@ -456,55 +422,22 @@ class EncoderDecoderModel(nn.Module):
 
                 relation_matrix = relation.create_batch(batch.relation)
 
-                if self.use_separate_encoder:
-                    outs = [
-                        (
-                            item(
-                                src,
-                                col,
-                                tab,
-                                src_len,
-                                col_len,
-                                tab_len,
-                                src_mask,
-                                col_mask,
-                                tab_mask,
-                                relation_matrix,
-                            )
-                        )
-                        for item in self.encoder
-                    ]
-                else:
-                    out = self.encoder[0](
-                        src,
-                        col,
-                        tab,
-                        src_len,
-                        col_len,
-                        tab_len,
-                        src_mask,
-                        col_mask,
-                        tab_mask,
-                        relation_matrix,
-                    )
-                    outs = [out, out, out]
+                outs = self.encoder(
+                    src,
+                    col,
+                    tab,
+                    src_len,
+                    col_len,
+                    tab_len,
+                    src_mask,
+                    col_mask,
+                    tab_mask,
+                    relation_matrix,
+                )
 
-                src_encodings = [item[0] for item in outs]
-                table_embeddings = [item[1] for item in outs]
-                schema_embeddings = [item[2] for item in outs]
-
-                # src_encodings, table_embeddings, schema_embeddings = self.encoder(
-                #     src,
-                #     col,
-                #     tab,
-                #     src_len,
-                #     col_len,
-                #     tab_len,
-                #     src_mask,
-                #     col_mask,
-                #     tab_mask,
-                #     relation_matrix,
-                # )
+                src_encodings = outs[0]
+                table_embeddings = outs[1]
+                schema_embeddings = outs[2]
             elif self.encoder_name == "transformer":
                 (
                     src_encodings,
@@ -600,7 +533,7 @@ class EncoderDecoderModel(nn.Module):
             elif self.decoder_name == "transformer":
                 col_tab_dic = batch.col_table_dict
                 pred = self.decoder(
-                    len(src_encodings[0]),
+                    len(src_encodings),
                     src_encodings,
                     table_embeddings,
                     schema_embeddings,
@@ -609,6 +542,7 @@ class EncoderDecoderModel(nn.Module):
                     batch.table_len,
                     col_tab_dic,
                     golds=None,
+                    preds_init=batch.gt,
                 )
 
                 return pred
