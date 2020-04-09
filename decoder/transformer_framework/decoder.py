@@ -22,6 +22,7 @@ from framework.lazy_modules import (
     LazyRATransformerDecoder,
     LazyCalculateSimilarity,
 )
+import random
 
 
 class TransformerDecoderModule(nn.Module):
@@ -65,6 +66,7 @@ class TransformerDecoderFramework(nn.Module):
         self.refine_all = cfg.refine_all
         self.use_relation = cfg.use_relation
         self.look_left_only = cfg.look_left_only
+        self.purturb = cfg.purturb
 
         if self.refine_all:
             assert self.use_ct_loss is False, "Should be false"
@@ -204,50 +206,70 @@ class TransformerDecoderFramework(nn.Module):
                 for b_idx in range(b_size)
             ]
 
-        def embed_history_actions_per_mode(mode):
-            def embed_history_actions(
+        def embed_history_actions_symbols_per_mode(mode):
+            def embed_history_actions_symbols(
                 state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
             ) -> Dict[str, TensorPromise]:
                 history_actions: List[Action] = state.get_history_actions(
                     mode, self.look_left_only
                 )
-                history_action_embeddings: List[torch.Tensor] = [
-                    self.action_to_embedding(state, action, mode)
-                    for action in history_actions
-                ]
                 if mode == "infer":
+                    history_action_embeddings: List[torch.Tensor] = [
+                        self.action_to_embedding(state, action, mode)
+                        for action in history_actions
+                    ]
                     history_action_embeddings += [self.onedim_zero_tensor()]
+                    history_symbols = [action[0] for action in history_actions]
+                    current_symbol: Symbol = state.get_current_symbol()
+                    history_symbols += [current_symbol]
                 else:
-                    history_action_embeddings[
-                        state.refine_step_cnt
-                    ] = self.onedim_zero_tensor()
+                    for idx in range(state.refine_step_cnt, len(history_actions)):
+                        if (
+                            not self.purturb
+                            or isinstance(state, TransformerStatePred)
+                            or not random.randrange(0, 100) >= 15
+                        ):
+                            continue
+                        symbol = history_actions[idx][0]
+                        if symbol == "C":
+                            new_c_idx = random.randrange(
+                                0, len(state.encoded_col[mode])
+                            )
+                            new_action: Action = (symbol, new_c_idx)
+                        elif symbol == "T":
+                            new_t_idx = random.randrange(
+                                0, len(state.encoded_tab[mode])
+                            )
+                            new_action: Action = (symbol, new_t_idx)
+                        else:
+                            new_a_idx = random.randrange(
+                                0, len(SemQL.semql.actions[symbol])
+                            )
+                            new_action: Action = (symbol, new_a_idx)
+                        history_actions[idx] = new_action
+                    history_symbols = [action[0] for action in history_actions]
+                    history_action_embeddings: List[torch.Tensor] = [
+                        self.action_to_embedding(state, action, mode)
+                        for action in history_actions
+                    ]
+
                 action_embeddings = torch.stack(history_action_embeddings, dim=0)
                 action_embeddings_promise: TensorPromise = self.decoders[
                     mode
                 ].action_affine_layer.forward_later(action_embeddings)
-                prev_tensor_dict.update({"action_embedding": action_embeddings_promise})
-                return prev_tensor_dict
-
-            return embed_history_actions
-
-        def embed_history_symbols_per_mode(mode):
-            def embed_history_symbols(
-                state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
-            ) -> Dict[str, TensorPromise]:
-                history_symbols: List[Symbol] = state.get_history_symbols(
-                    mode, self.look_left_only
-                )
-                if mode == "infer":
-                    current_symbol: Symbol = state.get_current_symbol()
-                    history_symbols += [current_symbol]
                 symbol_embeddings = self.symbol_list_to_embedding(history_symbols, mode)
                 symbol_embeddings_promise: TensorPromise = self.decoders[
                     mode
                 ].symbol_affine_layer.forward_later(symbol_embeddings)
-                prev_tensor_dict.update({"symbol_embedding": symbol_embeddings_promise})
+                prev_tensor_dict.update(
+                    {
+                        "action_embedding": action_embeddings_promise,
+                        "symbol_embedding": symbol_embeddings_promise,
+                    }
+                )
                 return prev_tensor_dict
 
-            return embed_history_symbols
+            return embed_history_actions_symbols
 
         def combine_embeddings_per_mode(mode):
             def combine_embeddings(
@@ -474,8 +496,7 @@ class TransformerDecoderFramework(nn.Module):
             WhileLogic.While(state_class.is_not_done)
             .Do(
                 LogicUnit.If(state_class.is_to_infer)
-                .Then(embed_history_actions_per_mode("infer"))
-                .Then(embed_history_symbols_per_mode("infer"))
+                .Then(embed_history_actions_symbols_per_mode("infer"))
                 .Then(combine_embeddings_per_mode("infer"))
                 .Then(pass_transformer_per_mode("infer"))
                 .Then(pass_out_linear_per_mode("infer"))
@@ -485,8 +506,7 @@ class TransformerDecoderFramework(nn.Module):
             .Do(LogicUnit.If(state_class.is_initial_pred).Then(save_initial_pred))
             .Do(
                 LogicUnit.If(state_class.is_to_refine)
-                .Then(embed_history_actions_per_mode("refine"))
-                .Then(embed_history_symbols_per_mode("refine"))
+                .Then(embed_history_actions_symbols_per_mode("refine"))
                 .Then(combine_embeddings_per_mode("refine"))
                 .Then(pass_transformer_per_mode("refine"))
                 .Then(pass_out_linear_per_mode("refine"))
@@ -494,8 +514,7 @@ class TransformerDecoderFramework(nn.Module):
             )
             .Do(
                 LogicUnit.If(state_class.is_to_arbitrate)
-                .Then(embed_history_actions_per_mode("arbitrate"))
-                .Then(embed_history_symbols_per_mode("arbitrate"))
+                .Then(embed_history_actions_symbols_per_mode("arbitrate"))
                 .Then(combine_embeddings_per_mode("arbitrate"))
                 .Then(pass_transformer_per_mode("arbitrate"))
                 .Then(pass_out_linear_per_mode("arbitrate"))

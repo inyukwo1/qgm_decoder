@@ -8,3 +8,5 @@ use_arbitrator: true
 refine_all: true
 use_relation: false
 look_left_only: false
+purturb: false
+reduce_schema: false

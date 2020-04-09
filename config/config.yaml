@@ -34,3 +34,4 @@ load_model: false
 toy: false
 debugging: false
 tag: tag
+eval_train: true
