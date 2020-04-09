@@ -75,7 +75,6 @@ def train(cfg):
         for k in pretrained_model.keys():
             if k not in model.state_dict().keys():
                 del pretrained_modeled[k]
-
         model.load_state_dict(pretrained_modeled)
 
     model.load_word_emb()
