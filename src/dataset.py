@@ -40,6 +40,8 @@ class Example:
         relation=None,
         gt=None,
         db_id=None,
+        db=None,
+        data=None,
     ):
         self.src_sent = src_sent
         self.tab_cols = tab_cols
@@ -54,6 +56,8 @@ class Example:
         self.relation = relation
         self.gt = gt
         self.db_id = db_id
+        self.db = db
+        self.data = data
         # self.tokenized_src_sent = tokenized_src_sent
         # self.vis_seq = vis_seq
         # self.tab_iter = tab_iter

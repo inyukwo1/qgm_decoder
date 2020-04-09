@@ -297,13 +297,9 @@ def is_valid(rule_label, col_set_table_dict, sql):
     return flag is False
 
 
-def to_batch_seq(data_list, table_data):
+def to_batch_seq(data_list):
     examples = []
     for data in data_list:
-        db_data = table_data[data["db_id"]]
-        # assert db_data["column_names"] == data["column_names"]
-        # assert db_data["table_names"] == data["table_names"]
-
         # src
         question_arg = copy.deepcopy(data["question_arg"])
 
@@ -337,6 +333,8 @@ def to_batch_seq(data_list, table_data):
             relation=data["relation"] if "relation" in data else None,
             gt=data["gt"],
             db_id=data["db_id"],
+            db=data["db"],
+            data=data,
         )
 
         example.sql_json = copy.deepcopy(data)
@@ -599,8 +597,8 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type, use_down_schema):
         val_data = down_schema(val_data)
 
     # Parse datasets into exampels:
-    train_data = to_batch_seq(train_data, table_data)
-    val_data = to_batch_seq(val_data, table_data)
+    train_data = to_batch_seq(train_data)
+    val_data = to_batch_seq(val_data)
 
     return train_data, val_data, table_data
 
@@ -611,100 +609,113 @@ def down_schema(datas):
             set([item[1] for item in data["gt"] if item[0] == "T"])
         )
         # Append neighbor tables
-        tmp = copy.deepcopy(selected_table_indices)
-        for item in selected_table_indices:
-            if item in data["db"]["neighbors"]:
-                tmp += data["db"]["neighbors"][item]
-        selected_table_indices = list(set(tmp))
+        selected_table_indices = append_one_hop_neighbors(data["db"]["neighbors"], selected_table_indices)
+        sub_schema = create_sub_schema(selected_table_indices, data["table_names"], data["column_names"], data["col_set"], data["gt"])
 
-        append_sub_schema(data, selected_table_indices)
-
-        # ALter schema
-        data["gt"] = data["new_gt"]
-        data["col_set"] = data["new_col_set"]
-        data["column_names"] = data["new_column_names"]
-        data["table_names"] = data["new_table_names"]
+        # Alter schema
+        for key, item in sub_schema.items():
+            data[key] = item
 
         # Alter Relation matrix
         relation = data["relation"]
-        # qc
-        qc = []
-        for item in relation["qc"]:
-            tmp = [id for idx, id in enumerate(item) if idx in data["column_mapping"]]
-            qc += [tmp]
+        new_relation = create_sub_relation(relation, data["column_mapping"], data["table_mapping"])
 
-        # qt
-        qt = []
-        for item in relation["qt"]:
-            tmp = [id for idx, id in enumerate(item) if idx in data["table_mapping"]]
-            qt += [tmp]
+        # Replace relations
+        for key, item in new_relation.items():
+            relation[key] = item
 
-        if len(qt) == 1:
-            stop = 1
-        # cq
-        cq = [
-            item
-            for idx, item in enumerate(relation["cq"])
-            if idx in data["column_mapping"]
-        ]
 
-        # cc
-        cc = []
-        for idx_1, item in enumerate(relation["cc"]):
-            if idx_1 in data["column_mapping"]:
-                tmp = [
-                    id for idx, id in enumerate(item) if idx in data["column_mapping"]
-                ]
-                cc += [tmp]
-
-        # ct
-        ct = []
-        for idx_1, item in enumerate(relation["ct"]):
-            if idx_1 in data["column_mapping"]:
-                tmp = [
-                    id for idx, id in enumerate(item) if idx in data["table_mapping"]
-                ]
-                ct += [tmp]
-
-        # tq
-        tq = [
-            item
-            for idx, item in enumerate(relation["tq"])
-            if idx in data["table_mapping"]
-        ]
-
-        # tc
-        tc = []
-        for idx_1, item in enumerate(relation["tc"]):
-            if idx_1 in data["table_mapping"]:
-                tmp = [
-                    id for idx, id in enumerate(item) if idx in data["column_mapping"]
-                ]
-                tc += [tmp]
-
-        # tt
-        tt = []
-        for idx_1, item in enumerate(relation["tt"]):
-            if idx_1 in data["table_mapping"]:
-                tmp = [
-                    id for idx, id in enumerate(item) if idx in data["table_mapping"]
-                ]
-                tt += [tmp]
-
-        # Replace
-        relation["qc"] = qc
-        relation["qt"] = qt
-        relation["cq"] = cq
-        relation["cc"] = cc
-        relation["ct"] = ct
-        relation["tq"] = tq
-        relation["tc"] = tc
-        relation["tt"] = tt
 
     return datas
 
 
-def append_sub_schema(data, selected_table_ids):
+def create_sub_relation(relation, column_mapping, table_mapping):
+    # qc
+    qc = []
+    for item in relation["qc"]:
+        tmp = [id for idx, id in enumerate(item) if idx in column_mapping]
+        qc += [tmp]
+
+    # qt
+    qt = []
+    for item in relation["qt"]:
+        tmp = [id for idx, id in enumerate(item) if idx in table_mapping]
+        qt += [tmp]
+
+    # cq
+    cq = [
+        item
+        for idx, item in enumerate(relation["cq"])
+        if idx in column_mapping
+    ]
+
+    # cc
+    cc = []
+    for idx_1, item in enumerate(relation["cc"]):
+        if idx_1 in column_mapping:
+            tmp = [
+                id for idx, id in enumerate(item) if idx in column_mapping
+            ]
+            cc += [tmp]
+
+    # ct
+    ct = []
+    for idx_1, item in enumerate(relation["ct"]):
+        if idx_1 in column_mapping:
+            tmp = [
+                id for idx, id in enumerate(item) if idx in table_mapping
+            ]
+            ct += [tmp]
+
+    # tq
+    tq = [
+        item
+        for idx, item in enumerate(relation["tq"])
+        if idx in table_mapping
+    ]
+
+    # tc
+    tc = []
+    for idx_1, item in enumerate(relation["tc"]):
+        if idx_1 in table_mapping:
+            tmp = [
+                id for idx, id in enumerate(item) if idx in column_mapping
+            ]
+            tc += [tmp]
+
+    # tt
+    tt = []
+    for idx_1, item in enumerate(relation["tt"]):
+        if idx_1 in table_mapping:
+            tmp = [
+                id for idx, id in enumerate(item) if idx in table_mapping
+            ]
+            tt += [tmp]
+
+    # Create new relation
+    new_relation = {}
+    new_relation["qc"] = qc
+    new_relation["qt"] = qt
+    new_relation["cq"] = cq
+    new_relation["cc"] = cc
+    new_relation["ct"] = ct
+    new_relation["tq"] = tq
+    new_relation["tc"] = tc
+    new_relation["tt"] = tt
+
+    return new_relation
+
+
+def append_one_hop_neighbors(neighbor_dic, selected_table_indices):
+    # Append neighbor tables
+    new_indices = copy.deepcopy(selected_table_indices)
+    for item in selected_table_indices:
+        if item in neighbor_dic:
+            new_indices += neighbor_dic[item]
+    return list(set(new_indices))
+
+
+def create_sub_schema(selected_table_ids, table_names, column_names, col_set, gt=None):
     # New tables
     new_table_names = []
     table_mapping = {}
@@ -712,11 +723,11 @@ def append_sub_schema(data, selected_table_ids):
         # Mapping
         table_mapping[idx] = len(new_table_names)
         # New table names
-        new_table_names += [data["table_names"][idx]]
+        new_table_names += [table_names[idx]]
 
     # New column_names
     new_column_names = []
-    for tab_id, column_name in data["column_names"]:
+    for tab_id, column_name in column_names:
         if tab_id == -1:
             new_column_names += [(-1, column_name)]
         elif tab_id in selected_table_ids:
@@ -727,34 +738,37 @@ def append_sub_schema(data, selected_table_ids):
     selected_cols = [item[1] for item in new_column_names]
     column_mapping = {}
     new_col_set = []
-    for idx, column_name in enumerate(data["col_set"]):
+    for idx, column_name in enumerate(col_set):
         if column_name in selected_cols:
             column_mapping[idx] = len(column_mapping)
             new_col_set += [column_name]
 
     # New gt
-    new_gt = []
-    for item in data["gt"]:
-        if item[0] == "C":
-            ori_col = item[1]
-            new_col = column_mapping[ori_col]
-            new_gt += [("C", new_col)]
-        elif item[0] == "T":
-            ori_tab = item[1]
-            new_tab = table_mapping[ori_tab]
-            new_gt += [("T", new_tab)]
-        else:
-            new_gt += [item]
+    if gt:
+        new_gt = []
+        for item in gt:
+            if item[0] == "C":
+                ori_col = item[1]
+                new_col = column_mapping[ori_col]
+                new_gt += [("C", new_col)]
+            elif item[0] == "T":
+                ori_tab = item[1]
+                new_tab = table_mapping[ori_tab]
+                new_gt += [("T", new_tab)]
+            else:
+                new_gt += [item]
 
     # Append
-    data["new_table_names"] = new_table_names
-    data["new_column_names"] = new_column_names
-    data["new_col_set"] = new_col_set
-    data["new_gt"] = new_gt
-    data["column_mapping"] = column_mapping
-    data["table_mapping"] = table_mapping
+    dic = {}
+    dic["column_mapping"] = column_mapping
+    dic["table_mapping"] = table_mapping
+    dic["table_names"] = new_table_names
+    dic["column_names"] = new_column_names
+    dic["col_set"] = new_col_set
+    if gt:
+        dic["gt"] = new_gt
 
-    return None
+    return dic
 
 
 def save_checkpoint(model, checkpoint_name):
