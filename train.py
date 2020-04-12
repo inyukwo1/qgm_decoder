@@ -144,19 +144,6 @@ def train(cfg):
             )
             if cfg.decoder_name == "transformer":
                 (
-                    train_acc_pred,
-                    train_acc_refined,
-                    train_acc_arbitrated,
-                    train_acc_init_pred,
-                ) = utils.epoch_acc(
-                    model,
-                    cfg.batch_size,
-                    train_data,
-                    table_data,
-                    cfg.decoder_name,
-                    cfg.is_col_set,
-                )
-                (
                     val_acc_pred,
                     val_acc_refined,
                     val_acc_arbitrated,
@@ -170,30 +157,6 @@ def train(cfg):
                     cfg.is_col_set,
                 )
                 # Logging to tensorboard
-                utils.logging_to_tensorboard(
-                    summary_writer,
-                    "{}_train_pred_acc/".format(dataset_name),
-                    train_acc_pred,
-                    epoch,
-                )
-                utils.logging_to_tensorboard(
-                    summary_writer,
-                    "{}_train_refined_acc/".format(dataset_name),
-                    train_acc_refined,
-                    epoch,
-                )
-                utils.logging_to_tensorboard(
-                    summary_writer,
-                    "{}_train_arbitrated_acc/".format(dataset_name),
-                    train_acc_arbitrated,
-                    epoch,
-                )
-                utils.logging_to_tensorboard(
-                    summary_writer,
-                    "{}_train_acc_init_pred/".format(dataset_name),
-                    train_acc_init_pred,
-                    epoch,
-                )
                 utils.logging_to_tensorboard(
                     summary_writer,
                     "{}_val_loss/".format(dataset_name),
@@ -224,15 +187,7 @@ def train(cfg):
                     val_acc_init_pred,
                     epoch,
                 )
-                # Print Accuracy
-                log.info(
-                    "Total Train Acc: {} refined: {} arbitrated: {} init: {}\n".format(
-                        train_acc_pred["total"],
-                        train_acc_refined["total"],
-                        train_acc_arbitrated["total"],
-                        train_acc_init_pred["total"],
-                    )
-                )
+
                 log.info(
                     "Total Val Acc: {} refined: {} arbitrated: {} init: {}\n".format(
                         val_acc_pred["total"],
@@ -253,7 +208,7 @@ def train(cfg):
                     with open(os.path.join(log_path, "best_model.log"), "a") as f:
                         f.write(
                             "Epoch: {} Train Acc: {} Val Acc:{}".format(
-                                epoch, train_acc_arbitrated, best_val_acc
+                                epoch, 0, best_val_acc
                             )
                         )
             else:

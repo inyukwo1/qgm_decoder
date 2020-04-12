@@ -197,12 +197,30 @@ class TransformerDecoderFramework(nn.Module):
                 state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
             ) -> Dict[str, TensorPromise]:
                 history_actions: List[Action] = state.get_history_actions(self.mode)
-                history_action_embeddings: List[torch.Tensor] = [
-                    self.action_to_embedding(state, action, mode)
-                    for action in history_actions
-                ]
+
                 if self.mode == "infer":
+                    history_action_embeddings: List[torch.Tensor] = [
+                        self.action_to_embedding(state, action, mode)
+                        for action in history_actions
+                    ]
                     history_action_embeddings += [self.onedim_zero_tensor()]
+                else:
+                    if random.randrange(100) < 50:
+                        symbol = state.get_current_symbol(self.mode)
+                        if symbol == "C":
+                            new_action = ("C", random.randrange(len(state.encoded_col)))
+                        elif symbol == "T":
+                            new_action = ("T", random.randrange(len(state.encoded_tab)))
+                        else:
+                            new_action = (
+                                symbol,
+                                random.randrange(len(SemQL.semql.actions[symbol])),
+                            )
+                        history_actions[state.step_cnt] = new_action
+                    history_action_embeddings: List[torch.Tensor] = [
+                        self.action_to_embedding(state, action, mode)
+                        for action in history_actions
+                    ]
                 action_embeddings = torch.stack(history_action_embeddings, dim=0)
                 action_embeddings_promise: TensorPromise = self.decoders[
                     mode

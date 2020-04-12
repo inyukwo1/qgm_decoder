@@ -128,7 +128,7 @@ class LazyLSTM(nn.Module, LazyModule):
             in_dim, out_dim, batch_first=batch_first, bidirectional=bidirection
         )
 
-    def assert_intput(self, *inputs):
+    def assert_input(self, *inputs):
         pass
 
     def compute(self):
