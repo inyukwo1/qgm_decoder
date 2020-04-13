@@ -608,9 +608,19 @@ def down_schema(datas):
         selected_table_indices = list(
             set([item[1] for item in data["gt"] if item[0] == "T"])
         )
-        # Append neighbor tables
-        selected_table_indices = append_one_hop_neighbors(data["db"]["neighbors"], selected_table_indices)
-        sub_schema = create_sub_schema(selected_table_indices, data["table_names"], data["column_names"], data["col_set"], data["gt"])
+        use_one_hop_neighbors = False
+        if use_one_hop_neighbors:
+            # Append neighbor tables
+            selected_table_indices = append_one_hop_neighbors(
+                data["db"]["neighbors"], selected_table_indices
+            )
+        sub_schema = create_sub_schema(
+            selected_table_indices,
+            data["table_names"],
+            data["column_names"],
+            data["col_set"],
+            data["gt"],
+        )
 
         # Alter schema
         for key, item in sub_schema.items():
@@ -618,13 +628,13 @@ def down_schema(datas):
 
         # Alter Relation matrix
         relation = data["relation"]
-        new_relation = create_sub_relation(relation, data["column_mapping"], data["table_mapping"])
+        new_relation = create_sub_relation(
+            relation, data["column_mapping"], data["table_mapping"]
+        )
 
         # Replace relations
         for key, item in new_relation.items():
             relation[key] = item
-
-
 
     return datas
 
@@ -643,53 +653,37 @@ def create_sub_relation(relation, column_mapping, table_mapping):
         qt += [tmp]
 
     # cq
-    cq = [
-        item
-        for idx, item in enumerate(relation["cq"])
-        if idx in column_mapping
-    ]
+    cq = [item for idx, item in enumerate(relation["cq"]) if idx in column_mapping]
 
     # cc
     cc = []
     for idx_1, item in enumerate(relation["cc"]):
         if idx_1 in column_mapping:
-            tmp = [
-                id for idx, id in enumerate(item) if idx in column_mapping
-            ]
+            tmp = [id for idx, id in enumerate(item) if idx in column_mapping]
             cc += [tmp]
 
     # ct
     ct = []
     for idx_1, item in enumerate(relation["ct"]):
         if idx_1 in column_mapping:
-            tmp = [
-                id for idx, id in enumerate(item) if idx in table_mapping
-            ]
+            tmp = [id for idx, id in enumerate(item) if idx in table_mapping]
             ct += [tmp]
 
     # tq
-    tq = [
-        item
-        for idx, item in enumerate(relation["tq"])
-        if idx in table_mapping
-    ]
+    tq = [item for idx, item in enumerate(relation["tq"]) if idx in table_mapping]
 
     # tc
     tc = []
     for idx_1, item in enumerate(relation["tc"]):
         if idx_1 in table_mapping:
-            tmp = [
-                id for idx, id in enumerate(item) if idx in column_mapping
-            ]
+            tmp = [id for idx, id in enumerate(item) if idx in column_mapping]
             tc += [tmp]
 
     # tt
     tt = []
     for idx_1, item in enumerate(relation["tt"]):
         if idx_1 in table_mapping:
-            tmp = [
-                id for idx, id in enumerate(item) if idx in table_mapping
-            ]
+            tmp = [id for idx, id in enumerate(item) if idx in table_mapping]
             tt += [tmp]
 
     # Create new relation

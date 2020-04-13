@@ -39,7 +39,8 @@ class TransformerState(State):
 
     @classmethod
     def is_to_apply(cls, state) -> bool:
-        return state.is_to_refine(state) or state.is_to_arbitrate(state)
+        return False
+        # return state.is_to_refine(state) or state.is_to_arbitrate(state)
 
     def is_gold(self):
         pass
@@ -104,19 +105,21 @@ class TransformerStateGold(TransformerState):
 
     @classmethod
     def is_to_refine(cls, state) -> bool:
-        return (
-            not state.is_to_infer(state)
-            and state.refine_step_cnt < len(state.gold)
-            and not state.skip_refinement
-        )
+        return False
+        # return (
+        #     not state.is_to_infer(state)
+        #     and state.refine_step_cnt < len(state.gold)
+        #     and not state.skip_refinement
+        # )
 
     @classmethod
     def is_to_arbitrate(cls, state) -> bool:
-        return (
-            not state.is_to_infer(state)
-            and state.refine_step_cnt < len(state.gold)
-            and not state.skip_arbitrator
-        )
+        return False
+        # return (
+        #     not state.is_to_infer(state)
+        #     and state.refine_step_cnt < len(state.gold)
+        #     and not state.skip_arbitrator
+        # )
 
     @classmethod
     def combine_loss(cls, states: List["TransformerStateGold"]) -> SemQL_Loss_New:
@@ -189,14 +192,16 @@ class TransformerStatePred(TransformerState):
 
     @classmethod
     def is_to_refine(cls, state) -> bool:
-        return (
-            state.nonterminal_symbol_stack == []
-            and state.refine_step_cnt < state.step_cnt
-        )
+        return False
+        # return (
+        #     state.nonterminal_symbol_stack == []
+        #     and state.refine_step_cnt < state.step_cnt
+        # )
 
     @classmethod
     def is_to_arbitrate(cls, state) -> bool:
-        return state.is_to_refine(state)
+        return False
+        # return state.is_to_refine(state)
 
     @classmethod
     def get_preds(
