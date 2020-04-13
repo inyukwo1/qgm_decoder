@@ -19,7 +19,7 @@ class TransformerState(State):
 
     @classmethod
     def is_not_done(cls, state) -> bool:
-        return state.is_to_refine(state) or state.is_to_infer(state)
+        return state.is_to_infer(state)
 
     @classmethod
     def is_to_refine(cls, state) -> bool:
@@ -56,13 +56,13 @@ class TransformerState(State):
     def get_encoded_tab(self, mode):
         return self.encoded_tab[mode]
 
-    def get_history_actions(self, mode) -> List[Action]:
+    def get_history_actions(self, mode, perturb) -> List[Action]:
         pass
 
-    def get_history_symbols(self, mode) -> List[Symbol]:
-        return [action[0] for action in self.get_history_actions(mode)]
+    def get_history_symbols(self, mode, perturb) -> List[Symbol]:
+        return [action[0] for action in self.get_history_actions(mode, perturb)]
 
-    def get_current_symbol(self) -> Symbol:
+    def get_current_symbol(self, perturb) -> Symbol:
         pass
 
     def impossible_table_indices(self, idx) -> List[int]:
@@ -77,11 +77,13 @@ class TransformerStateGold(TransformerState):
         encoded_tab,
         col_tab_dic: Dict[int, List[int]],
         gold: List[Action],
+        perturbed_gold: List[Action],
     ):
         TransformerState.__init__(
             self, encoded_src, encoded_col, encoded_tab, col_tab_dic
         )
         self.gold: List[Action] = gold
+        self.perturbed_gold: List[Action] = perturbed_gold
         self.loss = SemQL_Loss_New()
         self.skip_infer = False
         self.skip_refinement = False
@@ -129,13 +131,16 @@ class TransformerStateGold(TransformerState):
     def is_gold(self):
         return True
 
-    def get_history_actions(self, mode) -> List[Action]:
+    def get_history_actions(self, mode, perturb) -> List[Action]:
         if mode == "infer":
-            return self.gold[: self.step_cnt]
+            if not perturb:
+                return self.gold[: self.step_cnt]
+            else:
+                return self.gold[: self.step_cnt] + self.perturbed_gold[self.step_cnt :]
         else:
             return self.gold[: self.refine_step_cnt + 1]
 
-    def get_current_symbol(self) -> Symbol:
+    def get_current_symbol(self, perturb) -> Symbol:
         return self.gold[self.step_cnt][0] if self.step_cnt < len(self.gold) else None
 
     def impossible_table_indices(self, idx) -> List[int]:
@@ -167,13 +172,14 @@ class TransformerStatePred(TransformerState):
         col_tab_dic,
         start_symbol: Symbol,
         target_step=100,
+        preds=None,
     ):
         TransformerState.__init__(
             self, encoded_src, encoded_col, encoded_tab, col_tab_dic
         )
         self.target_step = target_step
         self.probs = []
-        self.preds: List[Action] = []
+        self.preds: List[Action] = preds if preds else []
         self.init_preds: List[Action] = []
         self.refined_preds: List[Action] = []
         self.arbitrated_preds: List[Action] = []
@@ -219,16 +225,24 @@ class TransformerStatePred(TransformerState):
     def is_gold(self):
         return False
 
-    def get_history_actions(self, mode) -> List[Action]:
+    def get_history_actions(self, mode, perturb) -> List[Action]:
         if mode == "infer":
-            return self.preds[: self.step_cnt]
+            if not perturb:
+                return self.preds[: self.step_cnt]
+            else:
+                return self.preds
         else:
             return self.preds[: self.refine_step_cnt + 1]
 
-    def get_current_symbol(self) -> Symbol:
-        return (
-            self.nonterminal_symbol_stack[0] if self.nonterminal_symbol_stack else None
-        )
+    def get_current_symbol(self, perturb) -> Symbol:
+        if not perturb:
+            return (
+                self.nonterminal_symbol_stack[0]
+                if self.nonterminal_symbol_stack
+                else None
+            )
+        else:
+            return self.preds[self.step_cnt][0]
 
     def impossible_table_indices(self, idx) -> List[int]:
         prev_col_idx = self.preds[idx - 1][1]
@@ -241,10 +255,12 @@ class TransformerStatePred(TransformerState):
     def save_probs(self, probs):
         self.probs += [probs]
 
-    def apply_pred(self, prod):
+    def apply_pred(self, prod, perturb):
         pred_idx = torch.argmax(prod).item()
-
-        current_symbol = self.nonterminal_symbol_stack.pop(0)
+        if not perturb:
+            current_symbol = self.nonterminal_symbol_stack.pop(0)
+        else:
+            current_symbol = self.preds[self.step_cnt][0]
         if current_symbol == "C":
             assert_dim([len(self.col_tab_dic)], prod)
             action: Action = (current_symbol, pred_idx)
@@ -260,7 +276,10 @@ class TransformerStatePred(TransformerState):
         self.nonterminal_symbol_stack = (
             new_nonterminal_symbols + self.nonterminal_symbol_stack
         )
-        self.preds.append(action)
+        if not perturb:
+            self.preds.append(action)
+        else:
+            self.preds[self.step_cnt] = action
 
     def refine_pred(self, action: Action, idx: int = 0):
         self.refined_preds += [action]

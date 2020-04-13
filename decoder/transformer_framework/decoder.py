@@ -22,12 +22,13 @@ from framework.lazy_modules import (
     LazyRATransformerDecoder,
     LazyCalculateSimilarity,
 )
+import random
 
 
 class TransformerDecoderModule(nn.Module):
     def __init__(self, dim, nhead, layer_num, use_relation):
         super(TransformerDecoderModule, self).__init__()
-        relation_keys = [0, 1, 2]
+        relation_keys = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         self.use_relation = use_relation
         self.transformer = (
             LazyRATransformerDecoder(dim, nhead, layer_num, len(relation_keys))
@@ -65,20 +66,13 @@ class TransformerDecoderFramework(nn.Module):
         self.refine_all = cfg.refine_all
         self.use_relation = cfg.use_relation
         self.look_left_only = cfg.look_left_only
+        self.perturb = cfg.perturb
 
         if self.refine_all:
             assert self.use_ct_loss is False, "Should be false"
 
         self.decoders = nn.ModuleDict(
-            {
-                "infer": TransformerDecoderModule(dim, nhead, layer_num, False),
-                "refine": TransformerDecoderModule(
-                    dim, nhead, layer_num, self.use_relation
-                ),
-                "arbitrate": TransformerDecoderModule(
-                    dim, nhead, layer_num, self.use_relation
-                ),
-            }
+            {"infer": TransformerDecoderModule(dim, nhead, layer_num, self.perturb)}
         )
 
         self.col_symbol_id = SemQL.semql.symbol_to_sid["C"]
@@ -113,9 +107,38 @@ class TransformerDecoderFramework(nn.Module):
 
     def create_relation_matrix(self, actions, cur_idx=None):
         relation = torch.ones(len(actions), len(actions)).cuda().long()
-        for idx in range(cur_idx + 1):
-            relation[idx][: cur_idx + 1] = 2
+
+        relation[:cur_idx, :cur_idx] = 1
+        relation[:cur_idx, cur_idx] = 2
+        relation[:cur_idx, cur_idx + 1 :] = 3
+
+        relation[cur_idx, :cur_idx] = 4
+        relation[cur_idx, cur_idx] = 5
+        relation[cur_idx, cur_idx + 1 :] = 6
+
+        relation[cur_idx + 1 :, :cur_idx] = 7
+        relation[cur_idx + 1 :, cur_idx] = 8
+        relation[cur_idx + 1 :, cur_idx + 1 :] = 9
         return relation
+
+    def perturbe(self, len_col, len_tab, actions):
+        perturbed_actions = []
+        for action in actions:
+            if random.randrange(0, 100) > 15:
+                perturbed_actions.append(action)
+            else:
+                symbol = action[0]
+                if symbol == "C":
+                    new_action = ("C", random.randrange(len_col))
+                elif symbol == "T":
+                    new_action = ("T", random.randrange(len_tab))
+                else:
+                    new_action = (
+                        symbol,
+                        random.randrange(len(SemQL.semql.actions[symbol])),
+                    )
+                perturbed_actions.append(new_action)
+        return perturbed_actions
 
     def forward(
         self,
@@ -130,6 +153,7 @@ class TransformerDecoderFramework(nn.Module):
         golds=None,
         target_step=100,
         states=None,
+        preds_init=None,
     ):
         # Create states
         if states:
@@ -175,6 +199,7 @@ class TransformerDecoderFramework(nn.Module):
                     },
                     col_tab_dic[b_idx],
                     golds[b_idx],
+                    self.perturbe(col_lens[b_idx], tab_lens[b_idx], golds[b_idx]),
                 )
                 for b_idx in range(b_size)
             ]
@@ -200,6 +225,9 @@ class TransformerDecoderFramework(nn.Module):
                     col_tab_dic[b_idx],
                     SemQL.semql.start_symbol,
                     target_step,
+                    self.perturbe(col_lens[b_idx], tab_lens[b_idx], preds_init[b_idx])
+                    if self.perturb
+                    else None,
                 )
                 for b_idx in range(b_size)
             ]
@@ -208,17 +236,16 @@ class TransformerDecoderFramework(nn.Module):
             def embed_history_actions(
                 state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
             ) -> Dict[str, TensorPromise]:
-                history_actions: List[Action] = state.get_history_actions(mode)
+                history_actions: List[Action] = state.get_history_actions(
+                    mode, self.perturb
+                )
                 history_action_embeddings: List[torch.Tensor] = [
                     self.action_to_embedding(state, action, mode)
                     for action in history_actions
                 ]
-                if mode == "infer":
+                if mode == "infer" and not self.perturb:
                     history_action_embeddings += [self.onedim_zero_tensor()]
-                else:
-                    history_action_embeddings[
-                        state.refine_step_cnt
-                    ] = self.onedim_zero_tensor()
+
                 action_embeddings = torch.stack(history_action_embeddings, dim=0)
                 action_embeddings_promise: TensorPromise = self.decoders[
                     mode
@@ -232,9 +259,11 @@ class TransformerDecoderFramework(nn.Module):
             def embed_history_symbols(
                 state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
             ) -> Dict[str, TensorPromise]:
-                history_symbols: List[Symbol] = state.get_history_symbols(mode)
-                if mode == "infer":
-                    current_symbol: Symbol = state.get_current_symbol()
+                history_symbols: List[Symbol] = state.get_history_symbols(
+                    mode, self.perturb
+                )
+                if mode == "infer" and not self.perturb:
+                    current_symbol: Symbol = state.get_current_symbol(self.perturb)
                     history_symbols += [current_symbol]
                 symbol_embeddings = self.symbol_list_to_embedding(history_symbols, mode)
                 symbol_embeddings_promise: TensorPromise = self.decoders[
@@ -278,7 +307,8 @@ class TransformerDecoderFramework(nn.Module):
                 src_embedding: torch.Tensor = state.get_encoded_src(mode)
                 if self.decoders[mode].use_relation:
                     relation = self.create_relation_matrix(
-                        state.get_history_actions(mode), cur_idx=state.refine_step_cnt
+                        state.get_history_actions(mode, self.perturb),
+                        cur_idx=state.step_cnt,
                     )
                     decoder_out_promise: TensorPromise = self.decoders[
                         mode
@@ -340,11 +370,11 @@ class TransformerDecoderFramework(nn.Module):
 
                 decoder_out: torch.Tensor = prev_tensor_dict["decoder_out"].result
                 if mode == "infer":
-                    target_symbol: Symbol = state.get_current_symbol()
+                    target_symbol: Symbol = state.get_current_symbol(self.perturb)
                     target_cnt = state.step_cnt
                     assert target_symbol is not None
                 else:
-                    assert state.get_current_symbol() is None
+                    assert state.get_current_symbol(self.perturb) is None
                     history_symbols: List[Symbol] = state.get_history_symbols(mode)
                     target_symbol = history_symbols[state.refine_step_cnt]
                     target_cnt = state.refine_step_cnt
@@ -367,7 +397,7 @@ class TransformerDecoderFramework(nn.Module):
             else:
                 assert isinstance(state, TransformerStatePred)
                 state.save_probs(prod)
-                state.apply_pred(prod)
+                state.apply_pred(prod, self.perturb)
             state.step()
             return prev_tensor_dict
 
@@ -376,7 +406,9 @@ class TransformerDecoderFramework(nn.Module):
             prev_tensor_dict: Dict[str, Union[List[TensorPromise], TensorPromise]],
         ):
             if isinstance(state, TransformerStatePred):
-                actions = copy.deepcopy(state.get_history_actions("infer"))
+                actions = copy.deepcopy(
+                    state.get_history_actions("infer", self.perturb)
+                )
                 assert len(actions) == len(state.preds), "Diff: {} {}".format(
                     len(actions), len(state.preds)
                 )
@@ -472,25 +504,25 @@ class TransformerDecoderFramework(nn.Module):
                 .Then(apply_prod_infer)
             )
             .Do(LogicUnit.If(state_class.is_initial_pred).Then(save_initial_pred))
-            .Do(
-                LogicUnit.If(state_class.is_to_refine)
-                .Then(embed_history_actions_per_mode("refine"))
-                .Then(embed_history_symbols_per_mode("refine"))
-                .Then(combine_embeddings_per_mode("refine"))
-                .Then(pass_transformer_per_mode("refine"))
-                .Then(pass_out_linear_per_mode("refine"))
-                .Then(calc_prod_per_mode("refine"))
-            )
-            .Do(
-                LogicUnit.If(state_class.is_to_arbitrate)
-                .Then(embed_history_actions_per_mode("arbitrate"))
-                .Then(embed_history_symbols_per_mode("arbitrate"))
-                .Then(combine_embeddings_per_mode("arbitrate"))
-                .Then(pass_transformer_per_mode("arbitrate"))
-                .Then(pass_out_linear_per_mode("arbitrate"))
-                .Then(calc_prod_per_mode("arbitrate"))
-            )
-            .Do(LogicUnit.If(state_class.is_to_apply).Then(apply_prod_final))
+            # .Do(
+            #     LogicUnit.If(state_class.is_to_refine)
+            #     .Then(embed_history_actions_per_mode("refine"))
+            #     .Then(embed_history_symbols_per_mode("refine"))
+            #     .Then(combine_embeddings_per_mode("refine"))
+            #     .Then(pass_transformer_per_mode("refine"))
+            #     .Then(pass_out_linear_per_mode("refine"))
+            #     .Then(calc_prod_per_mode("refine"))
+            # )
+            # .Do(
+            #     LogicUnit.If(state_class.is_to_arbitrate)
+            #     .Then(embed_history_actions_per_mode("arbitrate"))
+            #     .Then(embed_history_symbols_per_mode("arbitrate"))
+            #     .Then(combine_embeddings_per_mode("arbitrate"))
+            #     .Then(pass_transformer_per_mode("arbitrate"))
+            #     .Then(pass_out_linear_per_mode("arbitrate"))
+            #     .Then(calc_prod_per_mode("arbitrate"))
+            # )
+            # .Do(LogicUnit.If(state_class.is_to_apply).Then(apply_prod_final))
         ).states
 
         if golds:
