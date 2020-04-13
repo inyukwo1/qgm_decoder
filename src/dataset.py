@@ -123,8 +123,8 @@ class Batch(object):
         self.qgm = [e.qgm for e in examples]
         self.relation = [e.relation for e in examples]
         self.gt = [e.gt for e in examples]
-        #self.tokenized_src_sents = [e.tokenized_src_sent for e in self.examples]
-        #self.tokenized_src_sents_len = [len(e.tokenized_src_sent) for e in examples]
+        # self.tokenized_src_sents = [e.tokenized_src_sent for e in self.examples]
+        # self.tokenized_src_sents_len = [len(e.tokenized_src_sent) for e in examples]
         # self.src_sents_word = [e.src_sent for e in self.examples]
         # self.table_sents_word = [
         #     [" ".join(x) for x in e.tab_cols] for e in self.examples
