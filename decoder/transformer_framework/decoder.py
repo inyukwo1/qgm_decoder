@@ -22,6 +22,7 @@ from framework.lazy_modules import (
     LazyRATransformerDecoder,
     LazyCalculateSimilarity,
 )
+import random
 
 
 class TransformerDecoderFramework(nn.Module):
@@ -43,11 +44,12 @@ class TransformerDecoderFramework(nn.Module):
         self.refine_all = cfg.refine_all
         self.use_relation = cfg.use_relation
         self.look_left_only = cfg.look_left_only
+        self.perturb = cfg.perturb
 
         if self.refine_all:
             assert self.use_ct_loss == False, "Should be false"
 
-        relation_keys = [0, 1, 2]
+        relation_keys = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
         # For inference
         self.infer_transformer = LazyTransformerDecoder(dim, nhead, layer_num)
@@ -134,9 +136,37 @@ class TransformerDecoderFramework(nn.Module):
 
     def create_relation_matrix(self, actions, cur_idx=None):
         relation = torch.ones(len(actions), len(actions)).cuda().long()
-        for idx in range(cur_idx + 1):
-            relation[idx][: cur_idx + 1] = 2
+        relation[:cur_idx, :cur_idx] = 1
+        relation[:cur_idx, cur_idx] = 2
+        relation[:cur_idx, cur_idx + 1 :] = 3
+
+        relation[cur_idx, :cur_idx] = 4
+        relation[cur_idx, cur_idx] = 5
+        relation[cur_idx, cur_idx + 1 :] = 6
+
+        relation[cur_idx + 1 :, :cur_idx] = 7
+        relation[cur_idx + 1 :, cur_idx] = 8
+        relation[cur_idx + 1 :, cur_idx + 1 :] = 9
         return relation
+
+    def perturbate(self, len_col, len_tab, actions):
+        perturbed_actions = []
+        for action in actions:
+            if random.randrange(0, 100) > 15:
+                perturbed_actions.append(action)
+            else:
+                symbol = action[0]
+                if symbol == "C":
+                    new_action = ("C", random.randrange(len_col))
+                elif symbol == "T":
+                    new_action = ("T", random.randrange(len_tab))
+                else:
+                    new_action = (
+                        symbol,
+                        random.randrange(len(SemQL.semql.actions[symbol])),
+                    )
+                perturbed_actions.append(new_action)
+        return perturbed_actions
 
     def forward(
         self,
@@ -151,6 +181,7 @@ class TransformerDecoderFramework(nn.Module):
         golds=None,
         target_step=100,
         states=None,
+        preds=None,
     ):
         # Create states
         if states:
@@ -175,6 +206,9 @@ class TransformerDecoderFramework(nn.Module):
                     ],
                     col_tab_dic[b_idx],
                     golds[b_idx],
+                    perturbed_gold=self.perturbate(
+                        col_lens[b_idx], tab_lens[b_idx], golds[b_idx]
+                    ),
                 )
                 for b_idx in range(b_size)
             ]
@@ -188,6 +222,9 @@ class TransformerDecoderFramework(nn.Module):
                     col_tab_dic[b_idx],
                     SemQL.semql.start_symbol,
                     target_step,
+                    preds=self.perturbate(
+                        col_lens[b_idx], tab_lens[b_idx], preds[b_idx]
+                    ),
                 )
                 for b_idx in range(b_size)
             ]
@@ -195,7 +232,7 @@ class TransformerDecoderFramework(nn.Module):
         def embed_history_actions(
             state: TransformerState, _
         ) -> Dict[str, TensorPromise]:
-            history_actions: List[Action] = state.get_history_actions()
+            history_actions: List[Action] = state.get_history_actions(self.perturb)
             history_action_embeddings: List[torch.Tensor] = [
                 self.action_to_embedding(state, action, grammar_idx=0)
                 for action in history_actions
@@ -211,8 +248,8 @@ class TransformerDecoderFramework(nn.Module):
         def embed_history_symbols(
             state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
         ) -> Dict[str, TensorPromise]:
-            history_symbols: List[Symbol] = state.get_history_symbols()
-            current_symbol: Symbol = state.get_current_symbol()
+            history_symbols: List[Symbol] = state.get_history_symbols(self.perturb)
+            current_symbol: Symbol = state.get_current_symbol(self.perturb)
             history_symbols += [current_symbol]
             symbol_embeddings = self.symbol_list_to_embedding(
                 history_symbols, grammar_idx=0
@@ -295,7 +332,7 @@ class TransformerDecoderFramework(nn.Module):
 
             decoder_out: torch.Tensor = prev_tensor_dict["decoder_out"].result
 
-            current_symbol: Symbol = state.get_current_symbol()
+            current_symbol: Symbol = state.get_current_symbol(self.perturb)
             assert current_symbol != None
             promise_prod: TensorPromise = calc_prod_with_idx_and_symbol(
                 state.step_cnt, current_symbol
@@ -313,7 +350,7 @@ class TransformerDecoderFramework(nn.Module):
             else:
                 assert isinstance(state, TransformerStatePred)
                 state.save_probs(prod)
-                state.apply_pred(prod)
+                state.apply_pred(prod, self.perturb)
             state.step()
             return prev_tensor_dict
 
@@ -674,9 +711,9 @@ class TransformerDecoderFramework(nn.Module):
             state.refine_step_cnt = cur_refine_step + 1
 
         states = SequentialMonad(states)(
-            WhileLogic.While(state_class.is_not_done)
+            WhileLogic.While(state_class.is_not_done(self.perturb))
             .Do(
-                LogicUnit.If(state_class.is_to_infer)
+                LogicUnit.If(state_class.is_to_infer(self.perturb))
                 .Then(embed_history_actions)
                 .Then(embed_history_symbols)
                 .Then(combine_embeddings)

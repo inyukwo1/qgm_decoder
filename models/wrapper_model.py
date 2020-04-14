@@ -608,7 +608,7 @@ class EncoderDecoderModel(nn.Module):
                     batch.col_num,
                     batch.table_len,
                     col_tab_dic,
-                    golds=None,
+                    preds=batch.gt,
                 )
 
                 return pred
