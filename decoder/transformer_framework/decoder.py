@@ -224,7 +224,9 @@ class TransformerDecoderFramework(nn.Module):
                     target_step,
                     preds=self.perturbate(
                         col_lens[b_idx], tab_lens[b_idx], preds[b_idx]
-                    ),
+                    )
+                    if self.perturb
+                    else None,
                 )
                 for b_idx in range(b_size)
             ]
