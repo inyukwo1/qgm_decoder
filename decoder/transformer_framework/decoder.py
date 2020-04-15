@@ -60,35 +60,35 @@ class TransformerDecoderFramework(nn.Module):
         self.infer_table_similarity = LazyCalculateSimilarity(dim, dim)
         self.grammar = SemQL(dim)
 
-        # For refinement
-        self.refine_transformer = (
-            LazyRATransformerDecoder(dim, nhead, layer_num, len(relation_keys))
-            if self.use_relation
-            else LazyTransformerDecoder(dim, nhead, layer_num)
-        )
-        self.refine_action_affine_layer = LazyLinear(dim, dim)
-        self.refine_symbol_affine_layer = LazyLinear(dim, dim)
-        self.refine_tgt_linear_layer = LazyLinear(dim * 2, dim)
-        self.refine_out_linear_layer = LazyLinear(dim, dim)
-        self.refine_action_similarity = LazyCalculateSimilarity(dim, dim)
-        self.refine_column_similarity = LazyCalculateSimilarity(dim, dim)
-        self.refine_table_similarity = LazyCalculateSimilarity(dim, dim)
-        self.grammar2 = SemQL(dim)
-
-        # Arbitrator
-        self.arbitrate_transformer = (
-            LazyRATransformerDecoder(dim, nhead, layer_num, len(relation_keys))
-            if self.use_relation
-            else LazyTransformerDecoder(dim, nhead, layer_num)
-        )
-        self.arbitrate_action_affine_layer = LazyLinear(dim, dim)
-        self.arbitrate_symbol_affine_layer = LazyLinear(dim, dim)
-        self.arbitrate_tgt_linear_layer = LazyLinear(dim * 2, dim)
-        self.arbitrate_out_linear_layer = LazyLinear(dim, dim)
-        self.arbitrate_action_similarity = LazyCalculateSimilarity(dim, dim)
-        self.arbitrate_column_similarity = LazyCalculateSimilarity(dim, dim)
-        self.arbitrate_table_similarity = LazyCalculateSimilarity(dim, dim)
-        self.grammar3 = SemQL(dim)
+        # # For refinement
+        # self.refine_transformer = (
+        #     LazyRATransformerDecoder(dim, nhead, layer_num, len(relation_keys))
+        #     if self.use_relation
+        #     else LazyTransformerDecoder(dim, nhead, layer_num)
+        # )
+        # self.refine_action_affine_layer = LazyLinear(dim, dim)
+        # self.refine_symbol_affine_layer = LazyLinear(dim, dim)
+        # self.refine_tgt_linear_layer = LazyLinear(dim * 2, dim)
+        # self.refine_out_linear_layer = LazyLinear(dim, dim)
+        # self.refine_action_similarity = LazyCalculateSimilarity(dim, dim)
+        # self.refine_column_similarity = LazyCalculateSimilarity(dim, dim)
+        # self.refine_table_similarity = LazyCalculateSimilarity(dim, dim)
+        # self.grammar2 = SemQL(dim)
+        #
+        # # Arbitrator
+        # self.arbitrate_transformer = (
+        #     LazyRATransformerDecoder(dim, nhead, layer_num, len(relation_keys))
+        #     if self.use_relation
+        #     else LazyTransformerDecoder(dim, nhead, layer_num)
+        # )
+        # self.arbitrate_action_affine_layer = LazyLinear(dim, dim)
+        # self.arbitrate_symbol_affine_layer = LazyLinear(dim, dim)
+        # self.arbitrate_tgt_linear_layer = LazyLinear(dim * 2, dim)
+        # self.arbitrate_out_linear_layer = LazyLinear(dim, dim)
+        # self.arbitrate_action_similarity = LazyCalculateSimilarity(dim, dim)
+        # self.arbitrate_column_similarity = LazyCalculateSimilarity(dim, dim)
+        # self.arbitrate_table_similarity = LazyCalculateSimilarity(dim, dim)
+        # self.grammar3 = SemQL(dim)
 
         self.col_symbol_id = self.grammar.symbol_to_sid["C"]
         self.tab_symbol_id = self.grammar.symbol_to_sid["T"]

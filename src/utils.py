@@ -341,6 +341,7 @@ def to_batch_seq(data_list):
         examples.append(example)
 
     examples.sort(key=lambda elem: len(elem.gt))
+
     return examples
 
 
@@ -448,6 +449,7 @@ def epoch_acc(
         }
     else:
         pred = []
+
     gold = []
     example_list = []
     for st in tqdm(range(0, len(sql_data), batch_size)):
@@ -464,19 +466,7 @@ def epoch_acc(
         else:
             pred += model.parse(examples)
 
-        if model_name == "lstm":
-            gold += [example.gt for example in examples]
-        elif model_name == "transformer":
-            gold += [example.gt for example in examples]
-        elif model_name == "qgm":
-            gold += [example.qgm for example in examples]
-        elif model_name == "semql":
-            gold += [example.gt for example in examples]
-        elif model_name == "ensemble":
-            for example in examples:
-                gold += [example.gt]
-        else:
-            raise RuntimeError("Unsupported model name")
+        gold += [example.gt for example in examples]
 
     # Calculate acc
     if model_name == "ensemble":
@@ -593,11 +583,11 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type, use_down_schema):
 
     # filter schema using 1-hop scheme
     if use_down_schema:
-        train_data = down_schema(train_data)
+        #train_data = down_schema(train_data)
         val_data = down_schema(val_data)
 
     # Parse datasets into exampels:
-    train_data = to_batch_seq(train_data)
+    #train_data = to_batch_seq(train_data)
     val_data = to_batch_seq(val_data)
 
     return train_data, val_data, table_data
@@ -608,7 +598,7 @@ def down_schema(datas):
         selected_table_indices = list(
             set([item[1] for item in data["gt"] if item[0] == "T"])
         )
-        use_one_hop_neighbors = False
+        use_one_hop_neighbors = True
         if use_one_hop_neighbors:
             # Append neighbor tables
             selected_table_indices = append_one_hop_neighbors(
@@ -740,17 +730,15 @@ def create_sub_schema(selected_table_ids, table_names, column_names, col_set, gt
     # New gt
     if gt:
         new_gt = []
-        for item in gt:
-            if item[0] == "C":
-                ori_col = item[1]
-                new_col = column_mapping[ori_col]
+        for symbol, local_idx in gt:
+            if symbol == "C":
+                new_col = column_mapping[local_idx]
                 new_gt += [("C", new_col)]
-            elif item[0] == "T":
-                ori_tab = item[1]
-                new_tab = table_mapping[ori_tab]
+            elif symbol == "T":
+                new_tab = table_mapping[local_idx]
                 new_gt += [("T", new_tab)]
             else:
-                new_gt += [item]
+                new_gt += [(symbol, local_idx)]
 
     # Append
     dic = {}

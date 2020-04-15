@@ -66,7 +66,7 @@ class EncoderDecoderModel(nn.Module):
             self.encoder = Transformer_Encoder(cfg)
         elif self.encoder_name == "ra_transformer":
             self.encoder = nn.ModuleList(
-                [RA_Transformer_Encoder(cfg) for _ in range(3)]
+                [RA_Transformer_Encoder(cfg) for _ in range(1)]
             )
             # self.encoder = RA_Transformer_Encoder(cfg)
         else:
@@ -74,7 +74,7 @@ class EncoderDecoderModel(nn.Module):
 
         # Key embeddings
         self.key_embs = nn.ModuleList(
-            [nn.Embedding(4, 300).double().cuda() for _ in range(8)]
+            [nn.Embedding(4, 300).double().cuda() for _ in range(1)]
         )
 
         if self.encoder_name != "bert":
