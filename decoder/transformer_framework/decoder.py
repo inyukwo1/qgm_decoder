@@ -66,10 +66,10 @@ class TransformerDecoderFramework(nn.Module):
     ) -> torch.Tensor:
         if action[0] == "C":
             col_idx = action[1]
-            return state.get_encoded_col(self.grammar)[col_idx]
+            return state.get_encoded_col()[col_idx]
         elif action[0] == "T":
             tab_idx = action[1]
-            return state.get_encoded_tab(self.grammar)[tab_idx]
+            return state.get_encoded_tab()[tab_idx]
         else:
             action_idx = torch.tensor(self.grammar.action_to_aid[action]).long().cuda()
             return self.grammar.action_emb(action_idx)
@@ -102,16 +102,11 @@ class TransformerDecoderFramework(nn.Module):
         tab_lens,
         col_tab_dic,
         golds=None,
-        target_step=100,
-        states=None,
+        pred_guide=None,
         is_ensemble=False,
     ):
         # Create states
-        if states:
-            state_class = type(states[0])
-            for state in states:
-                state.target_step = target_step
-        elif golds:
+        if golds:
             state_class = TransformerStateGold
             states = [
                 TransformerStateGold(
@@ -132,7 +127,7 @@ class TransformerDecoderFramework(nn.Module):
                     encoded_tab[b_idx][: tab_lens[b_idx]],
                     col_tab_dic[b_idx],
                     SemQL.semql.start_symbol,
-                    target_step,
+                    pred_guide,
                 )
                 for b_idx in range(b_size)
             ]
@@ -187,7 +182,7 @@ class TransformerDecoderFramework(nn.Module):
             combined_embedding: torch.Tensor = prev_tensor_dict[
                 "combined_embedding"
             ].result
-            src_embedding: torch.Tensor = state.get_encoded_src(0)
+            src_embedding: torch.Tensor = state.get_encoded_src()
 
             decoder_out_promise: TensorPromise = self.infer_transformer.forward_later(
                 combined_embedding, src_embedding
@@ -211,12 +206,12 @@ class TransformerDecoderFramework(nn.Module):
             def calc_prod_with_idx_and_symbol(idx, symbol):
                 if symbol == "C":
                     prod = self.infer_column_similarity.forward_later(
-                        decoder_out[idx], state.get_encoded_col(0), None
+                        decoder_out[idx], state.get_encoded_col(), None
                     )
                 elif symbol == "T":
                     prod = self.infer_table_similarity.forward_later(
                         decoder_out[idx],
-                        state.get_encoded_tab(0),
+                        state.get_encoded_tab(),
                         state.impossible_table_indices(idx),
                     )
                 else:

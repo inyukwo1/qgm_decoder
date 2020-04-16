@@ -138,17 +138,16 @@ def get_col_tab_dic(tab_cols, tab_ids, sql):
 
 def get_tab_col_dic(col_tab_dic):
     tab_col_dic = []
-    for b_idx in range(len(col_tab_dic)):
-        b_tmp = []
-        tab_len = len(col_tab_dic[b_idx][0])
-        for t_idx in range(tab_len):
-            tab_tmp = [
-                idx
-                for idx in range(len(col_tab_dic[b_idx]))
-                if t_idx in col_tab_dic[b_idx][idx]
-            ]
-            b_tmp += [tab_tmp]
-        tab_col_dic += [b_tmp]
+    b_tmp = []
+    tab_len = len(col_tab_dic[0])
+    for t_idx in range(tab_len):
+        tab_tmp = [
+            idx
+            for idx in range(len(col_tab_dic))
+            if t_idx in col_tab_dic[idx]
+        ]
+        b_tmp += [tab_tmp]
+    tab_col_dic += [b_tmp]
     return tab_col_dic
 
 

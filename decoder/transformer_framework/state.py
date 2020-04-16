@@ -19,7 +19,7 @@ class TransformerState(State):
 
     @classmethod
     def is_not_done(cls, state) -> bool:
-        return state.is_to_refine(state) or state.is_to_infer(state)
+        return state.is_to_infer(state)
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
@@ -121,12 +121,12 @@ class TransformerStatePred(TransformerState):
         encoded_tab,
         col_tab_dic,
         start_symbol: Symbol,
-        target_step=100,
+        pred_guide=None,
     ):
         TransformerState.__init__(
             self, encoded_src, encoded_col, encoded_tab, col_tab_dic
         )
-        self.target_step = target_step
+        self.pred_guide = pred_guide
         self.probs = []
         self.preds: List[Action] = []
         self.init_preds: List[Action] = []
@@ -139,7 +139,6 @@ class TransformerStatePred(TransformerState):
         return (
             state.nonterminal_symbol_stack != []
             and state.step_cnt < 50
-            and state.step_cnt <= state.target_step
         )
 
     @classmethod
@@ -153,8 +152,8 @@ class TransformerStatePred(TransformerState):
             "initial_preds": [state.init_preds for state in states],
         }
 
-    def get_probs(self) -> List[List[Tensor]]:
-        return self.probs[self.target_step]
+    def get_probs(self, idx) -> List[List[Tensor]]:
+        return self.probs[idx]
 
     def is_gold(self):
         return False
@@ -183,7 +182,14 @@ class TransformerStatePred(TransformerState):
         self.probs += [probs]
 
     def apply_pred(self, prod):
-        pred_idx = torch.argmax(prod).item()
+        if self.step_cnt < len(self.pred_guide):
+            action = self.pred_guide[self.step_cnt]
+            if action[0] in ["C", "T"]:
+                pred_idx = action[1]
+            else:
+                pred_idx = SemQL.semql.action_to_aid[action]
+        else:
+            pred_idx = torch.argmax(prod).item()
 
         current_symbol = self.nonterminal_symbol_stack.pop(0)
         if current_symbol == "C":
@@ -194,7 +200,6 @@ class TransformerStatePred(TransformerState):
             assert_dim([len(self.col_tab_dic[0])], prod)
             action: Action = (current_symbol, pred_idx)
             new_nonterminal_symbols = []
-
         else:
             action: Action = SemQL.semql.aid_to_action[pred_idx]
             new_nonterminal_symbols = SemQL.semql.parse_nonterminal_symbol(action)

@@ -8,6 +8,7 @@ from src import utils
 from rule.semql.semql import SemQL
 from models.wrapper_model import EncoderDecoderModel
 from models.ensemble import EnsembleWrapper
+from models.sequential_ensemble import SequentialEnsemble
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +25,8 @@ def evaluate(cfg):
     # Set model
     if cfg.cuda != -1:
         torch.cuda.set_device(cfg.cuda)
-    model = EnsembleWrapper(cfg)
+    # model = EnsembleWrapper(cfg)
+    model = SequentialEnsemble(cfg)
     model.load_models(cfg.load_model)
     if cfg.cuda != -1:
         model.cuda()
