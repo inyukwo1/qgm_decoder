@@ -99,7 +99,6 @@ class SequentialEnsemble(nn.Module):
                     pred_guide=ensembled_pred,
                     is_ensemble=True,
                 )
-
                 pred1 = states1[0].get_preds(states1)["preds"][0]
                 pred2 = states2[0].get_preds(states2)["preds"][0]
                 for idx in range(len(ensembled_pred), min(len(pred1), len(pred2))):
@@ -155,24 +154,26 @@ class SequentialEnsemble(nn.Module):
                             idx1 = new_data["table_mapping"][action1[1]]
                             idx2 = new_data["table_mapping"][action2[1]]
                         else:
-                            idx1 = action1[1]
-                            idx2 = action2[1]
-                        import random
-                        new_idx = action1[1]
-                        # new_idx = action1[1] if random.randint(0, 1) else action2[1]
-                        # new_idx = action1[1] if prod[idx1] > prod[idx2] else action2[1]
+                            idx1 = SemQL.semql.action_to_aid[action1]
+                            idx2 = SemQL.semql.action_to_aid[action2]
+                        # # First model
+                        # new_action = action1
+                        #
+                        # # import random
+                        # new_action = action1 if random.randint(0, 1) else action2
 
-                        if action1[0] in ["C", "T"]:
-                            new_action = (action1[0], new_idx)
+                        # Using third model
+                        if prod[idx1] > prod[idx2]:
+                            new_action = action1
                         else:
-                            new_action = SemQL.semql.aid_to_action[new_idx]
+                            new_action = action2
+
                         ensembled_pred += [new_action]
-                        print("action: {}".format(action1[0]))
                         break
                     else:
                         ensembled_pred += [action1]
 
-                not_done = idx == min(pred1, pred2)
+                not_done = len(pred1) != len(pred2) or len(ensembled_pred) != len(pred1)
 
         return {
             "preds": [ensembled_pred],
