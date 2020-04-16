@@ -202,40 +202,6 @@ class EnsembleDecoder(nn.Module):
                             max_value = value
                     pred_idx = max_idx
 
-            # def printt(tag):
-            #     with open("tmp.txt", "a") as f:
-            #         f.write(tag+"\n")
-            #         f.write("aids: {}\n".format(aids))
-            #         f.write("ground_truth: {} {}\n".format(gt_action, gt))
-            #         f.write("avg_idx: {}\n".format(pred_idx))
-            #         f.write("avg_score: {}\n".format(avg))
-            #         for score in scores:
-            #             max_idx = torch.argmax(score).item()
-            #             f.write("max_idx: {}\n".format(max_idx))
-            #             f.write("score: {}\n\n".format(score))
-            #
-            # # If all pred same
-            # with open("tmp.txt", "a") as f:
-            #     f.write("cnt!\n")
-            #
-            # right_wrong = [item == gt for item in max_indices]
-            # # All wrong
-            # if gt not in max_indices:
-            #     if pred_idx == gt:
-            #         printt("All wrong and final right")
-            #     else:
-            #         printt("All wrong and final wrong")
-            # elif False in right_wrong:
-            #     if pred_idx == gt:
-            #         printt("some right and final right")
-            #     else:
-            #         printt("some right and final wrong")
-            # else:
-            #     if pred_idx == gt:
-            #         printt("All right and final right")
-            #     else:
-            #         printt("All right and final wrong")
-
             prev_tensor_dict.update({"pred_idx": pred_idx})
             return prev_tensor_dict
 

@@ -118,7 +118,7 @@ def get_table_colNames(tab_ids, tab_cols):
     return result
 
 
-def get_col_table_dict(tab_cols, tab_ids, sql):
+def get_col_tab_dic(tab_cols, tab_ids, sql):
     table_dict = {}
     for c_id, c_v in enumerate(sql["col_set"]):
         for cor_id, cor_val in enumerate(tab_cols):
@@ -134,6 +134,22 @@ def get_col_table_dict(tab_cols, tab_ids, sql):
     col_table_dict[0] = [x for x in range(len(table_dict) - 1)]
 
     return col_table_dict
+
+
+def get_tab_col_dic(col_tab_dic):
+    tab_col_dic = []
+    for b_idx in range(len(col_tab_dic)):
+        b_tmp = []
+        tab_len = len(col_tab_dic[b_idx][0])
+        for t_idx in range(tab_len):
+            tab_tmp = [
+                idx
+                for idx in range(len(col_tab_dic[b_idx]))
+                if t_idx in col_tab_dic[b_idx][idx]
+            ]
+            b_tmp += [tab_tmp]
+        tab_col_dic += [b_tmp]
+    return tab_col_dic
 
 
 def schema_linking(
@@ -319,7 +335,8 @@ def to_batch_seq(data_list):
         # col table dic
         tab_cols = [col[1] for col in data["column_names"]]
         tab_ids = [col[0] for col in data["column_names"]]
-        col_table_dict = get_col_table_dict(tab_cols, tab_ids, data)
+        col_tab_dic = get_col_tab_dic(tab_cols, tab_ids, data)
+        tab_col_dic = get_tab_col_dic(col_tab_dic)
 
         example = Example(
             src_sent=question_arg,  # src encoding (length as well)
@@ -328,7 +345,8 @@ def to_batch_seq(data_list):
             table_names=table_names,  # tab encoding
             table_len=len(table_names),  # tab length
             sql=data["query"],
-            col_table_dict=col_table_dict,
+            col_tab_dic=col_tab_dic,
+            tab_col_dic=tab_col_dic,
             qgm=data["qgm"],
             relation=data["relation"] if "relation" in data else None,
             gt=data["gt"],
@@ -583,11 +601,11 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type, use_down_schema):
 
     # filter schema using 1-hop scheme
     if use_down_schema:
-        #train_data = down_schema(train_data)
+        # train_data = down_schema(train_data)
         val_data = down_schema(val_data)
 
     # Parse datasets into exampels:
-    #train_data = to_batch_seq(train_data)
+    train_data = to_batch_seq(train_data)
     val_data = to_batch_seq(val_data)
 
     return train_data, val_data, table_data

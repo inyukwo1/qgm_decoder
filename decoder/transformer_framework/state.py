@@ -22,25 +22,8 @@ class TransformerState(State):
         return state.is_to_refine(state) or state.is_to_infer(state)
 
     @classmethod
-    def is_to_refine(cls, state) -> bool:
-        pass
-
-    @classmethod
     def is_to_infer(cls, state) -> bool:
         pass
-
-    @classmethod
-    def is_initial_pred(cls, state) -> bool:
-        pass
-
-    @classmethod
-    def is_to_arbitrate(cls, state) -> bool:
-        pass
-
-    @classmethod
-    def is_to_apply(cls, state) -> bool:
-        return False
-        # return state.is_to_refine(state) or state.is_to_arbitrate(state)
 
     def is_gold(self):
         pass
@@ -48,14 +31,14 @@ class TransformerState(State):
     def step(self):
         self.step_cnt += 1
 
-    def get_encoded_src(self, idx=0):
-        return self.encoded_src[idx]
+    def get_encoded_src(self):
+        return self.encoded_src
 
-    def get_encoded_col(self, idx=0):
-        return self.encoded_col[idx]
+    def get_encoded_col(self):
+        return self.encoded_col
 
-    def get_encoded_tab(self, idx=0):
-        return self.encoded_tab[idx]
+    def get_encoded_tab(self):
+        return self.encoded_tab
 
     def get_history_actions(self) -> List[Action]:
         pass
@@ -78,7 +61,6 @@ class TransformerStateGold(TransformerState):
         encoded_tab,
         col_tab_dic: Dict[int, List[int]],
         gold: List[Action],
-        random_training: bool = None,
     ):
         TransformerState.__init__(
             self, encoded_src, encoded_col, encoded_tab, col_tab_dic
@@ -88,16 +70,6 @@ class TransformerStateGold(TransformerState):
         self.skip_infer = False
         self.skip_refinement = False
         self.skip_arbitrator = False
-        self._set_state_to_skip_training()
-
-    def _set_state_to_skip_training(self):
-        # Skip inference model
-        self.skip_infer = self.encoded_src[0] == None
-        self.skip_refinement = self.encoded_src[1] == None
-        self.skip_arbitrator = self.encoded_src[2] == None
-
-        if self.skip_infer:
-            self.step_cnt = len(self.gold)
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
@@ -105,30 +77,8 @@ class TransformerStateGold(TransformerState):
         return state.step_cnt < len(state.gold)
 
     @classmethod
-    def is_to_refine(cls, state) -> bool:
-        return False
-        # return (
-        #     not state.is_to_infer(state)
-        #     and state.refine_step_cnt < len(state.gold)
-        #     and not state.skip_refinement
-        # )
-
-    @classmethod
-    def is_to_arbitrate(cls, state) -> bool:
-        return False
-        # return (
-        #     not state.is_to_infer(state)
-        #     and state.refine_step_cnt < len(state.gold)
-        #     and not state.skip_arbitrator
-        # )
-
-    @classmethod
     def combine_loss(cls, states: List["TransformerStateGold"]) -> SemQL_Loss_New:
         return sum([state.loss for state in states])
-
-    @classmethod
-    def is_initial_pred(cls, state) -> bool:
-        return False
 
     def is_gold(self):
         return True
@@ -193,19 +143,6 @@ class TransformerStatePred(TransformerState):
         )
 
     @classmethod
-    def is_to_refine(cls, state) -> bool:
-        return False
-        # return (
-        #     state.nonterminal_symbol_stack == []
-        #     and state.refine_step_cnt < state.step_cnt
-        # )
-
-    @classmethod
-    def is_to_arbitrate(cls, state) -> bool:
-        return False
-        # return state.is_to_refine(state)
-
-    @classmethod
     def get_preds(
         cls, states: List["TransformerStatePred"]
     ) -> Dict[str, List[List[Action]]]:
@@ -215,10 +152,6 @@ class TransformerStatePred(TransformerState):
             "arbitrated_preds": [state.arbitrated_preds for state in states],
             "initial_preds": [state.init_preds for state in states],
         }
-
-    @classmethod
-    def is_initial_pred(cls, state) -> bool:
-        return not state.is_to_infer(state) and state.init_preds == []
 
     def get_probs(self) -> List[List[Tensor]]:
         return self.probs[self.target_step]
@@ -270,14 +203,5 @@ class TransformerStatePred(TransformerState):
         )
         self.preds.append(action)
 
-    def refine_pred(self, action: Action, idx: int = 0):
-        self.refined_preds += [action]
-
-    def arbitrate_pred(self, action: Action, idx: int = 0):
-        self.arbitrated_preds += [action]
-
     def infer_pred(self, action: Action, idx: int = 0):
         self.preds = self.preds[:idx] + [action]
-
-    def save_init_preds(self, actions):
-        self.init_preds = actions

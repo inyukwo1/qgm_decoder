@@ -1,14 +1,7 @@
 # -*- coding: utf-8 -*-
-"""
-# @Time    : 2019/5/25
-# @Author  : Jiaqi&Zecheng
-# @File    : utils.py
-# @Software: PyCharm
-"""
 
-import copy
-
-import preprocess.rule.semQL as define_rule
+# import copy
+# import preprocess.rule.semQL as define_rule
 from src.models import nn_utils
 
 
@@ -17,31 +10,32 @@ class Example:
         self,
         src_sent,
         tgt_actions=None,
-        vis_seq=None,
         tab_cols=None,
-        tab_iter=None,
         col_num=None,
         sql=None,
-        one_hot_type=None,
-        col_hot_type=None,
-        tab_hot_type=None,
-        schema_len=None,
-        tab_ids=None,
         table_names=None,
         table_len=None,
-        col_table_dict=None,
+        col_tab_dic=None,
+        tab_col_dic=None,
         cols=None,
-        table_col_name=None,
-        table_col_len=None,
-        col_pred=None,
-        tokenized_src_sent=None,
         qgm=None,
-        qgm_action=None,
         relation=None,
         gt=None,
         db_id=None,
         db=None,
         data=None,
+        vis_seq=None,
+        tab_iter=None,
+        one_hot_type=None,
+        col_hot_type=None,
+        tab_hot_type=None,
+        schema_len=None,
+        tab_ids=None,
+        qgm_action=None,
+        table_col_name=None,
+        table_col_len=None,
+        col_pred=None,
+        tokenized_src_sent=None,
     ):
         self.src_sent = src_sent
         self.tab_cols = tab_cols
@@ -49,7 +43,8 @@ class Example:
         self.sql = sql
         self.table_names = table_names
         self.table_len = table_len
-        self.col_table_dict = col_table_dict
+        self.col_tab_dic = col_tab_dic
+        self.tab_col_dic = tab_col_dic
         self.cols = cols
         self.tgt_actions = tgt_actions
         self.qgm = qgm
@@ -110,19 +105,20 @@ class Batch(object):
     def __init__(self, examples, grammar=None, is_cuda=False):
         self.examples = examples
 
-        # if examples[0].tgt_actions:
-        #     self.max_action_num = max(len(e.tgt_actions) for e in self.examples)
-        #     self.max_sketch_num = max(len(e.sketch) for e in self.examples)
         self.src_sents = [e.src_sent for e in self.examples]
         self.src_sents_len = [len(e.src_sent) for e in self.examples]
         self.table_sents = [e.tab_cols for e in self.examples]
         self.col_num = [e.col_num for e in self.examples]
         self.table_names = [e.table_names for e in self.examples]
         self.table_len = [e.table_len for e in examples]
-        self.col_table_dict = [e.col_table_dict for e in examples]
+        self.col_tab_dic = [e.col_tab_dic for e in examples]
+        self.tab_col_dic = [e.tab_col_dic for e in examples]
         self.qgm = [e.qgm for e in examples]
         self.relation = [e.relation for e in examples]
         self.gt = [e.gt for e in examples]
+        # if examples[0].tgt_actions:
+        #     self.max_action_num = max(len(e.tgt_actions) for e in self.examples)
+        #     self.max_sketch_num = max(len(e.sketch) for e in self.examples)
         # self.tokenized_src_sents = [e.tokenized_src_sent for e in self.examples]
         # self.tokenized_src_sents_len = [len(e.tokenized_src_sent) for e in examples]
         # self.src_sents_word = [e.src_sent for e in self.examples]
