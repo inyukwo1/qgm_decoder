@@ -99,6 +99,34 @@ class Action(object):
         self.children.append(child)
 
 
+class Root2(Action):
+    def __init__(self, id_c, parent=None):
+        super(Root2, self).__init__()
+        self.parent = parent
+        self.id_c = id_c
+        self._init_grammar()
+        self.production = self.grammar_dict[id_c]
+
+    @classmethod
+    def _init_grammar(self):
+        # TODO: should add Root grammar to this
+        self.grammar_dict = {
+            0: "Root2 Root1",
+            1: "Root2 Root",
+        }
+        self.production_id = {}
+        for id_x, value in enumerate(self.grammar_dict.values()):
+            self.production_id[value] = id_x
+
+        return self.grammar_dict.values()
+
+    def __str__(self):
+        return "Root2(" + str(self.id_c) + ")"
+
+    def __repr__(self):
+        return "Root2(" + str(self.id_c) + ")"
+
+
 class Root1(Action):
     def __init__(self, id_c, parent=None):
         super(Root1, self).__init__()
@@ -301,6 +329,38 @@ class Sel(Action):
 
     def __repr__(self):
         return "Sel(" + str(self.id_c) + ")"
+
+
+class SelFilter(Action):
+    """
+    Select
+    """
+
+    def __init__(self, id_c, parent=None):
+        super(SelFilter, self).__init__()
+
+        self.parent = parent
+        self.id_c = id_c
+        self._init_grammar()
+        self.production = self.grammar_dict[id_c]
+
+    @classmethod
+    def _init_grammar(self):
+        self.grammar_dict = {
+            0: "SelFilter Sel",
+            1: "SelFilter Sel Filter",
+        }
+        self.production_id = {}
+        for id_x, value in enumerate(self.grammar_dict.values()):
+            self.production_id[value] = id_x
+
+        return self.grammar_dict.values()
+
+    def __str__(self):
+        return "SelFilter(" + str(self.id_c) + ")"
+
+    def __repr__(self):
+        return "SelFilter(" + str(self.id_c) + ")"
 
 
 class Filter(Action):

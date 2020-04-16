@@ -17,7 +17,20 @@ import copy
 from utils import load_dataSets
 
 sys.path.append("..")
-from rule.semQL import Root1, Root, N, A, C, T, Sel, Sup, Filter, Order
+from rule.semQL import (
+    Root2,
+    Root1,
+    Root,
+    N,
+    A,
+    C,
+    T,
+    Sel,
+    Sup,
+    Filter,
+    Order,
+    SelFilter,
+)
 
 
 class Parser:
@@ -50,18 +63,23 @@ class Parser:
         if sql["sql"]["where"] != [] or sql["sql"]["having"] != []:
             use_fil = True
 
-        if use_fil and use_sup:
-            return [Root(0)], ["FILTER", "SUP", "SEL"]
-        elif use_fil and use_ord:
-            return [Root(1)], ["ORDER", "FILTER", "SEL"]
-        elif use_sup:
-            return [Root(2)], ["SUP", "SEL"]
-        elif use_fil:
-            return [Root(3)], ["FILTER", "SEL"]
+        if use_sup:
+            return [Root(0)], ["SUP", "SELFILTER"]
         elif use_ord:
-            return [Root(4)], ["ORDER", "SEL"]
+            return [Root(1)], ["ORDER", "SELFILTER"]
         else:
-            return [Root(5)], ["SEL"]
+            return [Root(2)], ["SELFILTER"]
+
+    def _parse_selfilter(self, sql):
+        use_fil = False
+        # check the where and having
+        if sql["sql"]["where"] != [] or sql["sql"]["having"] != []:
+            use_fil = True
+
+        if use_fil:
+            return [SelFilter(1)], ["SEL", "FILTER"]
+        else:
+            return [SelFilter(0)], ["SEL"]
 
     def _parser_column0(self, sql, select):
         """
@@ -376,6 +394,8 @@ class Parser:
         if state == "ROOT":
             return self._parse_root(sql)
 
+        if state == "SELFILTER":
+            return self._parse_selfilter(sql)
         if state == "SEL":
             return self._parse_select(sql)
 
@@ -403,27 +423,27 @@ class Parser:
         nest_query["keys"] = query["keys"]
 
         if sql["intersect"]:
-            results = [Root1(0)]
+            results = [Root2(0), Root1(0)]
             nest_query["sql"] = sql["intersect"]
             results.extend(self.parser(query))
             results.extend(self.parser(nest_query))
             return results
 
         if sql["union"]:
-            results = [Root1(1)]
+            results = [Root2(0), Root1(1)]
             nest_query["sql"] = sql["union"]
             results.extend(self.parser(query))
             results.extend(self.parser(nest_query))
             return results
 
         if sql["except"]:
-            results = [Root1(2)]
+            results = [Root2(0), Root1(2)]
             nest_query["sql"] = sql["except"]
             results.extend(self.parser(query))
             results.extend(self.parser(nest_query))
             return results
 
-        results = [Root1(3)]
+        results = [Root2(1)]
         results.extend(self.parser(query))
 
         return results

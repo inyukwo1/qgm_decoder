@@ -12,7 +12,7 @@ class SemQL(Grammar):
     semql: "SemQL" = None
 
     def __init__(self, emb_dim=300):
-        super(SemQL, self).__init__("./rule/semql/semql.manifesto", emb_dim)
+        super(SemQL, self).__init__("./rule/semql/semql2.manifesto", emb_dim)
         SemQL.semql = self
 
     def create_loss_object(self):

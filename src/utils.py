@@ -517,7 +517,9 @@ def load_data_new(
 
     with open(sql_path) as f:
         data = lower_keys(json.load(f))
-        sql_data += data
+        for datum in data:
+            if "FROM (" not in datum["query"]:
+                sql_data += [datum]
 
     # Add db info
     for data in sql_data:
@@ -526,6 +528,7 @@ def load_data_new(
         data["column_names"] = db["column_names"]
         # Append ground truth
         gt_str = SemQL.create_data(data["qgm"])
+        gt_str = data["rule_label"]
         gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
         data["gt"] = gt
 

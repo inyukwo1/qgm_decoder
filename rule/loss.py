@@ -4,6 +4,9 @@ import torch
 class Loss:
     def __init__(self):
         keys = [
+            "box_oper",
+            "order",
+            "sup",
             "head_agg",
             "head_col",
             "head_num",

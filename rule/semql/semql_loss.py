@@ -50,18 +50,29 @@ class SemQL_Loss_New(Loss):
         super(SemQL_Loss_New, self).__init__()
 
         # Symbols
+        self.root2 = "Root2"
+        self.root1 = "Root1"
         self.root = "Root"
+        self.selfil = "SelFilter"
         self.sel = "Sel"
         self.n = "N"
         self.filter = "Filter"
+        self.order = "Order"
+        self.sup = "Sup"
         self.a = "A"
         self.c = "C"
         self.t = "T"
 
     def _get_key(self, action_node: Symbol, prev_actions):
-        if action_node == self.root:
+        if action_node == self.root1 or action_node == self.root2:
+            key = "box_oper"
+        elif action_node == self.order:
+            key = "order"
+        elif action_node == self.sup:
+            key = "sup"
+        elif action_node == self.root:
             key = "predicate_num"
-        elif action_node == self.sel:
+        elif action_node == self.sel or action_node == self.n:
             key = "head_num"
         elif action_node == self.a:
             prev_symbols = [
@@ -71,7 +82,7 @@ class SemQL_Loss_New(Loss):
             ]
             assert len(prev_symbols) > 0, "Wrong prev_actions: {}".format(prev_actions)
             key = "head_agg" if prev_symbols[-1] == "Sel" else "predicate_agg"
-        elif action_node == self.filter:
+        elif action_node == self.filter or action_node == self.selfil:
             key = "predicate_num"
         elif action_node == self.c:
             prev_symbols = [

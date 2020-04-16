@@ -1,6 +1,8 @@
 <symbol_start>
+Root2
 Root1
 Root
+SelFilter
 Sel
 Filter
 N
@@ -37,8 +39,10 @@ not_in
 <symbol_end>
 
 <grammar_start>
-Root1 ::= intersect Root Root | union Root Root | except Root Root | Root
-Root ::= Sel Sup Filter | Sel Filter Order | Sel Sup | Sel Filter | Sel Order | Sel
+Root2 ::= Root1 | Root
+Root1 ::= intersect Root Root | union Root Root | except Root Root
+Root ::= Sup SelFilter | Order SelFilter | SelFilter
+SelFilter ::= Sel | Sel Filter
 Sel ::= N
 N ::= A | A A | A A A | A A A A | A A A A A
 Filter ::= and Filter Filter | or Filter Filter | = A | != A | < A | > A | <= A | >= A | between A | like A | not_like A | = A Root | < A Root | > A Root | != A Root | between A Root | >= A Root | <= A Root | in A Root | not_in A Root
