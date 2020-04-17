@@ -38,14 +38,7 @@ class TransformerDecoderFramework(nn.Module):
         self.dim = dim
         self.nhead = nhead
         self.layer_num = layer_num
-        self.use_ct_loss = cfg.use_ct_loss
-        self.use_arbitrator = cfg.use_arbitrator
-        self.refine_all = cfg.refine_all
         self.use_relation = cfg.use_relation
-        self.look_left_only = cfg.look_left_only
-
-        if self.refine_all:
-            assert self.use_ct_loss == False, "Should be false"
 
         # For inference
         self.infer_transformer = LazyTransformerDecoder(dim, nhead, layer_num)

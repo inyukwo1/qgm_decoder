@@ -61,12 +61,18 @@ class SequentialEnsemble(nn.Module):
         batch = Batch(examples, is_cuda=self.is_cuda)
         with torch.no_grad():
             # Encode
-            (src_encodings1, table_embeddings1, schema_embeddings1, _) = self.sub_models[
-                1
-            ].encode(batch)
-            (src_encodings2, table_embeddings2, schema_embeddings2, _) = self.sub_models[
-                1
-            ].encode(batch)
+            (
+                src_encodings1,
+                table_embeddings1,
+                schema_embeddings1,
+                _,
+            ) = self.sub_models[1].encode(batch)
+            (
+                src_encodings2,
+                table_embeddings2,
+                schema_embeddings2,
+                _,
+            ) = self.sub_models[1].encode(batch)
 
             b_size = len(src_encodings1)
 
@@ -99,6 +105,8 @@ class SequentialEnsemble(nn.Module):
                     pred_guide=ensembled_pred,
                     is_ensemble=True,
                 )
+                return states1[0].get_preds(states1)["preds"]
+
                 pred1 = states1[0].get_preds(states1)["preds"][0]
                 pred2 = states2[0].get_preds(states2)["preds"][0]
                 for idx in range(len(ensembled_pred), min(len(pred1), len(pred2))):
@@ -106,29 +114,49 @@ class SequentialEnsemble(nn.Module):
                     action2 = pred2[idx]
                     if action1 != action2:
                         # Get all tables
-                        selected_table_indices = set([item[1] for item in pred1 if item[0] == "T"])
-                        selected_table_indices.update([item[1] for item in pred2 if item[0] == "T"])
+                        selected_table_indices = set(
+                            [item[1] for item in pred1 if item[0] == "T"]
+                        )
+                        selected_table_indices.update(
+                            [item[1] for item in pred2 if item[0] == "T"]
+                        )
                         # Narrow down schema
                         new_data = copy.deepcopy(examples[0].data)
-                        sub_schema = utils.create_sub_schema(selected_table_indices, new_data["table_names"], new_data["column_names"], new_data["col_set"])
+                        sub_schema = utils.create_sub_schema(
+                            selected_table_indices,
+                            new_data["table_names"],
+                            new_data["column_names"],
+                            new_data["col_set"],
+                        )
                         for key, item in sub_schema.items():
                             new_data[key] = item
-                        sub_relation = utils.create_sub_relation(new_data["relation"], sub_schema["column_mapping"], sub_schema["table_mapping"])
+                        sub_relation = utils.create_sub_relation(
+                            new_data["relation"],
+                            sub_schema["column_mapping"],
+                            sub_schema["table_mapping"],
+                        )
                         for key, item in sub_relation.items():
                             new_data["relation"][key] = item
                         # Create new example and batch
                         new_examples = utils.to_batch_seq([new_data])
                         new_batch = Batch(new_examples, is_cuda=self.is_cuda)
                         # Encode
-                        (src_encodings3, table_embeddings3, schema_embeddings3, _) = self.sub_models[
-                            2
-                        ].encode(new_batch)
+                        (
+                            src_encodings3,
+                            table_embeddings3,
+                            schema_embeddings3,
+                            _,
+                        ) = self.sub_models[2].encode(new_batch)
                         narrowed_pred = []
                         for item in ensembled_pred:
                             if item[0] == "C":
-                                narrowed_pred += [(item[0], new_data["column_mapping"][item[1]])]
+                                narrowed_pred += [
+                                    (item[0], new_data["column_mapping"][item[1]])
+                                ]
                             elif item[0] == "T":
-                                narrowed_pred += [(item[0], new_data["table_mapping"][item[1]])]
+                                narrowed_pred += [
+                                    (item[0], new_data["table_mapping"][item[1]])
+                                ]
                             else:
                                 narrowed_pred += [item]
 
@@ -146,7 +174,9 @@ class SequentialEnsemble(nn.Module):
                         )
                         prod = states3[0].get_probs(idx)
                         # Choose one with higher prob from model3
-                        assert action1[0] == action2[0], "{} {}".format(action1, action2)
+                        assert action1[0] == action2[0], "{} {}".format(
+                            action1, action2
+                        )
                         if action1[0] == "C":
                             idx1 = new_data["column_mapping"][action1[1]]
                             idx2 = new_data["column_mapping"][action2[1]]
@@ -156,11 +186,6 @@ class SequentialEnsemble(nn.Module):
                         else:
                             idx1 = SemQL.semql.action_to_aid[action1]
                             idx2 = SemQL.semql.action_to_aid[action2]
-                        # # First model
-                        # new_action = action1
-                        #
-                        # # import random
-                        # new_action = action1 if random.randint(0, 1) else action2
 
                         # Using third model
                         if prod[idx1] > prod[idx2]:
@@ -175,9 +200,80 @@ class SequentialEnsemble(nn.Module):
 
                 not_done = len(pred1) != len(pred2) or len(ensembled_pred) != len(pred1)
 
-        return {
-            "preds": [ensembled_pred],
-            "refined_preds": [[]],
-            "arbitrated_preds": [[]],
-            "initial_preds": [[]],
-        }, _
+        return ensembled_pred
+
+    #
+    # def parse(self, examples):
+    #     batch = Batch(examples, is_cuda=self.is_cuda)
+    #     with torch.no_grad():
+    #         # Encode
+    #         (src_encodings1, table_embeddings1, schema_embeddings1, _) = self.sub_models[
+    #             1
+    #         ].encode(batch)
+    #         (src_encodings2, table_embeddings2, schema_embeddings2, _) = self.sub_models[
+    #             1
+    #         ].encode(batch)
+    #
+    #         b_size = len(src_encodings1)
+    #
+    #         # Decode
+    #         ensembled_pred = []
+    #         not_done = True
+    #
+    #         while not_done:
+    #             states1 = self.sub_models[0].decoder(
+    #                 b_size,
+    #                 src_encodings1,
+    #                 table_embeddings1,
+    #                 schema_embeddings1,
+    #                 batch.src_sents_len,
+    #                 batch.col_num,
+    #                 batch.table_len,
+    #                 batch.col_tab_dic,
+    #                 pred_guide=ensembled_pred,
+    #                 is_ensemble=True,
+    #             )
+    #             pred1 = states1[0].get_preds(states1)["preds"][0]
+    #
+    #             states2 = self.sub_models[1].decoder(
+    #                 b_size,
+    #                 src_encodings2,
+    #                 table_embeddings2,
+    #                 schema_embeddings2,
+    #                 batch.src_sents_len,
+    #                 batch.col_num,
+    #                 batch.table_len,
+    #                 batch.col_tab_dic,
+    #                 pred_guide=pred1,
+    #                 is_ensemble=True,
+    #             )
+    #
+    #             for idx in range(len(ensembled_pred), len(pred1)):
+    #                 prod = states2[0].get_probs(idx)
+    #                 new_idx = torch.argmax(prod).item()
+    #                 action = pred1[idx]
+    #                 # Create original idx
+    #                 if action[0] in ["C", "T"]:
+    #                     ori_idx = action[1]
+    #                 else:
+    #                     ori_idx = SemQL.semql.action_to_aid[action]
+    #
+    #                 # Compares original and new
+    #                 if ori_idx != new_idx:
+    #                     # Create new action
+    #                     if action[0] in ["C", "T"]:
+    #                         ensembled_pred += [(action[0], new_idx)]
+    #                     else:
+    #                         ensembled_pred += [SemQL.semql.aid_to_action[new_idx]]
+    #                     break
+    #                 else:
+    #                     ensembled_pred += [action]
+    #
+    #             not_done = len(ensembled_pred) != len(pred1)
+    #
+    #     return {
+    #         "preds": [ensembled_pred],
+    #         "refined_preds": [[]],
+    #         "arbitrated_preds": [[]],
+    #         "initial_preds": [[]],
+    #     }, _

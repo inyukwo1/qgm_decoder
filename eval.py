@@ -39,22 +39,9 @@ def evaluate(cfg):
     # Evaluation
     log.info("Evaluation:")
 
-    if True:
-        (
-            total_acc_pred,
-            total_acc_refined,
-            total_acc_arbitrated,
-            total_acc_init_pred,
-        ) = utils.epoch_acc(model, cfg.batch_size, val_data, cfg.decoder_name,)
-        print("total acc pred: {}".format(total_acc_pred))
-        print("total acc refined: {}".format(total_acc_refined))
-        print("total acc arbitrated: {}".format(total_acc_arbitrated))
-        print("total acc init pred: {}".format(total_acc_init_pred))
-        return None
-    else:
-        dev_total_acc, dev_is_correct, dev_pred, dev_gold, dev_list = utils.epoch_acc(
-            model, cfg.batch_size, val_data, cfg.decoder_name, return_details=True,
-        )
+    dev_total_acc, dev_is_correct, dev_pred, dev_gold, dev_list = utils.epoch_acc(
+        model, cfg.batch_size, val_data, cfg.decoder_name, return_details=True,
+    )
 
     # print("Train Acc: {}".format(train_total_acc["total"]))
     print("Dev Acc: {}".format(dev_total_acc["total"]))
@@ -79,6 +66,7 @@ def evaluate(cfg):
     utils.analyze_regarding_schema_size(
         dev_list, dev_is_correct, dev_pred, dev_gold, table_data
     )
+
 
 if __name__ == "__main__":
     evaluate()

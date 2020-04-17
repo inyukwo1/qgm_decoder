@@ -35,8 +35,6 @@ class EncoderDecoderModel(nn.Module):
         self.use_col_set = cfg.is_col_set
         self.encoder_name = cfg.encoder_name
         self.decoder_name = cfg.decoder_name
-        self.use_separate_encoder = cfg.use_separate_encoder
-        self.random_training = cfg.random_training
         self.embed_size = 1024 if self.is_bert else 300
 
         # Decoder
@@ -223,6 +221,7 @@ class EncoderDecoderModel(nn.Module):
                 batch.tab_col_dic,
                 batch.gt if is_training else None,
             )
+
             return output
         elif self.decoder_name == "transformer":
             b_size = len(src_encodings)
@@ -285,6 +284,7 @@ class EncoderDecoderModel(nn.Module):
         )
         # Decode
         loss = self.decode(
+            batch,
             src_encodings,
             table_embeddings,
             schema_embeddings,

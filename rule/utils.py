@@ -8,19 +8,39 @@ def count_symbol(qgm_action, symbol):
     return symbols.count(symbol)
 
 
-def filter_action(qgm_action, target_symbol, prev_symbols):
-    SkETCH_SYMBOLS = ["A", "C", "T"]
-    prev_symbols = list(reversed(prev_symbols))
-
-    actions = []
-    for idx, action in enumerate(qgm_action):
+def filter_action(actions, target_symbol, parent_symbol, ignore_symbols):
+    outs = []
+    for idx, action in enumerate(actions):
+        # Check if target symbol
         if action[0] == target_symbol:
-            past_actions = [
-                item
-                for item in list(reversed(qgm_action[:idx]))
-                if item[0] not in SkETCH_SYMBOLS
-            ]
-            if len(past_actions) >= len(prev_symbols):
-                if past_actions[: len(prev_symbols)] == prev_symbols:
-                    actions += [action]
-    return actions
+            correct = False
+            # Check parent
+            for idx2 in range(idx, -1, -1):
+                if actions[idx2][0] == ignore_symbols:
+                    continue
+                elif actions[idx2][0] == parent_symbol:
+                    correct = True
+                    break
+                else:
+                    break
+            if correct:
+                outs += [action]
+    return outs
+
+
+# def filter_action(qgm_action, target_symbol, prev_symbols):
+#     SkETCH_SYMBOLS = ["A", "C", "T"]
+#     prev_symbols = list(reversed(prev_symbols))
+#
+#     actions = []
+#     for idx, action in enumerate(qgm_action):
+#         if action[0] == target_symbol:
+#             past_actions = [
+#                 item
+#                 for item in list(reversed(qgm_action[:idx]))
+#                 if item[0] not in SkETCH_SYMBOLS
+#             ]
+#             if len(past_actions) >= len(prev_symbols):
+#                 if past_actions[: len(prev_symbols)] == prev_symbols:
+#                     actions += [action]
+#     return actions

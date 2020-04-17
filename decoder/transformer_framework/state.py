@@ -136,21 +136,11 @@ class TransformerStatePred(TransformerState):
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
-        return (
-            state.nonterminal_symbol_stack != []
-            and state.step_cnt < 50
-        )
+        return state.nonterminal_symbol_stack != [] and state.step_cnt < 50
 
     @classmethod
-    def get_preds(
-        cls, states: List["TransformerStatePred"]
-    ) -> Dict[str, List[List[Action]]]:
-        return {
-            "preds": [state.preds for state in states],
-            "refined_preds": [state.refined_preds for state in states],
-            "arbitrated_preds": [state.arbitrated_preds for state in states],
-            "initial_preds": [state.init_preds for state in states],
-        }
+    def get_preds(cls, states: List["TransformerStatePred"]) -> List[Action]:
+        return [state.preds for state in states]
 
     def get_probs(self, idx) -> List[List[Tensor]]:
         return self.probs[idx]
@@ -182,7 +172,7 @@ class TransformerStatePred(TransformerState):
         self.probs += [probs]
 
     def apply_pred(self, prod):
-        if self.step_cnt < len(self.pred_guide):
+        if self.pred_guide and self.step_cnt < len(self.pred_guide):
             action = self.pred_guide[self.step_cnt]
             if action[0] in ["C", "T"]:
                 pred_idx = action[1]

@@ -141,11 +141,7 @@ def get_tab_col_dic(col_tab_dic):
     b_tmp = []
     tab_len = len(col_tab_dic[0])
     for t_idx in range(tab_len):
-        tab_tmp = [
-            idx
-            for idx in range(len(col_tab_dic))
-            if t_idx in col_tab_dic[idx]
-        ]
+        tab_tmp = [idx for idx in range(len(col_tab_dic)) if t_idx in col_tab_dic[idx]]
         b_tmp += [tab_tmp]
     tab_col_dic += [b_tmp]
     return tab_col_dic
@@ -399,7 +395,7 @@ def epoch_train(
         examples = sql_data[st:ed]
         examples.sort(key=lambda example: -len(example.src_sent))
 
-        result = model.forward(examples)
+        result = model.forward(examples, is_training=True)
         if decoder_name == "lstm":
             tmp = {key: [] for key in result[0].get_keys()}
             for losses in result:
@@ -454,19 +450,11 @@ def epoch_train(
 
 
 def epoch_acc(
-    model, batch_size, sql_data, model_name, return_details=False,
+    model, batch_size, sql_data, return_details=False,
 ):
-    model.eval()
-    if model_name == "transformer":
-        pred = {
-            "preds": [],
-            "refined_preds": [],
-            "arbitrated_preds": [],
-            "initial_preds": [],
-        }
-    else:
-        pred = []
 
+    model.eval()
+    pred = []
     gold = []
     example_list = []
     for st in tqdm(range(0, len(sql_data), batch_size)):
@@ -474,41 +462,11 @@ def epoch_acc(
         examples = sql_data[st:ed]
         examples.sort(key=lambda example: -len(example.src_sent))
         example_list += examples
-        if model_name == "transformer":
-            tmp, _ = model.parse(examples)
-            pred["preds"] += tmp["preds"]
-            pred["refined_preds"] += tmp["refined_preds"]
-            pred["arbitrated_preds"] += tmp["arbitrated_preds"]
-            pred["initial_preds"] += tmp["initial_preds"]
-        else:
-            pred += model.parse(examples)
-
+        pred += model.parse(examples)
         gold += [example.gt for example in examples]
 
     # Calculate acc
-    if model_name == "ensemble":
-        total_acc, is_correct_list = model.decoder.decoders[0].grammar.cal_acc(
-            pred, gold
-        )
-    elif model_name == "transformer":
-        total_acc_pred, is_correct_list_pred = SemQL.semql.cal_acc(pred["preds"], gold)
-        total_acc_refined, is_correct_list_refined = SemQL.semql.cal_acc(
-            pred["refined_preds"], gold
-        )
-        (total_acc_arbitrated, is_correct_list_arbitrated,) = SemQL.semql.cal_acc(
-            pred["arbitrated_preds"], gold
-        )
-        (total_acc_init_pred, is_correct_list_init_pred,) = SemQL.semql.cal_acc(
-            pred["initial_preds"], gold
-        )
-        return (
-            total_acc_pred,
-            total_acc_refined,
-            total_acc_arbitrated,
-            total_acc_init_pred,
-        )
-    else:
-        total_acc, is_correct_list = SemQL.semql.cal_acc(pred, gold)
+    total_acc, is_correct_list = SemQL.semql.cal_acc(pred, gold)
 
     if return_details:
         return total_acc, is_correct_list, pred, gold, example_list
@@ -889,7 +847,10 @@ def logging_to_tensorboard(summary_writer, prefix, summary, epoch):
         for key in summary.keys():
             summary_writer.add_scalar(prefix + key, summary[key], epoch)
     else:
-        summary_writer.add_scalar(prefix, summary, epoch)
+        try:
+            summary_writer.add_scalar(prefix, summary, epoch)
+        except:
+            stop = 1
 
 
 def calculate_total_acc(total_accs, data_lens):
@@ -947,7 +908,6 @@ def analyze_regarding_schema_size(examples, is_correct, preds, golds, table_data
 
         # Initialize and count for col
         if col_len not in col_acc_dic:
-            print("db: {} col_len: {}".format(example.db_id, col_len))
             col_cnt_tab_cnt[col_len] = set()
             col_cnt_tab_cnt[col_len].add(tab_len)
 
@@ -1033,4 +993,4 @@ def analyze_regarding_schema_size(examples, is_correct, preds, golds, table_data
     for tab_len in sorted(tab_cnt_col_cnt.keys()):
         col_len = tab_cnt_col_cnt[tab_len]
         print("tab_len: {} col_len: {}".format(tab_len, col_len))
-    print("number of db: {}".format(len(db)))
+    print("number of db: {}".format(len(dbs)))
