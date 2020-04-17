@@ -847,10 +847,7 @@ def logging_to_tensorboard(summary_writer, prefix, summary, epoch):
         for key in summary.keys():
             summary_writer.add_scalar(prefix + key, summary[key], epoch)
     else:
-        try:
-            summary_writer.add_scalar(prefix, summary, epoch)
-        except:
-            stop = 1
+        summary_writer.add_scalar(prefix, summary, epoch)
 
 
 def calculate_total_acc(total_accs, data_lens):
