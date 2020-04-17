@@ -23,7 +23,7 @@ class LSTMEncoder(nn.Module):
         )
 
         self.word_emb = None
-        # self._import_word_emb()
+        self._import_word_emb()
 
     def set_word_emb(self, word_emb):
         self.word_emb = word_emb

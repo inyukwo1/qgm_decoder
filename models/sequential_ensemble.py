@@ -61,12 +61,18 @@ class SequentialEnsemble(nn.Module):
         batch = Batch(examples, is_cuda=self.is_cuda)
         with torch.no_grad():
             # Encode
-            (src_encodings1, table_embeddings1, schema_embeddings1, _) = self.sub_models[
-                1
-            ].encode(batch)
-            (src_encodings2, table_embeddings2, schema_embeddings2, _) = self.sub_models[
-                1
-            ].encode(batch)
+            (
+                src_encodings1,
+                table_embeddings1,
+                schema_embeddings1,
+                _,
+            ) = self.sub_models[1].encode(batch)
+            (
+                src_encodings2,
+                table_embeddings2,
+                schema_embeddings2,
+                _,
+            ) = self.sub_models[1].encode(batch)
 
             b_size = len(src_encodings1)
 
@@ -106,29 +112,49 @@ class SequentialEnsemble(nn.Module):
                     action2 = pred2[idx]
                     if action1 != action2:
                         # Get all tables
-                        selected_table_indices = set([item[1] for item in pred1 if item[0] == "T"])
-                        selected_table_indices.update([item[1] for item in pred2 if item[0] == "T"])
+                        selected_table_indices = set(
+                            [item[1] for item in pred1 if item[0] == "T"]
+                        )
+                        selected_table_indices.update(
+                            [item[1] for item in pred2 if item[0] == "T"]
+                        )
                         # Narrow down schema
                         new_data = copy.deepcopy(examples[0].data)
-                        sub_schema = utils.create_sub_schema(selected_table_indices, new_data["table_names"], new_data["column_names"], new_data["col_set"])
+                        sub_schema = utils.create_sub_schema(
+                            selected_table_indices,
+                            new_data["table_names"],
+                            new_data["column_names"],
+                            new_data["col_set"],
+                        )
                         for key, item in sub_schema.items():
                             new_data[key] = item
-                        sub_relation = utils.create_sub_relation(new_data["relation"], sub_schema["column_mapping"], sub_schema["table_mapping"])
+                        sub_relation = utils.create_sub_relation(
+                            new_data["relation"],
+                            sub_schema["column_mapping"],
+                            sub_schema["table_mapping"],
+                        )
                         for key, item in sub_relation.items():
                             new_data["relation"][key] = item
                         # Create new example and batch
                         new_examples = utils.to_batch_seq([new_data])
                         new_batch = Batch(new_examples, is_cuda=self.is_cuda)
                         # Encode
-                        (src_encodings3, table_embeddings3, schema_embeddings3, _) = self.sub_models[
-                            2
-                        ].encode(new_batch)
+                        (
+                            src_encodings3,
+                            table_embeddings3,
+                            schema_embeddings3,
+                            _,
+                        ) = self.sub_models[2].encode(new_batch)
                         narrowed_pred = []
                         for item in ensembled_pred:
                             if item[0] == "C":
-                                narrowed_pred += [(item[0], new_data["column_mapping"][item[1]])]
+                                narrowed_pred += [
+                                    (item[0], new_data["column_mapping"][item[1]])
+                                ]
                             elif item[0] == "T":
-                                narrowed_pred += [(item[0], new_data["table_mapping"][item[1]])]
+                                narrowed_pred += [
+                                    (item[0], new_data["table_mapping"][item[1]])
+                                ]
                             else:
                                 narrowed_pred += [item]
 
@@ -146,7 +172,9 @@ class SequentialEnsemble(nn.Module):
                         )
                         prod = states3[0].get_probs(idx)
                         # Choose one with higher prob from model3
-                        assert action1[0] == action2[0], "{} {}".format(action1, action2)
+                        assert action1[0] == action2[0], "{} {}".format(
+                            action1, action2
+                        )
                         if action1[0] == "C":
                             idx1 = new_data["column_mapping"][action1[1]]
                             idx2 = new_data["column_mapping"][action2[1]]
@@ -175,9 +203,12 @@ class SequentialEnsemble(nn.Module):
 
                 not_done = len(pred1) != len(pred2) or len(ensembled_pred) != len(pred1)
 
-        return {
-            "preds": [ensembled_pred],
-            "refined_preds": [[]],
-            "arbitrated_preds": [[]],
-            "initial_preds": [[]],
-        }, _
+        return (
+            {
+                "preds": [ensembled_pred],
+                "refined_preds": [[]],
+                "arbitrated_preds": [[]],
+                "initial_preds": [[]],
+            },
+            _,
+        )

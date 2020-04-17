@@ -77,7 +77,7 @@ def train(cfg):
                 del pretrained_modeled[k]
         model.load_state_dict(pretrained_modeled)
 
-    model.load_word_emb()
+    # model.load_word_emb()
     # model.word_emb = None if cfg.is_bert else utils.load_word_emb(cfg.glove_embed_path)
 
     # Log path
@@ -270,7 +270,12 @@ def train(cfg):
                     log.info("Saving new best model with acc: {}".format(best_val_acc))
                     torch.save(
                         model.state_dict(),
-                        os.path.join(log_model_path, "best_model.pt"),
+                        os.path.join(
+                            log_model_path,
+                            "best_model_{}_{}.pt".format(
+                                train_acc["total"], best_val_acc
+                            ),
+                        ),
                     )
                     with open(os.path.join(log_path, "best_model.log"), "a") as f:
                         f.write(

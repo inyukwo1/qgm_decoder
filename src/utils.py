@@ -141,11 +141,7 @@ def get_tab_col_dic(col_tab_dic):
     b_tmp = []
     tab_len = len(col_tab_dic[0])
     for t_idx in range(tab_len):
-        tab_tmp = [
-            idx
-            for idx in range(len(col_tab_dic))
-            if t_idx in col_tab_dic[idx]
-        ]
+        tab_tmp = [idx for idx in range(len(col_tab_dic)) if t_idx in col_tab_dic[idx]]
         b_tmp += [tab_tmp]
     tab_col_dic += [b_tmp]
     return tab_col_dic
@@ -283,6 +279,7 @@ def process(sql, db_data):
     process_dict["col_set_type"] = col_set_type
     process_dict["tab_set_type"] = tab_set_type
     process_dict["question_arg"] = question_arg  # for src encoding
+    process_dict["question_arg_type"] = question_arg_type
     process_dict["one_hot_type"] = one_hot_type
     process_dict["tab_cols"] = tab_cols
     process_dict["tab_ids"] = tab_ids
@@ -312,12 +309,33 @@ def is_valid(rule_label, col_set_table_dict, sql):
     return flag is False
 
 
-def to_batch_seq(data_list):
+def to_batch_seq(data_list, table_data):
     examples = []
     for data in data_list:
         # src
-        question_arg = copy.deepcopy(data["question_arg"])
+        table = table_data[data["db_id"]]
+        process_dict = process(data, table)
 
+        question_arg = copy.deepcopy(data["question_arg"])
+        for c_id, col_ in enumerate(process_dict["col_set_iter"]):
+            for q_id, ori in enumerate(process_dict["q_iter_small"]):
+                if ori in col_:
+                    process_dict["col_set_type"][c_id][0] += 1
+
+        for t_id, tab_ in enumerate(process_dict["table_names"]):
+            for q_id, ori in enumerate(process_dict["q_iter_small"]):
+                if ori in tab_:
+                    process_dict["tab_set_type"][t_id][0] += 1
+        schema_linking(
+            process_dict["question_arg"],
+            process_dict["question_arg_type"],
+            process_dict["one_hot_type"],
+            process_dict["col_set_type"],
+            process_dict["col_set_iter"],
+            process_dict["tab_set_type"],
+            process_dict["table_names"],
+            data,
+        )
         # column
         col_set_iter = [
             [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
@@ -352,6 +370,9 @@ def to_batch_seq(data_list):
             db_id=data["db_id"],
             db=data["db"],
             data=data,
+            one_hot_type=process_dict["one_hot_type"],
+            col_hot_type=process_dict["col_set_type"],
+            tab_hot_type=process_dict["tab_set_type"],
         )
 
         example.sql_json = copy.deepcopy(data)
@@ -399,7 +420,7 @@ def epoch_train(
         examples = sql_data[st:ed]
         examples.sort(key=lambda example: -len(example.src_sent))
 
-        result = model.forward(examples)
+        result = model.forward(examples, True)
         if decoder_name == "lstm":
             tmp = {key: [] for key in result[0].get_keys()}
             for losses in result:
@@ -524,7 +545,9 @@ def load_data_new(
 
     with open(sql_path) as f:
         data = lower_keys(json.load(f))
-        sql_data += data
+        for datum in data:
+            if "FROM (" not in datum["query"]:
+                sql_data += [datum]
 
     # Add db info
     for data in sql_data:
@@ -532,7 +555,10 @@ def load_data_new(
         data["db"] = db
         data["column_names"] = db["column_names"]
         # Append ground truth
-        gt_str = SemQL.create_data(data["qgm"])
+        if query_type == "all":
+            gt_str = data["rule_label"]
+        else:
+            gt_str = SemQL.create_data(data["qgm"])
         gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
         data["gt"] = gt
 
@@ -604,8 +630,8 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type, use_down_schema):
         val_data = down_schema(val_data)
 
     # Parse datasets into exampels:
-    train_data = to_batch_seq(train_data)
-    val_data = to_batch_seq(val_data)
+    train_data = to_batch_seq(train_data, table_data)
+    val_data = to_batch_seq(val_data, table_data)
 
     return train_data, val_data, table_data
 

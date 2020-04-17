@@ -22,7 +22,7 @@ from encoder.transformer.encoder import Transformer_Encoder
 from encoder.lstm.encoder import LSTMEncoder
 from encoder.bert.encoder import BERT
 
-# from encoder.irnet.encoder import IRNetLSTMEncoder
+from encoder.irnet.encoder import IRNetLSTMEncoder
 import src.relation as relation
 
 
@@ -62,7 +62,8 @@ class EncoderDecoderModel(nn.Module):
             self.encoder = BERT(cfg)
         elif self.encoder_name == "lstm":
             self.encoder = LSTMEncoder(cfg)
-            # self.encoder = IRNetLSTMEncoder(cfg)
+        elif self.encoder_name == "irnet":
+            self.encoder = IRNetLSTMEncoder(cfg)
         elif self.encoder_name == "transformer":
             self.encoder = Transformer_Encoder(cfg)
         elif self.encoder_name == "ra_transformer":
@@ -191,7 +192,7 @@ class EncoderDecoderModel(nn.Module):
                 last_cell,
             ) = self.encoder(batch)
             enc_last_cell = last_cell
-        elif self.encoder_name == "lstm":
+        elif self.encoder_name == "lstm" or self.encoder_name == "irnet":
             out = self.encoder(batch)
             src_encodings = [item["src_encoding"] for item in out]
             table_embeddings = [item["col_encoding"] for item in out]
@@ -285,6 +286,7 @@ class EncoderDecoderModel(nn.Module):
         )
         # Decode
         loss = self.decode(
+            batch,
             src_encodings,
             table_embeddings,
             schema_embeddings,
