@@ -24,6 +24,7 @@ class Transformer_Decoder(nn.Module):
         self.dim = dim
         self.nhead = nhead
         self.layer_num = layer_num
+        self.predict_table_only = cfg.predict_table_only
 
         decoder_layer = TransformerDecoderLayer(d_model=dim, nhead=nhead)
         self.transformer_decoder = TransformerDecoder(
@@ -225,16 +226,22 @@ class Transformer_Decoder(nn.Module):
 
                 encoded_tab = table_view.get_encoded_tab()
 
-                # Get Mask from prev col
-                prev_col_id = [item[1] for item in table_view.get_prev_action()]
-                tab_mask = torch.ones(
-                    table_view.get_b_size(), len(table_view.tab_mask[0])
-                ).cuda()
-                col_tab_dic = table_view.get_col_tab_dic()
+                if self.predict_table_only:
+                    tab_mask = torch.zeros(
+                        table_view.get_b_size(), len(table_view.tab_mask[0])
+                    ).cuda()
+                else:
 
-                for idx, col_id in enumerate(prev_col_id):
-                    tab_ids = col_tab_dic[idx][col_id]
-                    tab_mask[idx][tab_ids] = 0
+                    # Get Mask from prev col
+                    prev_col_id = [item[1] for item in table_view.get_prev_action()]
+                    tab_mask = torch.ones(
+                        table_view.get_b_size(), len(table_view.tab_mask[0])
+                    ).cuda()
+                    col_tab_dic = table_view.get_col_tab_dic()
+
+                    for idx, col_id in enumerate(prev_col_id):
+                        tab_ids = col_tab_dic[idx][col_id]
+                        tab_mask[idx][tab_ids] = 0
 
                 pred_tab_id = self.predict(
                     table_view, table_out, encoded_tab, tab_mask, self.tab_affine_layer

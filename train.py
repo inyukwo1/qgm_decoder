@@ -78,7 +78,7 @@ def train(cfg):
         model.load_state_dict(pretrained_modeled)
 
     # model.load_word_emb()
-    # model.word_emb = None if cfg.is_bert else utils.load_word_emb(cfg.glove_embed_path)
+    model.word_emb = None if cfg.is_bert else utils.load_word_emb(cfg.glove_embed_path)
 
     # Log path
     log_model_path = os.path.join(log_path, "model")
@@ -140,7 +140,11 @@ def train(cfg):
                     train_acc_arbitrated,
                     train_acc_init_pred,
                 ) = utils.epoch_acc(
-                    model, cfg.batch_size, train_data, cfg.decoder_name, cfg.is_col_set,
+                    model,
+                    cfg.batch_size,
+                    train_data,
+                    cfg.decoder_name,
+                    cfg.predict_table_only,
                 )
                 (
                     val_acc_pred,
@@ -148,7 +152,11 @@ def train(cfg):
                     val_acc_arbitrated,
                     val_acc_init_pred,
                 ) = utils.epoch_acc(
-                    model, cfg.batch_size, val_data, cfg.decoder_name, cfg.is_col_set,
+                    model,
+                    cfg.batch_size,
+                    val_data,
+                    cfg.decoder_name,
+                    cfg.predict_table_only,
                 )
                 # Logging to tensorboard
                 utils.logging_to_tensorboard(
@@ -239,10 +247,20 @@ def train(cfg):
                         )
             else:
                 train_acc = utils.epoch_acc(
-                    model, cfg.batch_size, train_data, cfg.decoder_name, cfg.is_col_set,
+                    model,
+                    cfg.batch_size,
+                    train_data,
+                    cfg.decoder_name,
+                    cfg.is_col_set,
+                    cfg.predict_table_only,
                 )
                 val_acc = utils.epoch_acc(
-                    model, cfg.batch_size, val_data, cfg.decoder_name, cfg.is_col_set,
+                    model,
+                    cfg.batch_size,
+                    val_data,
+                    cfg.decoder_name,
+                    cfg.is_col_set,
+                    cfg.predict_table_only,
                 )
 
                 # Logging to tensorboard

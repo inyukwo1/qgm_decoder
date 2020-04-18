@@ -178,7 +178,8 @@ class TransformerStatePred(TransformerState):
     def save_probs(self, probs):
         self.probs += [probs]
 
-    def apply_pred(self, prod):
+    def apply_pred(self, prod, only_table):
+
         if self.step_cnt < len(self.pred_guide):
             action = self.pred_guide[self.step_cnt]
             if action[0] in ["C", "T"]:
@@ -189,21 +190,33 @@ class TransformerStatePred(TransformerState):
             pred_idx = torch.argmax(prod).item()
 
         current_symbol = self.nonterminal_symbol_stack.pop(0)
-        if current_symbol == "C":
-            assert_dim([len(self.col_tab_dic)], prod)
-            action: Action = (current_symbol, pred_idx)
-            new_nonterminal_symbols = ["T"]
-        elif current_symbol == "T":
-            assert_dim([len(self.col_tab_dic[0])], prod)
-            action: Action = (current_symbol, pred_idx)
-            new_nonterminal_symbols = []
+        if only_table:
+            assert current_symbol in ["T", "Z"]
+            if current_symbol == "Z":
+                action: Action = SemQL.semql.aid_to_action[pred_idx]
+                new_nonterminal_symbols = ["T"] * (action[1] + 1)
+                self.nonterminal_symbol_stack = (
+                    new_nonterminal_symbols + self.nonterminal_symbol_stack
+                )
+                self.preds.append(action)
+            else:
+                self.preds.append(("T", pred_idx))
         else:
-            action: Action = SemQL.semql.aid_to_action[pred_idx]
-            new_nonterminal_symbols = SemQL.semql.parse_nonterminal_symbol(action)
-        self.nonterminal_symbol_stack = (
-            new_nonterminal_symbols + self.nonterminal_symbol_stack
-        )
-        self.preds.append(action)
+            if current_symbol == "C":
+                assert_dim([len(self.col_tab_dic)], prod)
+                action: Action = (current_symbol, pred_idx)
+                new_nonterminal_symbols = ["T"]
+            elif current_symbol == "T":
+                assert_dim([len(self.col_tab_dic[0])], prod)
+                action: Action = (current_symbol, pred_idx)
+                new_nonterminal_symbols = []
+            else:
+                action: Action = SemQL.semql.aid_to_action[pred_idx]
+                new_nonterminal_symbols = SemQL.semql.parse_nonterminal_symbol(action)
+            self.nonterminal_symbol_stack = (
+                new_nonterminal_symbols + self.nonterminal_symbol_stack
+            )
+            self.preds.append(action)
 
     def infer_pred(self, action: Action, idx: int = 0):
         self.preds = self.preds[:idx] + [action]

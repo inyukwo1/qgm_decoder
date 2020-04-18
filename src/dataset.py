@@ -36,6 +36,7 @@ class Example:
         table_col_len=None,
         col_pred=None,
         tokenized_src_sent=None,
+        used_table_set=None,
     ):
         self.src_sent = src_sent
         self.tab_cols = tab_cols
@@ -59,6 +60,7 @@ class Example:
         self.one_hot_type = one_hot_type
         self.col_hot_type = col_hot_type
         self.tab_hot_type = tab_hot_type
+        self.used_table_set = list(used_table_set)
         # self.schema_len = schema_len
         # self.tab_ids = tab_ids
         # self.table_col_name = table_col_name
@@ -137,6 +139,14 @@ class Batch(object):
         # self.table_col_len = [e.table_col_len for e in examples]
         # self.col_pred = [e.col_pred for e in examples]
         # self.qgm_action = [e.qgm_action for e in examples]
+        self.used_table_set = [e.used_table_set for e in self.examples]
+        self.used_table_gt = [
+            (
+                [("Z", len(e.used_table_set))]
+                + [("T", table) for table in e.used_table_set]
+            )
+            for e in self.examples
+        ]
 
         self.grammar = grammar
         self.cuda = is_cuda

@@ -51,6 +51,7 @@ class SemQL_Loss_New(Loss):
 
         # Symbols
         self.root = "Root"
+        self.z = "Z"
         self.sel = "Sel"
         self.n = "N"
         self.filter = "Filter"
@@ -59,7 +60,9 @@ class SemQL_Loss_New(Loss):
         self.t = "T"
 
     def _get_key(self, action_node: Symbol, prev_actions):
-        if action_node == self.root:
+        if action_node == self.z:
+            key = "quantifier_tab"
+        elif action_node == self.root:
             key = "predicate_num"
         elif action_node == self.sel:
             key = "head_num"

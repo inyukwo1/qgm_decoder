@@ -43,6 +43,7 @@ class TransformerDecoderFramework(nn.Module):
         self.refine_all = cfg.refine_all
         self.use_relation = cfg.use_relation
         self.look_left_only = cfg.look_left_only
+        self.predict_table_only = cfg.predict_table_only
 
         if self.refine_all:
             assert self.use_ct_loss == False, "Should be false"
@@ -126,8 +127,8 @@ class TransformerDecoderFramework(nn.Module):
                     encoded_col[b_idx][: col_lens[b_idx]],
                     encoded_tab[b_idx][: tab_lens[b_idx]],
                     col_tab_dic[b_idx],
-                    SemQL.semql.start_symbol,
-                    pred_guide,
+                    "Z" if self.predict_table_only else SemQL.semql.start_symbol,
+                    pred_guide if pred_guide else [],
                 )
                 for b_idx in range(b_size)
             ]
@@ -212,7 +213,9 @@ class TransformerDecoderFramework(nn.Module):
                     prod = self.infer_table_similarity.forward_later(
                         decoder_out[idx],
                         state.get_encoded_tab(),
-                        state.impossible_table_indices(idx),
+                        []
+                        if self.predict_table_only
+                        else state.impossible_table_indices(idx),
                     )
                 else:
                     # Get possible actions from nonterminal stack
@@ -250,7 +253,7 @@ class TransformerDecoderFramework(nn.Module):
             else:
                 assert isinstance(state, TransformerStatePred)
                 state.save_probs(prod)
-                state.apply_pred(prod)
+                state.apply_pred(prod, self.predict_table_only)
             state.step()
             return prev_tensor_dict
 

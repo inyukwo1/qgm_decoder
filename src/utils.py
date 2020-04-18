@@ -373,6 +373,7 @@ def to_batch_seq(data_list, table_data):
             one_hot_type=process_dict["one_hot_type"],
             col_hot_type=process_dict["col_set_type"],
             tab_hot_type=process_dict["tab_set_type"],
+            used_table_set=data["used_table_set"],
         )
 
         example.sql_json = copy.deepcopy(data)
@@ -475,7 +476,7 @@ def epoch_train(
 
 
 def epoch_acc(
-    model, batch_size, sql_data, model_name, return_details=False,
+    model, batch_size, sql_data, model_name, use_table_only, return_details=False,
 ):
     model.eval()
     if model_name == "transformer":
@@ -496,7 +497,7 @@ def epoch_acc(
         examples.sort(key=lambda example: -len(example.src_sent))
         example_list += examples
         if model_name == "transformer":
-            tmp, _ = model.parse(examples)
+            tmp = model.parse(examples)
             pred["preds"] += tmp["preds"]
             pred["refined_preds"] += tmp["refined_preds"]
             pred["arbitrated_preds"] += tmp["arbitrated_preds"]
@@ -504,10 +505,22 @@ def epoch_acc(
         else:
             pred += model.parse(examples)
 
-        gold += [example.gt for example in examples]
+        gold += [
+            example.used_table_set if use_table_only else example.gt
+            for example in examples
+        ]
 
     # Calculate acc
-    if model_name == "ensemble":
+    if use_table_only:
+        correct = 0
+        for one_pred, one_gold in zip(pred["preds"], gold):
+            if one_pred[0][1] == len(one_gold) and set(
+                [action[1] for action in one_pred[1:]]
+            ) == set(one_gold):
+                correct += 1
+        total_acc = correct / len(gold)
+        return {"total": total_acc}, {"total": 0.0}, {"total": 0.0}, {"total": 0.0}
+    elif model_name == "ensemble":
         total_acc, is_correct_list = model.decoder.decoders[0].grammar.cal_acc(
             pred, gold
         )
@@ -534,7 +547,23 @@ def epoch_acc(
     if return_details:
         return total_acc, is_correct_list, pred, gold, example_list
     else:
-        return total_acc
+        return total_acc, 0, 0, 0
+
+
+def get_used_table_set(sql):
+    table_set = set()
+    if isinstance(sql, dict):
+        for key in sql:
+            if key == "from":
+                for elem in sql[key]["table_units"]:
+                    assert elem[0] == "table_unit"
+                    table_set.add(elem[1])
+            else:
+                table_set |= get_used_table_set(sql[key])
+    elif isinstance(sql, list):
+        for sub_sql in sql:
+            table_set |= get_used_table_set(sub_sql)
+    return table_set
 
 
 def load_data_new(
@@ -561,6 +590,7 @@ def load_data_new(
             gt_str = SemQL.create_data(data["qgm"])
         gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
         data["gt"] = gt
+        data["used_table_set"] = list(get_used_table_set(data["sql"]))
 
     # Filter some db
     if is_bert:

@@ -38,6 +38,7 @@ class EncoderDecoderModel(nn.Module):
         self.use_separate_encoder = cfg.use_separate_encoder
         self.random_training = cfg.random_training
         self.embed_size = 1024 if self.is_bert else 300
+        self.predict_table_only = cfg.predict_table_only
 
         # Decoder
         if self.decoder_name == "transformer":
@@ -227,6 +228,12 @@ class EncoderDecoderModel(nn.Module):
             return output
         elif self.decoder_name == "transformer":
             b_size = len(src_encodings)
+            gt = None
+            if is_training:
+                if self.predict_table_only:
+                    gt = batch.used_table_gt
+                else:
+                    gt = batch.gt
             output = self.decoder(
                 b_size,
                 src_encodings,
@@ -236,7 +243,7 @@ class EncoderDecoderModel(nn.Module):
                 batch.col_num,
                 batch.table_len,
                 batch.col_tab_dic,
-                batch.gt if is_training else None,
+                gt,
             )
             return output
         elif self.decoder_name == "qgm":
