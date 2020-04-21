@@ -142,7 +142,7 @@ class Batch(object):
         self.used_table_set = [e.used_table_set for e in self.examples]
         self.used_table_gt = [
             (
-                [("Z", len(e.used_table_set))]
+                [("Z", len(e.used_table_set) - 1)]
                 + [("T", table) for table in e.used_table_set]
             )
             for e in self.examples

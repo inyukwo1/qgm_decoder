@@ -231,7 +231,7 @@ def train(cfg):
                     )
                 )
 
-                # Save if total_acc is higher
+                # # Save if total_acc is higher
                 if best_val_acc <= val_acc_pred["total"]:
                     best_val_acc = val_acc_pred["total"]
                     log.info("Saving new best model with acc: {}".format(best_val_acc))
