@@ -141,11 +141,7 @@ def get_tab_col_dic(col_tab_dic):
     b_tmp = []
     tab_len = len(col_tab_dic[0])
     for t_idx in range(tab_len):
-        tab_tmp = [
-            idx
-            for idx in range(len(col_tab_dic))
-            if t_idx in col_tab_dic[idx]
-        ]
+        tab_tmp = [idx for idx in range(len(col_tab_dic)) if t_idx in col_tab_dic[idx]]
         b_tmp += [tab_tmp]
     tab_col_dic += [b_tmp]
     return tab_col_dic
