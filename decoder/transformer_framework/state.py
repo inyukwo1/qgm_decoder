@@ -191,16 +191,23 @@ class TransformerStatePred(TransformerState):
 
         current_symbol = self.nonterminal_symbol_stack.pop(0)
         if only_table:
-            assert current_symbol in ["T", "Z"]
+            assert current_symbol in ["T", "Z", "C", "Y"]
             if current_symbol == "Z":
                 action: Action = SemQL.semql.aid_to_action[pred_idx]
-                new_nonterminal_symbols = ["T"] * (action[1] + 1)
+                new_nonterminal_symbols = ["T"] * (action[1] + 1) + ["Y"]
+                self.nonterminal_symbol_stack = (
+                    new_nonterminal_symbols + self.nonterminal_symbol_stack
+                )
+                self.preds.append(action)
+            elif current_symbol == "Y":
+                action: Action = SemQL.semql.aid_to_action[pred_idx]
+                new_nonterminal_symbols = ["C"] * (action[1] + 1)
                 self.nonterminal_symbol_stack = (
                     new_nonterminal_symbols + self.nonterminal_symbol_stack
                 )
                 self.preds.append(action)
             else:
-                self.preds.append(("T", pred_idx))
+                self.preds.append((current_symbol, pred_idx))
         else:
             if current_symbol == "C":
                 assert_dim([len(self.col_tab_dic)], prod)

@@ -7,6 +7,7 @@ A
 C
 T
 Z
+Y
 none
 max
 min
@@ -38,5 +39,6 @@ Filter ::= and Filter Filter | Not A | Between A | = A | > A | < A | >= A | <= A
 A ::= none C | max C | min C | count C | sum C | avg C
 C ::= T
 T ::= none
-Z ::= T | T T | T T T | T T T T | T T T T T | T T T T T T | T T T T T T T
+Z ::= T Y | T T Y | T T T Y | T T T T Y | T T T T T Y | T T T T T T Y | T T T T T T T Y
+Y ::= C | C C | C C C | C C C C | C C C C C | C C C C C C | C C C C C C C | C C C C C C C C
 <grammar_end>

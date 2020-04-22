@@ -60,7 +60,7 @@ class SemQL_Loss_New(Loss):
         self.t = "T"
 
     def _get_key(self, action_node: Symbol, prev_actions):
-        if action_node == self.z:
+        if action_node == self.z or action_node == "Y":
             key = "quantifier_tab"
         elif action_node == self.root:
             key = "predicate_num"
@@ -77,13 +77,7 @@ class SemQL_Loss_New(Loss):
         elif action_node == self.filter:
             key = "predicate_num"
         elif action_node == self.c:
-            prev_symbols = [
-                prev_action[0]
-                for prev_action in prev_actions
-                if prev_action[0] in ["Sel", "Filter"]
-            ]
-            assert len(prev_symbols) > 0, "Wrong prev_actions: {}".format(prev_actions)
-            key = "head_col" if prev_symbols[-1] == "Sel" else "predicate_col"
+            key = "head_col"
         elif action_node == self.t:
             key = "quantifier_tab"
         else:
