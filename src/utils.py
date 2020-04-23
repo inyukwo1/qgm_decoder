@@ -615,7 +615,7 @@ def down_schema(datas):
         selected_table_indices = list(
             set([item[1] for item in data["gt"] if item[0] == "T"])
         )
-        use_one_hop_neighbors = True
+        use_one_hop_neighbors = False
         if use_one_hop_neighbors:
             # Append neighbor tables
             selected_table_indices = append_one_hop_neighbors(

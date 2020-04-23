@@ -99,6 +99,8 @@ class SequentialEnsemble(nn.Module):
                     pred_guide=ensembled_pred,
                     is_ensemble=True,
                 )
+                return states1[0].get_preds(states1), None
+
                 pred1 = states1[0].get_preds(states1)["preds"][0]
                 pred2 = states2[0].get_preds(states2)["preds"][0]
                 for idx in range(len(ensembled_pred), min(len(pred1), len(pred2))):
