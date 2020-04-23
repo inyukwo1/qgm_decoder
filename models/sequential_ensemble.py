@@ -99,7 +99,7 @@ class SequentialEnsemble(nn.Module):
                     pred_guide=ensembled_pred,
                     is_ensemble=True,
                 )
-                return states1[0].get_preds(states1), None
+                return states1[0].get_preds(states1)
 
                 pred1 = states1[0].get_preds(states1)["preds"][0]
                 pred2 = states2[0].get_preds(states2)["preds"][0]
@@ -182,4 +182,4 @@ class SequentialEnsemble(nn.Module):
             "refined_preds": [[]],
             "arbitrated_preds": [[]],
             "initial_preds": [[]],
-        }, _
+        }

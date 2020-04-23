@@ -457,15 +457,7 @@ def epoch_acc(
     model, batch_size, sql_data, model_name, return_details=False,
 ):
     model.eval()
-    if model_name == "transformer":
-        pred = {
-            "preds": [],
-            "refined_preds": [],
-            "arbitrated_preds": [],
-            "initial_preds": [],
-        }
-    else:
-        pred = []
+    pred = []
 
     gold = []
     example_list = []
@@ -475,11 +467,8 @@ def epoch_acc(
         examples.sort(key=lambda example: -len(example.src_sent))
         example_list += examples
         if model_name == "transformer":
-            tmp, _ = model.parse(examples)
-            pred["preds"] += tmp["preds"]
-            pred["refined_preds"] += tmp["refined_preds"]
-            pred["arbitrated_preds"] += tmp["arbitrated_preds"]
-            pred["initial_preds"] += tmp["initial_preds"]
+            tmp = model.parse(examples)
+            pred += tmp["preds"]
         else:
             pred += model.parse(examples)
 
@@ -491,22 +480,10 @@ def epoch_acc(
             pred, gold
         )
     elif model_name == "transformer":
-        total_acc_pred, is_correct_list_pred = SemQL.semql.cal_acc(pred["preds"], gold)
-        total_acc_refined, is_correct_list_refined = SemQL.semql.cal_acc(
-            pred["refined_preds"], gold
+        total_acc_pred, is_correct_list_pred = SemQL.semql.cal_acc(
+            pred, gold
         )
-        (total_acc_arbitrated, is_correct_list_arbitrated,) = SemQL.semql.cal_acc(
-            pred["arbitrated_preds"], gold
-        )
-        (total_acc_init_pred, is_correct_list_init_pred,) = SemQL.semql.cal_acc(
-            pred["initial_preds"], gold
-        )
-        return (
-            total_acc_pred,
-            total_acc_refined,
-            total_acc_arbitrated,
-            total_acc_init_pred,
-        )
+        return total_acc_pred, is_correct_list_pred, pred, gold, example_list
     else:
         total_acc, is_correct_list = SemQL.semql.cal_acc(pred, gold)
 
@@ -944,53 +921,55 @@ def analyze_regarding_schema_size(examples, is_correct, preds, golds, table_data
         dbs.add(example.db_id)
         col_len = len(db["column_names"])
         tab_len = len(db["table_names"])
+        col_dic_key = (col_len, len(example.tab_cols))
+        tab_dic_key = (tab_len, len(example.table_names))
 
         # Initialize and count for col
-        if col_len not in col_acc_dic:
-            print("db: {} col_len: {}".format(example.db_id, col_len))
-            col_cnt_tab_cnt[col_len] = set()
-            col_cnt_tab_cnt[col_len].add(tab_len)
+        if col_dic_key not in col_acc_dic:
+            print("db: {} col_len: {}".format(example.db_id, col_dic_key))
+            col_cnt_tab_cnt[col_dic_key] = set()
+            col_cnt_tab_cnt[col_dic_key].add(tab_dic_key)
 
-            col_acc_dic[col_len] = 0
-            col_cnt_dic[col_len] = 1
+            col_acc_dic[col_dic_key] = 0
+            col_cnt_dic[col_dic_key] = 1
             # Detailed analysis
-            col_cnt_act_dic[col_len] = 0
-            col_cnt_col_dic[col_len] = 0
-            col_cnt_tab_dic[col_len] = 0
+            col_cnt_act_dic[col_dic_key] = 0
+            col_cnt_col_dic[col_dic_key] = 0
+            col_cnt_tab_dic[col_dic_key] = 0
         else:
-            col_cnt_dic[col_len] += 1
-            col_cnt_tab_cnt[col_len].add(tab_len)
+            col_cnt_dic[col_dic_key] += 1
+            col_cnt_tab_cnt[col_dic_key].add(tab_dic_key)
 
         # Initialize and count for tab
-        if tab_len not in tab_acc_dic:
-            tab_acc_dic[tab_len] = 0
-            tab_cnt_dic[tab_len] = 1
+        if tab_dic_key not in tab_acc_dic:
+            tab_acc_dic[tab_dic_key] = 0
+            tab_cnt_dic[tab_dic_key] = 1
 
             # Detailed analysis
-            tab_cnt_act_dic[tab_len] = 0
-            tab_cnt_col_dic[tab_len] = 0
-            tab_cnt_tab_dic[tab_len] = 0
+            tab_cnt_act_dic[tab_dic_key] = 0
+            tab_cnt_col_dic[tab_dic_key] = 0
+            tab_cnt_tab_dic[tab_dic_key] = 0
         else:
-            tab_cnt_dic[tab_len] += 1
+            tab_cnt_dic[tab_dic_key] += 1
 
         # Count correct
         if pred == gold:
-            tab_acc_dic[tab_len] += 1
-            col_acc_dic[col_len] += 1
+            tab_acc_dic[tab_dic_key] += 1
+            col_acc_dic[col_dic_key] += 1
         # Count wrong
         else:
             min_len = min(len(pred), len(gold))
             for idx in range(min_len):
                 if pred[idx] != gold[idx]:
                     if gold[idx][0] == "C":
-                        tab_cnt_col_dic[tab_len] += 1
-                        col_cnt_col_dic[col_len] += 1
+                        tab_cnt_col_dic[tab_dic_key] += 1
+                        col_cnt_col_dic[col_dic_key] += 1
                     elif gold[idx][0] == "T":
-                        tab_cnt_tab_dic[tab_len] += 1
-                        col_cnt_tab_dic[col_len] += 1
+                        tab_cnt_tab_dic[tab_dic_key] += 1
+                        col_cnt_tab_dic[col_dic_key] += 1
                     else:
-                        tab_cnt_act_dic[tab_len] += 1
-                        col_cnt_act_dic[col_len] += 1
+                        tab_cnt_act_dic[tab_dic_key] += 1
+                        col_cnt_act_dic[col_dic_key] += 1
                     break
 
     for key, item in sorted(col_acc_dic.items()):
@@ -1033,4 +1012,4 @@ def analyze_regarding_schema_size(examples, is_correct, preds, golds, table_data
     for tab_len in sorted(tab_cnt_col_cnt.keys()):
         col_len = tab_cnt_col_cnt[tab_len]
         print("tab_len: {} col_len: {}".format(tab_len, col_len))
-    print("number of db: {}".format(len(db)))
+    print("number of db: {}".format(len(dbs)))
