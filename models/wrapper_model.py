@@ -38,10 +38,11 @@ class EncoderDecoderModel(nn.Module):
         self.use_separate_encoder = cfg.use_separate_encoder
         self.random_training = cfg.random_training
         self.embed_size = 1024 if self.is_bert else 300
+        self.perturb = cfg.perturb
 
         # Decoder
         if self.decoder_name == "transformer":
-            self.decoder = TransformerDecoderFramework(cfg)
+            self.decoder = TransformerDecoderFramework(cfg, cfg.perturb)
         elif self.decoder_name == "lstm":
             self.decoder = LSTM_Decoder(cfg)
         elif self.decoder_name == "qgm":
@@ -235,7 +236,9 @@ class EncoderDecoderModel(nn.Module):
                 batch.col_num,
                 batch.table_len,
                 batch.col_tab_dic,
-                batch.gt if is_training else None,
+                golds=batch.gt if is_training else None,
+                further_pred=batch.gt if not is_training and self.perturb else None,
+                wrapper=True,
             )
             return output
         elif self.decoder_name == "qgm":
@@ -285,6 +288,7 @@ class EncoderDecoderModel(nn.Module):
         )
         # Decode
         loss = self.decode(
+            batch,
             src_encodings,
             table_embeddings,
             schema_embeddings,

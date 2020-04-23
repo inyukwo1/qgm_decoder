@@ -22,10 +22,11 @@ from framework.lazy_modules import (
     LazyRATransformerDecoder,
     LazyCalculateSimilarity,
 )
+import random
 
 
 class TransformerDecoderFramework(nn.Module):
-    def __init__(self, cfg):
+    def __init__(self, cfg, perturb=False):
         super(TransformerDecoderFramework, self).__init__()
         is_bert = cfg.is_bert
 
@@ -41,14 +42,17 @@ class TransformerDecoderFramework(nn.Module):
         self.use_ct_loss = cfg.use_ct_loss
         self.use_arbitrator = cfg.use_arbitrator
         self.refine_all = cfg.refine_all
-        self.use_relation = cfg.use_relation
-        self.look_left_only = cfg.look_left_only
+        self.perturb = perturb
 
         if self.refine_all:
             assert self.use_ct_loss == False, "Should be false"
 
         # For inference
-        self.infer_transformer = LazyTransformerDecoder(dim, nhead, layer_num)
+        self.infer_transformer = (
+            LazyRATransformerDecoder(dim, nhead, layer_num, 10)
+            if perturb
+            else LazyTransformerDecoder(dim, nhead, layer_num)
+        )
         self.infer_action_affine_layer = LazyLinear(dim, dim)
         self.infer_symbol_affine_layer = LazyLinear(dim, dim)
         self.infer_tgt_linear_layer = LazyLinear(dim * 2, dim)
@@ -87,9 +91,37 @@ class TransformerDecoderFramework(nn.Module):
 
     def create_relation_matrix(self, actions, cur_idx=None):
         relation = torch.ones(len(actions), len(actions)).cuda().long()
-        for idx in range(cur_idx + 1):
-            relation[idx][: cur_idx + 1] = 2
+        relation[:cur_idx, :cur_idx] = 1
+        relation[:cur_idx, cur_idx] = 2
+        relation[:cur_idx, cur_idx + 1 :] = 3
+
+        relation[cur_idx, :cur_idx] = 4
+        relation[cur_idx, cur_idx] = 5
+        relation[cur_idx, cur_idx + 1 :] = 6
+
+        relation[cur_idx + 1 :, :cur_idx] = 7
+        relation[cur_idx + 1 :, cur_idx] = 8
+        relation[cur_idx + 1 :, cur_idx + 1 :] = 9
         return relation
+
+    def perturbe(self, len_col, len_tab, actions):
+        perturbed_actions = []
+        for action in actions:
+            if random.randrange(0, 100) > 15:
+                perturbed_actions.append(action)
+            else:
+                symbol = action[0]
+                if symbol == "C":
+                    new_action = ("C", random.randrange(len_col))
+                elif symbol == "T":
+                    new_action = ("T", random.randrange(len_tab))
+                else:
+                    new_action = (
+                        symbol,
+                        random.randrange(len(SemQL.semql.actions[symbol])),
+                    )
+                perturbed_actions.append(new_action)
+        return perturbed_actions
 
     def forward(
         self,
@@ -104,6 +136,8 @@ class TransformerDecoderFramework(nn.Module):
         golds=None,
         pred_guide=None,
         is_ensemble=False,
+        further_pred=None,
+        wrapper=False,
     ):
         # Create states
         if golds:
@@ -115,6 +149,9 @@ class TransformerDecoderFramework(nn.Module):
                     encoded_tab[b_idx][: tab_lens[b_idx]],
                     col_tab_dic[b_idx],
                     golds[b_idx],
+                    self.perturbe(col_lens[b_idx], tab_lens[b_idx], golds[b_idx])
+                    if self.perturb
+                    else None,
                 )
                 for b_idx in range(b_size)
             ]
@@ -128,6 +165,9 @@ class TransformerDecoderFramework(nn.Module):
                     col_tab_dic[b_idx],
                     SemQL.semql.start_symbol,
                     pred_guide,
+                    self.perturbe(col_lens[b_idx], tab_lens[b_idx], further_pred[b_idx])
+                    if wrapper
+                    else further_pred[b_idx],
                 )
                 for b_idx in range(b_size)
             ]
@@ -139,8 +179,11 @@ class TransformerDecoderFramework(nn.Module):
             history_action_embeddings: List[torch.Tensor] = [
                 self.action_to_embedding(state, action) for action in history_actions
             ]
-            current_action_embedding = self.onedim_zero_tensor()
-            history_action_embeddings += [current_action_embedding]
+            if self.perturb:
+                history_action_embeddings[state.step_cnt] = self.onedim_zero_tensor()
+            else:
+                current_action_embedding = self.onedim_zero_tensor()
+                history_action_embeddings += [current_action_embedding]
             action_embeddings = torch.stack(history_action_embeddings, dim=0)
             action_embeddings_promise: TensorPromise = self.infer_action_affine_layer.forward_later(
                 action_embeddings
@@ -151,8 +194,9 @@ class TransformerDecoderFramework(nn.Module):
             state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
         ) -> Dict[str, TensorPromise]:
             history_symbols: List[Symbol] = state.get_history_symbols()
-            current_symbol: Symbol = state.get_current_symbol()
-            history_symbols += [current_symbol]
+            if not self.perturb:
+                current_symbol: Symbol = state.get_current_symbol()
+                history_symbols += [current_symbol]
             symbol_embeddings = self.symbol_list_to_embedding(history_symbols)
             symbol_embeddings_promise: TensorPromise = self.infer_symbol_affine_layer.forward_later(
                 symbol_embeddings
@@ -184,9 +228,17 @@ class TransformerDecoderFramework(nn.Module):
             ].result
             src_embedding: torch.Tensor = state.get_encoded_src()
 
-            decoder_out_promise: TensorPromise = self.infer_transformer.forward_later(
-                combined_embedding, src_embedding
-            )
+            if self.perturb:
+                relation = self.create_relation_matrix(
+                    state.get_history_actions(), cur_idx=state.step_cnt,
+                )
+                decoder_out_promise: TensorPromise = self.infer_transformer.forward_later(
+                    combined_embedding, src_embedding, relation
+                )
+            else:
+                decoder_out_promise: TensorPromise = self.infer_transformer.forward_later(
+                    combined_embedding, src_embedding
+                )
             prev_tensor_dict.update({"decoder_out": decoder_out_promise})
             return prev_tensor_dict
 

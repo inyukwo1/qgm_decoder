@@ -395,7 +395,7 @@ def epoch_train(
         examples = sql_data[st:ed]
         examples.sort(key=lambda example: -len(example.src_sent))
 
-        result = model.forward(examples)
+        result = model.forward(examples, True)
         if decoder_name == "lstm":
             tmp = {key: [] for key in result[0].get_keys()}
             for losses in result:
@@ -471,7 +471,7 @@ def epoch_acc(
         examples.sort(key=lambda example: -len(example.src_sent))
         example_list += examples
         if model_name == "transformer":
-            tmp, _ = model.parse(examples)
+            tmp = model.parse(examples)
             pred["preds"] += tmp["preds"]
             pred["refined_preds"] += tmp["refined_preds"]
             pred["arbitrated_preds"] += tmp["arbitrated_preds"]

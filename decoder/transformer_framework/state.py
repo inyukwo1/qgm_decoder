@@ -61,6 +61,7 @@ class TransformerStateGold(TransformerState):
         encoded_tab,
         col_tab_dic: Dict[int, List[int]],
         gold: List[Action],
+        perturbed_gold,
     ):
         TransformerState.__init__(
             self, encoded_src, encoded_col, encoded_tab, col_tab_dic
@@ -70,6 +71,7 @@ class TransformerStateGold(TransformerState):
         self.skip_infer = False
         self.skip_refinement = False
         self.skip_arbitrator = False
+        self.perturbed_gold = perturbed_gold
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
@@ -84,11 +86,24 @@ class TransformerStateGold(TransformerState):
         return True
 
     def get_history_actions(self) -> List[Action]:
-        return self.gold[: self.step_cnt]
+        return (
+            self.gold[: self.step_cnt] + self.perturbed_gold[self.step_cnt :]
+            if self.perturbed_gold
+            else self.gold[: self.step_cnt]
+        )
 
     def get_history_symbols(self) -> List[Symbol]:
-        symbol_list = [action[0] for action in self.gold]
-        return symbol_list[: self.step_cnt]
+        if self.perturbed_gold:
+            symbol_list = [
+                action[0]
+                for action in self.gold[: self.step_cnt]
+                + self.perturbed_gold[self.step_cnt :]
+            ]
+            return symbol_list
+        else:
+
+            symbol_list = [action[0] for action in self.gold]
+            return symbol_list[: self.step_cnt]
 
     def get_current_symbol(self) -> Symbol:
         return self.gold[self.step_cnt][0] if self.step_cnt < len(self.gold) else None
@@ -122,11 +137,13 @@ class TransformerStatePred(TransformerState):
         col_tab_dic,
         start_symbol: Symbol,
         pred_guide=None,
+        further_pred=None,
     ):
         TransformerState.__init__(
             self, encoded_src, encoded_col, encoded_tab, col_tab_dic
         )
-        self.pred_guide = pred_guide
+        self.pred_guide = pred_guide if pred_guide else []
+        self.further_pred = further_pred
         self.probs = []
         self.preds: List[Action] = []
         self.init_preds: List[Action] = []
@@ -136,7 +153,14 @@ class TransformerStatePred(TransformerState):
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
-        return state.nonterminal_symbol_stack != [] and state.step_cnt < 50
+        if state.further_pred:
+            return (
+                state.nonterminal_symbol_stack != []
+                and state.step_cnt < 50
+                and state.step_cnt < len(state.further_pred)
+            )
+        else:
+            return state.nonterminal_symbol_stack != [] and state.step_cnt < 50
 
     @classmethod
     def get_preds(
@@ -156,11 +180,14 @@ class TransformerStatePred(TransformerState):
         return False
 
     def get_history_actions(self) -> List[Action]:
-        return self.preds[: self.step_cnt]
+        return (
+            self.preds[: self.step_cnt] + self.further_pred[self.step_cnt :]
+            if self.further_pred
+            else self.preds[: self.step_cnt]
+        )
 
     def get_history_symbols(self) -> List[Symbol]:
-        symbol_list = [action[0] for action in self.preds]
-        return symbol_list[: self.step_cnt]
+        return [action[0] for action in self.get_history_actions()]
 
     def get_current_symbol(self) -> Symbol:
         return (
