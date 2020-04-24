@@ -213,9 +213,7 @@ class TransformerDecoderFramework(nn.Module):
                     prod = self.infer_table_similarity.forward_later(
                         decoder_out[idx],
                         state.get_encoded_tab(),
-                        []
-                        if self.predict_table_only
-                        else state.impossible_table_indices(idx),
+                        state.impossible_table_indices(idx),
                     )
                 else:
                     # Get possible actions from nonterminal stack

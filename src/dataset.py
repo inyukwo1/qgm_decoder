@@ -60,8 +60,7 @@ class Example:
         self.one_hot_type = one_hot_type
         self.col_hot_type = col_hot_type
         self.tab_hot_type = tab_hot_type
-        self.used_table_set = list(used_table_set)
-        self.used_col_set = list(set([action[1] for action in gt if action[0] == "C"]))
+        self.used_col_tab_set = [action for action in gt if action[0] in {"C", "T"}]
         # self.schema_len = schema_len
         # self.tab_ids = tab_ids
         # self.table_col_name = table_col_name
@@ -140,13 +139,11 @@ class Batch(object):
         # self.table_col_len = [e.table_col_len for e in examples]
         # self.col_pred = [e.col_pred for e in examples]
         # self.qgm_action = [e.qgm_action for e in examples]
-        self.used_table_set = [e.used_table_set for e in self.examples]
+        # self.used_table_set = [e.used_table_set for e in self.examples]
         self.used_table_gt = [
             (
-                [("Z", len(e.used_table_set) - 1)]
-                + [("T", table) for table in e.used_table_set]
-                + [("Y", len(e.used_col_set) - 1)]
-                + [("C", col) for col in e.used_col_set]
+                [("Z", len(e.used_col_tab_set) // 2 - 1)]
+                + [action for action in e.used_col_tab_set]
             )
             for e in self.examples
         ]

@@ -506,7 +506,7 @@ def epoch_acc(
             pred += model.parse(examples)
 
         gold += [
-            example.used_table_set if use_table_only else example.gt
+            example.used_col_tab_set if use_table_only else example.gt
             for example in examples
         ]
 
@@ -514,9 +514,9 @@ def epoch_acc(
     if use_table_only:
         correct = 0
         for idx, (one_pred, one_gold) in enumerate(zip(pred["preds"], gold)):
-            if one_pred[0][1] + 1 == len(one_gold) and set(
-                [action[1] for action in one_pred[1:] if action[0] == "T"]
-            ) == set(one_gold):
+            if set([action[1] for action in one_pred[1:] if action[0] == "T"]) == set(
+                [action[1] for action in one_gold[1:] if action[0] == "T"]
+            ):
                 correct += 1
         total_acc = correct / len(gold)
         return {"total": total_acc}, {"total": 0.0}, {"total": 0.0}, {"total": 0.0}
