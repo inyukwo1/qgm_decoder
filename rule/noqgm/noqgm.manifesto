@@ -1,0 +1,40 @@
+<symbol_start>
+Root
+Sel
+Filter
+N
+A
+C
+T
+none
+max
+min
+count
+sum
+avg
+Not
+Between
+Like
+NotLike
+and
+or
+In
+NotIn
+Exists
+Is
+=
+!=
+<
+>
+<=
+>=
+<symbol_end>
+
+<grammar_start>
+Root ::= Sel Filter | Sel
+Sel ::= A | A A | A A A | A A A A | A A A A A
+Filter ::= and Filter Filter | Not A | Between A | = A | > A | < A | >= A | <= A | != A | In A | Like A | Is A | Exists A | NotIn A | NotLike A
+A ::= none C | max C | min C | count C | sum C | avg C
+C ::= T
+T ::= none
+<grammar_end>

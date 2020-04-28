@@ -1013,3 +1013,13 @@ def analyze_regarding_schema_size(examples, is_correct, preds, golds, table_data
         col_len = tab_cnt_col_cnt[tab_len]
         print("tab_len: {} col_len: {}".format(tab_len, col_len))
     print("number of db: {}".format(len(dbs)))
+
+# Analysis
+def first_diff_symbol(pred, gold):
+    for idx in range(min(len(pred), len(gold))):
+        if pred[idx] != gold[idx]:
+            return pred[idx][0]
+    return None
+
+# Num of column in the select clause
+def wrong_by_col_num_in_select(pred, gold):
