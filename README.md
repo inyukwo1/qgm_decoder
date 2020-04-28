@@ -31,7 +31,7 @@ python train.py encoder=lstm decoder=transformer query_type=all batch_size=8 opt
 * run `create_semql_qgm_for_all_dataset.sh` under `./preprocess/` directiory
 
 #### Data path hierarchy
-
+```
 data
 |
 |-- spider
@@ -46,7 +46,7 @@ data
 |-- (another dataset)
 |
 ...
-
+```
 
 #### Training
 
@@ -56,7 +56,7 @@ Run `train.py` to train the model.
 
 Now support hydra to pass arguments.
 config design is as below
-
+```
 config
  |
  |-- dataset
@@ -82,7 +82,7 @@ config
      |
      |-- output
      |-- job_logging
-
+```
 
 * You can select config file or change any argument with the command line `python train.py cuda=1 model=qgm dataset=wikisql`
 * Or create your own config file under *config/train/* for convenience.
