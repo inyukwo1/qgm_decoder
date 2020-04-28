@@ -588,7 +588,7 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type, use_down_schema):
 
 
 def down_schema(datas):
-    for data in datas:
+    for idx, data in enumerate(datas):
         selected_table_indices = list(
             set([item[1] for item in data["gt"] if item[0] == "T"])
         )

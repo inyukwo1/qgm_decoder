@@ -57,15 +57,15 @@ def evaluate(cfg):
     # train_out_path = os.path.join(log_path, "train.result")
     dev_out_path = os.path.join(log_path, "dev.result")
     #
-    # utils.write_eval_result_as(
-    #     dev_out_path,
-    #     dev_list,
-    #     dev_is_correct,
-    #     dev_total_acc,
-    #     dev_pred,
-    #     dev_gold,
-    #     use_col_set=cfg.is_col_set,
-    # )
+    utils.write_eval_result_as(
+        dev_out_path,
+        dev_list,
+        dev_is_correct,
+        dev_total_acc,
+        dev_pred,
+        dev_gold,
+        use_col_set=cfg.is_col_set,
+    )
 
     # dev_is_correct
     # indices = [idx for idx, item in enumerate(dev_is_correct) if item == True]

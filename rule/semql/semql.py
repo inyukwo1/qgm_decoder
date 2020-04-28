@@ -5,7 +5,7 @@ from rule.semql.semql_loss import SemQL_Loss
 import rule.utils as utils
 
 
-SKETCH_SYMBOLS = ["A", "C", "T"]
+SKETCH_SYMBOLS = ["C", "T"]
 
 # Singleton
 class SemQL(Grammar):
