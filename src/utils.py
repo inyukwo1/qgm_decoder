@@ -274,6 +274,7 @@ def process(sql, db_data):
     process_dict["col_iter"] = col_iter
     process_dict["table_names"] = table_names
     process_dict["tab_set_iter"] = tab_set_iter  # for tab encoding
+    process_dict["question_arg_type"] = question_arg_type
 
     return process_dict
 
@@ -297,12 +298,34 @@ def is_valid(rule_label, col_set_table_dict, sql):
     return flag is False
 
 
-def to_batch_seq(data_list):
+def to_batch_seq(data_list, table_data):
     examples = []
     for data in data_list:
         # src
+        table = table_data[data["db_id"]]
         question_arg = copy.deepcopy(data["question_arg"])
+        process_dict = process(data, table)
 
+        for c_id, col_ in enumerate(process_dict["col_set_iter"]):
+            for q_id, ori in enumerate(process_dict["q_iter_small"]):
+                if ori in col_:
+                    process_dict["col_set_type"][c_id][0] += 1
+
+        for t_id, tab_ in enumerate(process_dict["table_names"]):
+            for q_id, ori in enumerate(process_dict["q_iter_small"]):
+                if ori in tab_:
+                    process_dict["tab_set_type"][t_id][0] += 1
+
+        schema_linking(
+            process_dict["question_arg"],
+            process_dict["question_arg_type"],
+            process_dict["one_hot_type"],
+            process_dict["col_set_type"],
+            process_dict["col_set_iter"],
+            process_dict["tab_set_type"],
+            process_dict["table_names"],
+            data,
+        )
         # column
         col_set_iter = [
             [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
@@ -335,6 +358,8 @@ def to_batch_seq(data_list):
             db_id=data["db_id"],
             db=data["db"],
             data=data,
+            col_hot_type=process_dict["col_set_type"],
+            tab_hot_type=process_dict["tab_set_type"],
         )
 
         example.sql_json = copy.deepcopy(data)
@@ -517,7 +542,9 @@ def load_data_new(
 
     with open(sql_path) as f:
         data = lower_keys(json.load(f))
-        sql_data += data
+        for datum in data:
+            if "FROM (" not in datum["query"]:
+                sql_data += [datum]
 
     # Add db info
     for data in sql_data:
@@ -526,6 +553,8 @@ def load_data_new(
         data["column_names"] = db["column_names"]
         # Append ground truth
         gt_str = SemQL.create_data(data["qgm"])
+        gt_str = data["rule_label"]
+
         gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
         data["gt"] = gt
 
@@ -597,8 +626,8 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type, use_down_schema):
         val_data = down_schema(val_data)
 
     # Parse datasets into exampels:
-    train_data = to_batch_seq(train_data)
-    val_data = to_batch_seq(val_data)
+    train_data = to_batch_seq(train_data, table_data)
+    val_data = to_batch_seq(val_data, table_data)
 
     return train_data, val_data, table_data
 

@@ -50,18 +50,25 @@ class SemQL_Loss_New(Loss):
         super(SemQL_Loss_New, self).__init__()
 
         # Symbols
+        self.root1 = "Root1"
         self.root = "Root"
         self.sel = "Sel"
         self.n = "N"
         self.filter = "Filter"
+        self.order = "Order"
+        self.sup = "Sup"
         self.a = "A"
         self.c = "C"
         self.t = "T"
 
     def _get_key(self, action_node: Symbol, prev_actions):
-        if action_node == self.root:
+        if action_node == self.root1:
+            key = "box_operator"
+        elif action_node == self.sup or action_node == self.order:
+            key = "order"
+        elif action_node == self.root:
             key = "predicate_num"
-        elif action_node == self.sel:
+        elif action_node == self.sel or action_node == self.n:
             key = "head_num"
         elif action_node == self.a:
             prev_symbols = [
@@ -84,5 +91,6 @@ class SemQL_Loss_New(Loss):
         elif action_node == self.t:
             key = "quantifier_tab"
         else:
+            print(action_node)
             raise RuntimeError("Should not be here")
         return key

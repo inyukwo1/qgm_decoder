@@ -2,16 +2,51 @@
 
 * `Ubuntu 16.04`
 * `Python3.6`
-* `Pytorch 1.4.0` or higher
+* `Pytorch 1.4.0`
 
 Install Python dependency: `pip install -r requirements.txt`
+Install radam from https://github.com/LiyuanLucasLiu/RAdam. I.e.,
+```bash
+git clone https://github.com/LiyuanLucasLiu/RAdam.git
+python setup.py build
+python setup.py install
+```
+
 
 ## Running Code
+
+* ra-transformer encoder with qgm decoder:
+```bash
+python train.py encoder=ra_transformer decoder=transformer query_type=all batch_size=8 optimize_freq=16 tag=${something}
+```
+* lstm encoder with qgm decoder:
+```bash
+python train.py encoder=lstm decoder=transformer query_type=all batch_size=8 optimize_freq=16 tag=${something}
+```
+* 
 
 #### Data preparation
 
 * Download [Glove Embedding](https://nlp.stanford.edu/data/wordvecs/glove.42B.300d.zip) and put `glove.42B.300d` under `./data/` directory  
-* Follow instructions under `./qgm/` directiory
+* run `create_semql_qgm_for_all_dataset.sh` under `./preprocess/` directiory
+
+#### Data path hierarchy
+
+data
+|
+|-- spider
+|   |
+|   |-- tables.json
+|   |-- train.json
+|   |-- dev.json
+|   |-- database
+|       |
+|       |...
+|
+|-- (another dataset)
+|
+...
+
 
 #### Training
 
