@@ -480,11 +480,6 @@ def epoch_acc(
         total_acc, is_correct_list = model.decoder.decoders[0].grammar.cal_acc(
             pred, gold
         )
-    elif model_name == "transformer":
-        total_acc_pred, is_correct_list_pred = SemQL.semql.cal_acc(
-            pred, gold
-        )
-        return total_acc_pred, is_correct_list_pred, pred, gold, example_list
     else:
         total_acc, is_correct_list = SemQL.semql.cal_acc(pred, gold)
 
