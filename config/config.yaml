@@ -1,7 +1,7 @@
 defaults:
   - hydra/job_logging: custom
   - hydra/output: custom
-  - encoder: lstm
+  - encoder: ra_transformer
   - decoder: transformer
   - dataset: spider
   - train: default
@@ -29,6 +29,8 @@ optimize_freq: 8
 
 # etc
 use_down_schema: false
+use_lstm_encoder: true
+use_separate_encoder: false
 rule: "noqgm"
 
 #

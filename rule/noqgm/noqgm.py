@@ -93,7 +93,6 @@ class NOQGM(Grammar):
 
         is_correct_list = []
         for p_actions, g_actions in zip(pred_actions, gold_actions):
-            print("pred:{}\ngold:{}\n\n".format(p_actions, g_actions))
             # Sketch
             p_sketch = [item for item in p_actions if item[0] not in SKETCH_SYMBOLS]
             g_sketch = [item for item in g_actions if item[0] not in SKETCH_SYMBOLS]

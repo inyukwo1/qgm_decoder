@@ -17,8 +17,10 @@ class RA_Transformer_Encoder(nn.Module):
         hidden_size = cfg.hidden_size
         dim = hidden_size
         self.is_bert = cfg.is_bert
+        self.use_lstm = cfg.use_lstm_encoder
+        self.encode_separately = cfg.use_separate_encoder
 
-        if not self.is_bert:
+        if self.use_lstm:
             self.sen_lstm = nn.LSTM(
                 dim, hidden_size // 2, bidirectional=True, batch_first=True
             )
@@ -28,12 +30,28 @@ class RA_Transformer_Encoder(nn.Module):
             self.tab_lstm = nn.LSTM(
                 dim, hidden_size // 2, bidirectional=True, batch_first=True
             )
+        if self.encode_separately:
+            # Separated
+            nl_encoder_layer = RATransformerEncoderLayer(
+                d_model=dim, nhead=nhead, nrelation=N_RELATIONS
+            )
+            self.nl_ra_transformer_encoder = RATransformerEncoder(
+                nl_encoder_layer, num_layers=2
+            )
 
+            schema_encoder_layer = RATransformerEncoderLayer(
+                d_model=dim, nhead=nhead, nrelation=N_RELATIONS
+            )
+            self.schema_ra_transformer_encoder = RATransformerEncoder(
+                schema_encoder_layer, num_layers=2
+            )
+
+        # Combined
         encoder_layer = RATransformerEncoderLayer(
             d_model=dim, nhead=nhead, nrelation=N_RELATIONS
         )
         self.ra_transformer_encoder = RATransformerEncoder(
-            encoder_layer, num_layers=layer_num
+            encoder_layer, num_layers=2 if self.encode_separately else layer_num
         )
 
     def forward(
@@ -50,7 +68,7 @@ class RA_Transformer_Encoder(nn.Module):
         relation,
     ):
         # LSTM
-        if not self.is_bert:
+        if self.use_lstm:
             sen = self.encode_with_lstm(sen, sen_len, self.sen_lstm)
             col = self.encode_with_lstm(col, col_len, self.col_lstm)
             tab = self.encode_with_lstm(tab, tab_len, self.tab_lstm)
@@ -64,6 +82,22 @@ class RA_Transformer_Encoder(nn.Module):
         sen = sen.transpose(0, 1)
         col = col.transpose(0, 1)
         tab = tab.transpose(0, 1)
+
+        if self.encode_separately:
+            # encode NL
+            nl_relation = relation[:, :sen_max_len, :sen_max_len]
+            nl_src = sen
+            nl_mask = sen_mask.bool()
+            sen = self.nl_ra_transformer_encoder(nl_src, nl_relation, src_key_padding_mask=nl_mask)
+
+            # encode schema
+            schema_relation = relation[:, sen_max_len:, sen_max_len:]
+            schema_src = torch.cat([col, tab], dim=0)
+            schema_mask = torch.cat([col_mask, tab_mask], dim=1).bool()
+            schema_out = self.schema_ra_transformer_encoder(schema_src, schema_relation, src_key_padding_mask=schema_mask)
+
+            col = schema_out[col_max_len:, :, :]
+            tab = schema_out[:col_max_len, :, :]
 
         # Combine
         src = torch.cat([sen, col, tab], dim=0)
