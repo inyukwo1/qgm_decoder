@@ -18,16 +18,58 @@ class NOQGM(Grammar):
         return NOQGM_Loss(self.symbol_to_sid)
 
     @classmethod
-    def create_data(cls, sql):
+    def create_data(cls, sql, db):
         # json to strings of actions
-        # Check if multiple sql
+        # No nested in the from clause
+        for item in sql["from"]["table_units"]:
+            if item[0] == "sql":
+                return None
         if sql["intersect"] or sql["union"] or sql["except"]:
             # Multiple
-            pass
+            return None
+        elif sql["having"] or sql["groupby"] or sql["orderby"]:
+            return None
         else:
             # Single
-            
+            # Root
+            if sql["where"]:
+                action = "Root(1) "
+            else:
+                action = "Root(0) "
+            # Sel
+            assert sql["select"], "Something is weird {}".format(sql["select"])
+            action += "Sel({}) ".format(len(sql["select"][1])-1)
+            for select in sql["select"][1]:
+                action += "A({}) ".format(select[0])
+                ori_col_id = select[1][1][1]
+                new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
+                if ori_col_id == 0:
+                    tab_id = sql["from"]["table_units"][0][1]
+                else:
+                    tab_id = db["column_names"][ori_col_id][0]
+                action += "C({}) ".format(new_col_id)
+                action += "T({}) ".format(tab_id)
 
+            for idx in range(0, len(sql["where"]), 2):
+                where_cond = sql["where"][idx]
+                if isinstance(where_cond[3], dict):
+                    return None
+                if len(sql["where"]) > idx+1:
+                    assert sql["where"][idx+1] in ["or", "and"]
+                    action += "Filter({}) ".format(0 if sql["where"][idx+1] == 'or' else 1)
+                op_id = where_cond[1] + 6 if where_cond[0] else where_cond[1] + 2
+                action += "Filter({}) ".format(op_id)
+                action += "A({}) ".format(where_cond[2][1][0])
+                ori_col_id = where_cond[2][1][1]
+                new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
+                if ori_col_id == 0:
+                    tab_id = sql["from"]["table_units"][0][1]
+                else:
+                    tab_id = db["column_names"][ori_col_id][0]
+                action += "C({}) ".format(new_col_id)
+                action += "T({}) ".format(tab_id)
+
+        return action[:-1]
 
         # # Simple query only
         # qgm_box = qgm_boxes[0]

@@ -17,6 +17,7 @@ from preprocess.rule.semQL import *
 from decoder.qgm.utils import filter_datas
 import src.relation as relation
 from src.dataset import Batch
+from rule.noqgm.noqgm import NOQGM
 from rule.semql.semql import SemQL
 
 
@@ -399,7 +400,7 @@ def epoch_train(
         examples = sql_data[st:ed]
         examples.sort(key=lambda example: -len(example.src_sent))
 
-        result = model.forward(examples)
+        result = model.forward(examples, is_train=True)
         if decoder_name == "lstm":
             tmp = {key: [] for key in result[0].get_keys()}
             for losses in result:
@@ -506,12 +507,16 @@ def load_data_new(
     # Add db info
     for data in sql_data:
         db = table_data[data["db_id"]]
+        db["col_set"] = data["col_set"]
         data["db"] = db
         data["column_names"] = db["column_names"]
         # Append ground truth
-        gt_str = SemQL.create_data(data["qgm"])
-        gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
-        data["gt"] = gt
+        # gt_str = SemQL.create_data(data["qgm"])
+        gt_str = NOQGM.create_data(data["sql"], db)
+        if gt_str:
+            gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
+            data["gt"] = gt
+    sql_data = [item for item in sql_data if "gt" in item]
 
     # Filter some db
     if is_bert:
@@ -526,7 +531,7 @@ def load_data_new(
         ]
 
     # Filter data with qgm that has nested query
-    sql_data = filter_datas(sql_data, query_type)
+    # sql_data = filter_datas(sql_data, query_type)
 
     return sql_data[:10] if use_small else sql_data
 
@@ -1023,3 +1028,4 @@ def first_diff_symbol(pred, gold):
 
 # Num of column in the select clause
 def wrong_by_col_num_in_select(pred, gold):
+    pass

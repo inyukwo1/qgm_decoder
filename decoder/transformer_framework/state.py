@@ -121,12 +121,10 @@ class TransformerStatePred(TransformerState):
         encoded_tab,
         col_tab_dic,
         start_symbol: Symbol,
-        pred_guide=None,
     ):
         TransformerState.__init__(
             self, encoded_src, encoded_col, encoded_tab, col_tab_dic
         )
-        self.pred_guide = pred_guide
         self.probs = []
         self.preds: List[Action] = []
         self.init_preds: List[Action] = []
@@ -182,14 +180,7 @@ class TransformerStatePred(TransformerState):
         self.probs += [probs]
 
     def apply_pred(self, prod):
-        if self.step_cnt < len(self.pred_guide):
-            action = self.pred_guide[self.step_cnt]
-            if action[0] in ["C", "T"]:
-                pred_idx = action[1]
-            else:
-                pred_idx = SemQL.semql.action_to_aid[action]
-        else:
-            pred_idx = torch.argmax(prod).item()
+        pred_idx = torch.argmax(prod).item()
 
         current_symbol = self.nonterminal_symbol_stack.pop(0)
         if current_symbol == "C":

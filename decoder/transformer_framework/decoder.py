@@ -102,8 +102,6 @@ class TransformerDecoderFramework(nn.Module):
         tab_lens,
         col_tab_dic,
         golds=None,
-        pred_guide=None,
-        is_ensemble=False,
     ):
         # Create states
         if golds:
@@ -127,7 +125,6 @@ class TransformerDecoderFramework(nn.Module):
                     encoded_tab[b_idx][: tab_lens[b_idx]],
                     col_tab_dic[b_idx],
                     SemQL.semql.start_symbol,
-                    pred_guide,
                 )
                 for b_idx in range(b_size)
             ]
@@ -269,7 +266,5 @@ class TransformerDecoderFramework(nn.Module):
 
         if golds:
             return TransformerStateGold.combine_loss(states)
-        elif is_ensemble:
-            return states
         else:
             return TransformerStatePred.get_preds(states)

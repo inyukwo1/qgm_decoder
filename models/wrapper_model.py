@@ -208,7 +208,7 @@ class EncoderDecoderModel(nn.Module):
         table_embeddings,
         schema_embeddings,
         enc_last_cell,
-        is_training=False,
+        is_train=False,
     ):
         if self.decoder_name == "lstm":
             output = self.decoder(
@@ -221,7 +221,7 @@ class EncoderDecoderModel(nn.Module):
                 batch.schema_token_mask,
                 batch.col_tab_dic,
                 batch.tab_col_dic,
-                batch.gt if is_training else None,
+                batch.gt if is_train else None,
             )
             return output
         elif self.decoder_name == "transformer":
@@ -235,7 +235,7 @@ class EncoderDecoderModel(nn.Module):
                 batch.col_num,
                 batch.table_len,
                 batch.col_tab_dic,
-                batch.gt if is_training else None,
+                batch.gt if is_train else None,
             )
             return output
         elif self.decoder_name == "qgm":
@@ -261,7 +261,7 @@ class EncoderDecoderModel(nn.Module):
                 table_embeddings,
                 schema_embeddings,
                 batch.col_tab_dic,
-                batch.gt if is_training else None,
+                batch.gt if is_train else None,
             )
             return output
         elif self.decoder_name == "ra_transformer":
@@ -270,14 +270,14 @@ class EncoderDecoderModel(nn.Module):
                 table_embeddings,
                 schema_embeddings,
                 batch.col_tab_dic,
-                batch.gt if is_training else None,
+                batch.gt if is_train else None,
             )
             return output
         else:
             raise RuntimeError("Unsupported Decoder Name")
         return output
 
-    def forward(self, examples, is_training=False):
+    def forward(self, examples, is_train=False):
         batch = Batch(examples, is_cuda=self.is_cuda)
         # Encode
         src_encodings, table_embeddings, schema_embeddings, enc_last_cell = self.encode(
@@ -285,15 +285,16 @@ class EncoderDecoderModel(nn.Module):
         )
         # Decode
         loss = self.decode(
+            batch,
             src_encodings,
             table_embeddings,
             schema_embeddings,
             enc_last_cell,
-            is_training=is_training,
+            is_train=is_train,
         )
         return loss
 
     def parse(self, examples):
         with torch.no_grad():
-            pred = self.forward(examples, is_training=False)
+            pred = self.forward(examples, is_train=False)
             return pred
