@@ -3,6 +3,7 @@ import copy
 import torch
 import torch.nn as nn
 from rule.semql.semql import SemQL
+from rule.noqgm.noqgm import NOQGM
 from rule.grammar import Action, Symbol, SymbolId
 from decoder.transformer_framework.state import (
     TransformerStateGold,
@@ -56,7 +57,10 @@ class TransformerDecoderFramework(nn.Module):
         self.infer_action_similarity = LazyCalculateSimilarity(dim, dim)
         self.infer_column_similarity = LazyCalculateSimilarity(dim, dim)
         self.infer_table_similarity = LazyCalculateSimilarity(dim, dim)
-        self.grammar = SemQL(dim)
+        if cfg.rule == "noqgm":
+            self.grammar = NOQGM(dim)
+        else:
+            self.grammar = SemQL(dim)
 
         self.col_symbol_id = self.grammar.symbol_to_sid["C"]
         self.tab_symbol_id = self.grammar.symbol_to_sid["T"]
@@ -108,6 +112,7 @@ class TransformerDecoderFramework(nn.Module):
             state_class = TransformerStateGold
             states = [
                 TransformerStateGold(
+                    self.grammar,
                     encoded_src[b_idx][: src_lens[b_idx]],
                     encoded_col[b_idx][: col_lens[b_idx]],
                     encoded_tab[b_idx][: tab_lens[b_idx]],
@@ -120,11 +125,11 @@ class TransformerDecoderFramework(nn.Module):
             state_class = TransformerStatePred
             states = [
                 TransformerStatePred(
+                    self.grammar,
                     encoded_src[b_idx][: src_lens[b_idx]],
                     encoded_col[b_idx][: col_lens[b_idx]],
                     encoded_tab[b_idx][: tab_lens[b_idx]],
                     col_tab_dic[b_idx],
-                    SemQL.semql.start_symbol,
                 )
                 for b_idx in range(b_size)
             ]
@@ -213,10 +218,10 @@ class TransformerDecoderFramework(nn.Module):
                     )
                 else:
                     # Get possible actions from nonterminal stack
-                    possible_action_ids = SemQL.semql.get_possible_aids(symbol)
+                    possible_action_ids = self.grammar.get_possible_aids(symbol)
                     impossible_indices = [
                         idx
-                        for idx in range(SemQL.semql.get_action_len())
+                        for idx in range(self.grammar.get_action_len())
                         if idx not in possible_action_ids
                     ]
 

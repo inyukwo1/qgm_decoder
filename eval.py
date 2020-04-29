@@ -56,7 +56,7 @@ def evaluate(cfg):
 
     # train_out_path = os.path.join(log_path, "train.result")
     dev_out_path = os.path.join(log_path, "dev.result")
-    #
+
     utils.write_eval_result_as(
         dev_out_path,
         dev_list,

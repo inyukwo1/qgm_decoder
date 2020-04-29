@@ -481,7 +481,7 @@ def epoch_acc(
             pred, gold
         )
     else:
-        total_acc, is_correct_list = SemQL.semql.cal_acc(pred, gold)
+        total_acc, is_correct_list = NOQGM.noqgm.cal_acc(pred, gold)
 
     if return_details:
         return total_acc, is_correct_list, pred, gold, example_list
@@ -1023,4 +1023,5 @@ def first_diff_symbol(pred, gold):
 
 # Num of column in the select clause
 def wrong_by_col_num_in_select(pred, gold):
+
     pass

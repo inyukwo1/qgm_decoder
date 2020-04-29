@@ -24,6 +24,7 @@ class Grammar(nn.Module):
     def __init__(self, grammar_path, emb_dim=300):
         super(Grammar, self).__init__()
         # Symbol
+        self.name = None
         self.symbols = []
         self.terminals = []
         self.start_symbol = None

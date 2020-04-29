@@ -11,7 +11,7 @@ class NOQGM(Grammar):
     noqgm: "NOQGM" = None
 
     def __init__(self, emb_dim=300):
-        super(NOQGM, self).__init__("./rule/semql/semql.manifesto", emb_dim)
+        super(NOQGM, self).__init__("./rule/noqgm/noqgm.manifesto", emb_dim)
         NOQGM.noqgm = self
 
     def create_loss_object(self):

@@ -4,18 +4,21 @@ from typing import List, NewType, Dict
 from framework.sequential_monad import State
 from framework.utils import assert_dim
 from rule.semql.semql import SemQL
+from rule.noqgm.noqgm import NOQGM
+from rule.noqgm.noqgm_loss import NOQGM_Loss_New
 from rule.grammar import SymbolId, Symbol, Action
 from rule.semql.semql_loss import SemQL_Loss_New
 
 
 class TransformerState(State):
-    def __init__(self, encoded_src, encoded_col, encoded_tab, col_tab_dic):
+    def __init__(self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic):
         self.step_cnt = 0
         self.refine_step_cnt = 0
         self.encoded_src = encoded_src
         self.encoded_col = encoded_col
         self.encoded_tab = encoded_tab
         self.col_tab_dic = col_tab_dic
+        self.grammar = grammar
 
     @classmethod
     def is_not_done(cls, state) -> bool:
@@ -56,6 +59,7 @@ class TransformerState(State):
 class TransformerStateGold(TransformerState):
     def __init__(
         self,
+        grammar,
         encoded_src,
         encoded_col,
         encoded_tab,
@@ -63,10 +67,15 @@ class TransformerStateGold(TransformerState):
         gold: List[Action],
     ):
         TransformerState.__init__(
-            self, encoded_src, encoded_col, encoded_tab, col_tab_dic
+            self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
         )
         self.gold: List[Action] = gold
-        self.loss = SemQL_Loss_New()
+        if isinstance(self.grammar, NOQGM):
+            self.loss = NOQGM_Loss_New()
+        elif isinstance(self.grammar, SemQL):
+            self.loss = SemQL_Loss_New()
+        else:
+            raise RuntimeError("Bad grammar")
         self.skip_infer = False
         self.skip_refinement = False
         self.skip_arbitrator = False
@@ -77,7 +86,7 @@ class TransformerStateGold(TransformerState):
         return state.step_cnt < len(state.gold)
 
     @classmethod
-    def combine_loss(cls, states: List["TransformerStateGold"]) -> SemQL_Loss_New:
+    def combine_loss(cls, states: List["TransformerStateGold"]):
         return sum([state.loss for state in states])
 
     def is_gold(self):
@@ -107,8 +116,8 @@ class TransformerStateGold(TransformerState):
         if gold_symbol in {"C", "T"}:
             gold_action_idx = gold_action[1]
         else:
-            assert_dim([SemQL.semql.get_action_len()], prod)
-            gold_action_idx = SemQL.semql.action_to_aid[gold_action]
+            assert_dim([self.grammar.get_action_len()], prod)
+            gold_action_idx = self.grammar.action_to_aid[gold_action]
         prev_actions: List[Action] = self.gold[: self.step_cnt]
         self.loss.add(-prod[gold_action_idx], gold_symbol, prev_actions)
 
@@ -116,21 +125,21 @@ class TransformerStateGold(TransformerState):
 class TransformerStatePred(TransformerState):
     def __init__(
         self,
+        grammar,
         encoded_src,
         encoded_col,
         encoded_tab,
         col_tab_dic,
-        start_symbol: Symbol,
     ):
         TransformerState.__init__(
-            self, encoded_src, encoded_col, encoded_tab, col_tab_dic
+            self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
         )
         self.probs = []
         self.preds: List[Action] = []
         self.init_preds: List[Action] = []
         self.refined_preds: List[Action] = []
         self.arbitrated_preds: List[Action] = []
-        self.nonterminal_symbol_stack: List[Symbol] = [start_symbol]
+        self.nonterminal_symbol_stack: List[Symbol] = [grammar.start_symbol]
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
@@ -192,8 +201,8 @@ class TransformerStatePred(TransformerState):
             action: Action = (current_symbol, pred_idx)
             new_nonterminal_symbols = []
         else:
-            action: Action = SemQL.semql.aid_to_action[pred_idx]
-            new_nonterminal_symbols = SemQL.semql.parse_nonterminal_symbol(action)
+            action: Action = self.grammar.aid_to_action[pred_idx]
+            new_nonterminal_symbols = self.grammar.parse_nonterminal_symbol(action)
         self.nonterminal_symbol_stack = (
             new_nonterminal_symbols + self.nonterminal_symbol_stack
         )
