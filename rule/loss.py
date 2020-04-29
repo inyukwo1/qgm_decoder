@@ -23,7 +23,7 @@ class Loss:
         key = self._get_key(action_node, prev_actions)
         assert key in self.loss_dic.keys(), "key:{}".format(key)
         self.loss_dic[key] += value
-        if "col" in key or "agg" in key or "tab" in key:
+        if "col" in key or "agg" in key:
             self.loss_dic["detail"] += value
         else:
             self.loss_dic["sketch"] += value

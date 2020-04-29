@@ -32,11 +32,8 @@ class EncoderDecoderModel(nn.Module):
         self.cfg = cfg
         self.is_bert = cfg.is_bert
         self.is_cuda = cfg.cuda != -1
-        self.use_col_set = cfg.is_col_set
         self.encoder_name = cfg.encoder_name
         self.decoder_name = cfg.decoder_name
-        self.use_separate_encoder = cfg.use_separate_encoder
-        self.random_training = cfg.random_training
         self.embed_size = 1024 if self.is_bert else 300
 
         # Decoder
@@ -81,7 +78,7 @@ class EncoderDecoderModel(nn.Module):
         for idx, key_emb in enumerate(key_embs):
             self.key_embs[idx].weight = nn.Parameter(key_emb.cuda())
 
-    def gen_x_batch(self, q, iidx=0):
+    def gen_x_batch(self, q):
         B = len(q)
         val_embs = []
         val_len = np.zeros(B, dtype=np.int64)
@@ -93,24 +90,16 @@ class EncoderDecoderModel(nn.Module):
                 q_val = []
                 for w in one_q:
                     if w == "[db]":
-                        emb_list.append(self.key_embs[iidx].weight[0])
+                        emb_list.append(self.key_embs.weight[0])
                     elif w == "[table]":
-                        emb_list.append(self.key_embs[iidx].weight[1])
+                        emb_list.append(self.key_embs.weight[1])
                     elif w == "[column]":
-                        emb_list.append(self.key_embs[iidx].weight[2])
+                        emb_list.append(self.key_embs.weight[2])
                     elif w == "[value]":
-                        emb_list.append(self.key_embs[iidx].weight[3])
+                        emb_list.append(self.key_embs.weight[3])
                     else:
                         q_val.append(self.word_emb.get(w, self.word_emb["unk"]))
 
-                q_val2 = list(
-                    map(
-                        lambda x: self.word_emb.get(
-                            x, np.zeros(self.embed_size, dtype=np.float32),
-                        ),
-                        one_q,
-                    )
-                )
                 print("Warning!")
                 raise RuntimeWarning("Check this logic")
             else:
@@ -120,13 +109,13 @@ class EncoderDecoderModel(nn.Module):
                     ws_len = len(ws)
                     for w in ws:
                         if w == "[db]":
-                            emb_list.append(self.key_embs[iidx].weight[0])
+                            emb_list.append(self.key_embs.weight[0])
                         elif w == "[table]":
-                            emb_list.append(self.key_embs[iidx].weight[1])
+                             emb_list.append(self.key_embs.weight[1])
                         elif w == "[column]":
-                            emb_list.append(self.key_embs[iidx].weight[2])
+                            emb_list.append(self.key_embs.weight[2])
                         elif w == "[value]":
-                            emb_list.append(self.key_embs[iidx].weight[3])
+                            emb_list.append(self.key_embs.weight[3])
                         else:
                             numpy_emb = self.word_emb.get(w, self.word_emb["unk"])
                             emb_list.append(torch.tensor(numpy_emb).cuda())

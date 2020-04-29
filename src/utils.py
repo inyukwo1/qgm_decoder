@@ -319,6 +319,18 @@ def to_batch_seq(data_list):
         # src
         question_arg = copy.deepcopy(data["question_arg"])
 
+        # Append [db], [value] types
+        assert len(question_arg) == len(data["question_arg_type"])
+        for idx, type in enumerate(data["question_arg_type"]):
+            if "db" in type:
+                question_arg[idx] = ["[db]"] + question_arg[idx]
+            elif "value" in type:
+                question_arg[idx] = ["[value]"] + question_arg[idx]
+            elif "table" in type:
+                question_arg[idx] = ["[table]"] + question_arg[idx]
+            elif "column" in type:
+                question_arg[idx] = ["[column]"] + question_arg[idx]
+
         # column
         col_set_iter = [
             [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
@@ -459,7 +471,6 @@ def epoch_acc(
 ):
     model.eval()
     pred = []
-
     gold = []
     example_list = []
     for st in tqdm(range(0, len(sql_data), batch_size)):
@@ -467,21 +478,11 @@ def epoch_acc(
         examples = sql_data[st:ed]
         examples.sort(key=lambda example: -len(example.src_sent))
         example_list += examples
-        if model_name == "transformer":
-            tmp = model.parse(examples)
-            pred += tmp["preds"]
-        else:
-            pred += model.parse(examples)
-
+        pred += model.parse(examples)
         gold += [example.gt for example in examples]
 
     # Calculate acc
-    if model_name == "ensemble":
-        total_acc, is_correct_list = model.decoder.decoders[0].grammar.cal_acc(
-            pred, gold
-        )
-    else:
-        total_acc, is_correct_list = NOQGM.noqgm.cal_acc(pred, gold)
+    total_acc, is_correct_list = NOQGM.noqgm.cal_acc(pred, gold)
 
     if return_details:
         return total_acc, is_correct_list, pred, gold, example_list
@@ -577,7 +578,7 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type, use_down_schema):
 
     # filter schema using 1-hop scheme
     if use_down_schema:
-        # train_data = down_schema(train_data)
+        train_data = down_schema(train_data)
         val_data = down_schema(val_data)
 
     # Parse datasets into exampels:
@@ -1022,6 +1023,27 @@ def first_diff_symbol(pred, gold):
     return None
 
 # Num of column in the select clause
-def wrong_by_col_num_in_select(pred, gold):
+def wrong_in_select_col_num(pred, gold):
+    for idx in range(min(len(pred), len(gold))):
+        if pred[idx] != gold[idx] and pred[idx][0] == "Sel":
+            return True
+    return False
 
-    pass
+def wrong_in_agg_op(pred, gold):
+    for idx in range(min(len(pred), len(gold))):
+        if pred[idx] != gold[idx] and pred[idx][0] == "A":
+            for idx2 in range(idx, -1, -1):
+                return True
+    return False
+
+def wrong_in_where_yes_no(pred, gold):
+    for idx in range(min(len(pred), len(gold))):
+        if pred[idx] != gold[idx] and pred[idx][0] == "Root":
+            return True
+    return False
+
+def wrong_in_where_op(pred, gold):
+    for idx in range(min(len(pred), len(gold))):
+        if pred[idx] != gold[idx] and pred[idx][0] == "Filter":
+            return True
+    return False

@@ -39,14 +39,7 @@ class TransformerDecoderFramework(nn.Module):
         self.dim = dim
         self.nhead = nhead
         self.layer_num = layer_num
-        self.use_ct_loss = cfg.use_ct_loss
-        self.use_arbitrator = cfg.use_arbitrator
-        self.refine_all = cfg.refine_all
         self.use_relation = cfg.use_relation
-        self.look_left_only = cfg.look_left_only
-
-        if self.refine_all:
-            assert self.use_ct_loss == False, "Should be false"
 
         # For inference
         self.infer_transformer = LazyTransformerDecoder(dim, nhead, layer_num)
@@ -214,7 +207,7 @@ class TransformerDecoderFramework(nn.Module):
                     prod = self.infer_table_similarity.forward_later(
                         decoder_out[idx],
                         state.get_encoded_tab(),
-                        state.impossible_table_indices(idx),
+                        state.invalid_table_indices(idx),
                     )
                 else:
                     # Get possible actions from nonterminal stack
@@ -251,7 +244,6 @@ class TransformerDecoderFramework(nn.Module):
                 state.apply_loss(state.step_cnt, prod)
             else:
                 assert isinstance(state, TransformerStatePred)
-                state.save_probs(prod)
                 state.apply_pred(prod)
             state.step()
             return prev_tensor_dict

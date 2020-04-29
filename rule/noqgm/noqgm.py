@@ -33,9 +33,9 @@ class NOQGM(Grammar):
             # Single
             # Root
             if sql["where"]:
-                action = "Root(1) "
-            else:
                 action = "Root(0) "
+            else:
+                action = "Root(1) "
             # Sel
             assert sql["select"], "Something is weird {}".format(sql["select"])
             action += "Sel({}) ".format(len(sql["select"][1])-1)
@@ -71,32 +71,6 @@ class NOQGM(Grammar):
 
         return action[:-1]
 
-        # # Simple query only
-        # qgm_box = qgm_boxes[0]
-        #
-        # actions = "Root({}) ".format(0 if qgm_box["body"]["local_predicates"] else 1)
-        #
-        # # Sel
-        # sel_len = len(qgm_box["head"])
-        # actions += "Sel({}) ".format(sel_len - 1)
-        # for idx, head in enumerate(qgm_box["head"]):
-        #     actions += "A({}) ".format(head[0])
-        #     actions += "C({}) ".format(head[1])
-        #     actions += "T({}) ".format(head[2])
-        #
-        # # Filter
-        # p_len = len(qgm_box["body"]["local_predicates"])
-        # for idx, predicate in enumerate(qgm_box["body"]["local_predicates"]):
-        #     if idx + 1 < p_len:
-        #         actions += "Filter({}) ".format(0)
-        #     actions += "Filter({}) ".format(predicate[2] + 1)
-        #     actions += "A({}) ".format(predicate[0])
-        #     actions += "C({}) ".format(predicate[1][0])
-        #     actions += "T({}) ".format(predicate[1][1])
-        #
-        # actions = actions.strip(" ")
-        return actions
-
     def cal_acc(self, pred_actions, gold_actions):
         assert len(pred_actions) == len(gold_actions), "Num diff: {}, {}".format(
             len(pred_actions), len(gold_actions)
@@ -119,6 +93,7 @@ class NOQGM(Grammar):
 
         is_correct_list = []
         for p_actions, g_actions in zip(pred_actions, gold_actions):
+            print("pred:{}\ngold:{}\n\n".format(p_actions, g_actions))
             # Sketch
             p_sketch = [item for item in p_actions if item[0] not in SKETCH_SYMBOLS]
             g_sketch = [item for item in g_actions if item[0] not in SKETCH_SYMBOLS]

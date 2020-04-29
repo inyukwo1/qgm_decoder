@@ -1,19 +1,14 @@
 import torch
-from torch import Tensor
 from typing import List, NewType, Dict
 from framework.sequential_monad import State
 from framework.utils import assert_dim
-from rule.semql.semql import SemQL
-from rule.noqgm.noqgm import NOQGM
 from rule.noqgm.noqgm_loss import NOQGM_Loss_New
 from rule.grammar import SymbolId, Symbol, Action
-from rule.semql.semql_loss import SemQL_Loss_New
 
 
 class TransformerState(State):
     def __init__(self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic):
         self.step_cnt = 0
-        self.refine_step_cnt = 0
         self.encoded_src = encoded_src
         self.encoded_col = encoded_col
         self.encoded_tab = encoded_tab
@@ -70,15 +65,7 @@ class TransformerStateGold(TransformerState):
             self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
         )
         self.gold: List[Action] = gold
-        if isinstance(self.grammar, NOQGM):
-            self.loss = NOQGM_Loss_New()
-        elif isinstance(self.grammar, SemQL):
-            self.loss = SemQL_Loss_New()
-        else:
-            raise RuntimeError("Bad grammar")
-        self.skip_infer = False
-        self.skip_refinement = False
-        self.skip_arbitrator = False
+        self.loss = NOQGM_Loss_New()
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
@@ -102,13 +89,13 @@ class TransformerStateGold(TransformerState):
     def get_current_symbol(self) -> Symbol:
         return self.gold[self.step_cnt][0] if self.step_cnt < len(self.gold) else None
 
-    def impossible_table_indices(self, idx) -> List[int]:
+    def invalid_table_indices(self, idx) -> List[int]:
         prev_col_idx = self.gold[idx - 1][1]
-        possible_indices = self.col_tab_dic[prev_col_idx]
-        impossible_indices = [
-            idx for idx in self.col_tab_dic[0] if idx not in possible_indices
+        valid_indices = self.col_tab_dic[prev_col_idx]
+        invalid_indices = [
+            idx for idx in self.col_tab_dic[0] if idx not in valid_indices
         ]
-        return impossible_indices
+        return invalid_indices
 
     def apply_loss(self, idx, prod: torch.Tensor) -> None:
         gold_action = self.gold[idx]
@@ -134,33 +121,21 @@ class TransformerStatePred(TransformerState):
         TransformerState.__init__(
             self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
         )
-        self.probs = []
         self.preds: List[Action] = []
-        self.init_preds: List[Action] = []
-        self.refined_preds: List[Action] = []
-        self.arbitrated_preds: List[Action] = []
         self.nonterminal_symbol_stack: List[Symbol] = [grammar.start_symbol]
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
         return (
             state.nonterminal_symbol_stack != []
-            and state.step_cnt < 50
+            and state.step_cnt < 60
         )
 
     @classmethod
     def get_preds(
         cls, states: List["TransformerStatePred"]
     ) -> Dict[str, List[List[Action]]]:
-        return {
-            "preds": [state.preds for state in states],
-            "refined_preds": [state.refined_preds for state in states],
-            "arbitrated_preds": [state.arbitrated_preds for state in states],
-            "initial_preds": [state.init_preds for state in states],
-        }
-
-    def get_probs(self, idx) -> List[List[Tensor]]:
-        return self.probs[idx]
+        return [state.preds for state in states]
 
     def is_gold(self):
         return False
@@ -177,16 +152,13 @@ class TransformerStatePred(TransformerState):
             self.nonterminal_symbol_stack[0] if self.nonterminal_symbol_stack else None
         )
 
-    def impossible_table_indices(self, idx) -> List[int]:
+    def invalid_table_indices(self, idx) -> List[int]:
         prev_col_idx = self.preds[idx - 1][1]
-        possible_indices = self.col_tab_dic[prev_col_idx]
-        impossible_indices = [
-            idx for idx in self.col_tab_dic[0] if idx not in possible_indices
+        valid_indices = self.col_tab_dic[prev_col_idx]
+        invalid_indices = [
+            idx for idx in self.col_tab_dic[0] if idx not in valid_indices
         ]
-        return impossible_indices
-
-    def save_probs(self, probs):
-        self.probs += [probs]
+        return invalid_indices
 
     def apply_pred(self, prod):
         pred_idx = torch.argmax(prod).item()
@@ -207,6 +179,3 @@ class TransformerStatePred(TransformerState):
             new_nonterminal_symbols + self.nonterminal_symbol_stack
         )
         self.preds.append(action)
-
-    def infer_pred(self, action: Action, idx: int = 0):
-        self.preds = self.preds[:idx] + [action]

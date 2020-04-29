@@ -28,9 +28,7 @@ eval_freq: 1
 optimize_freq: 8
 
 # etc
-random_training: false
 use_down_schema: false
-use_ensemble: false
 rule: "noqgm"
 
 #

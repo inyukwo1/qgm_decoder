@@ -12,7 +12,6 @@ from torch.utils.tensorboard import SummaryWriter
 from src import utils
 from rule.semql.semql import SemQL
 from models.wrapper_model import EncoderDecoderModel
-
 # from models.LSTMEncoderQGMTransformerDecoder import LSTMEncoderQGMTransformerDecoder
 
 log = logging.getLogger(__name__)
@@ -159,6 +158,7 @@ def train(cfg):
             # Print Accuracy
             log.info("Total Train Acc: {}".format(train_acc["total"]))
             log.info("Total Val Acc: {}\n".format(val_acc["total"]))
+
             # Save if total_acc is higher
             if best_val_acc <= val_acc["total"]:
                 best_val_acc = val_acc["total"]
@@ -178,7 +178,6 @@ def train(cfg):
         scheduler.step()
         if scheduler_bert:
             scheduler_bert.step()
-
 
 if __name__ == "__main__":
     train()

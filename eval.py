@@ -39,20 +39,11 @@ def evaluate(cfg):
     # Evaluation
     log.info("Evaluation:")
 
-    if True:
-        dev_total_acc, dev_is_correct, dev_pred, dev_gold, dev_list = utils.epoch_acc(model, cfg.batch_size, val_data, cfg.decoder_name,)
-        # print("total acc pred: {}".format(total_acc_pred))
-        # print("total acc refined: {}".format(total_acc_refined))
-        # print("total acc arbitrated: {}".format(total_acc_arbitrated))
-        # print("total acc init pred: {}".format(total_acc_init_pred))
-        print("total acc : {}".format(dev_total_acc))
-    else:
-        dev_total_acc, dev_is_correct, dev_pred, dev_gold, dev_list = utils.epoch_acc(
-            model, cfg.batch_size, val_data, cfg.decoder_name, return_details=True,
-        )
+    dev_total_acc, dev_is_correct, dev_pred, dev_gold, dev_list = utils.epoch_acc(
+        model, cfg.batch_size, val_data, cfg.decoder_name, return_details=True)
 
     # print("Train Acc: {}".format(train_total_acc["total"]))
-    # print("Dev Acc: {}".format(dev_total_acc["total"]))
+    print("Dev Acc: {}".format(dev_total_acc["total"]))
 
     # train_out_path = os.path.join(log_path, "train.result")
     dev_out_path = os.path.join(log_path, "dev.result")
@@ -66,10 +57,6 @@ def evaluate(cfg):
         dev_gold,
         use_col_set=cfg.is_col_set,
     )
-
-    # dev_is_correct
-    # indices = [idx for idx, item in enumerate(dev_is_correct) if item == True]
-    # print(indices)
 
     utils.analyze_regarding_schema_size(
         dev_list, dev_is_correct, dev_pred, dev_gold, table_data
