@@ -93,7 +93,8 @@ config
 #### Testing
 
 * Run `eval.py` to evaluate the model
-* .result files will be generated for your analysis. 
+* .result files will be generated for your analysis.
+* For down sizing schema set argument use_down_schema=True 
 
 ##### Arguments
 
