@@ -510,6 +510,7 @@ def epoch_acc(
         if return_details:
             out, details = output
             details_list += details
+            pred += out
         else:
             pred += output
         gold += [example.gt for example in examples]
