@@ -8,20 +8,20 @@ import torch.nn.utils
 
 # from src import utils
 from src.dataset import Batch
-from decoder.qgm.qgm_decoder import QGM_Decoder
+from models.decoder.qgm.qgm_decoder import QGM_Decoder
 
-from decoder.lstm.decoder import LSTM_Decoder
-from decoder.transformer_framework.decoder import TransformerDecoderFramework
+from models.decoder.lstm.decoder import LSTM_Decoder
+from models.decoder.transformer_framework.decoder import TransformerDecoderFramework
 
 # from decoder.semql.semql_decoder import SemQL_Decoder
-from decoder.semql_framework.decoder import SemQLDecoderFramework
-from decoder.ra_transformer_framework.decoder import RATransformerDecoder
-from decoder.ensemble.decoder import EnsembleDecoder
+from models.decoder.semql_framework.decoder import SemQLDecoderFramework
+from models.decoder.ra_transformer_framework.decoder import RATransformerDecoder
+from models.decoder.ensemble.decoder import EnsembleDecoder
 
-from encoder.ra_transformer.encoder import RA_Transformer_Encoder
-from encoder.transformer.encoder import Transformer_Encoder
-from encoder.lstm.encoder import LSTMEncoder
-from encoder.bert.encoder import BERT
+from models.encoder.ra_transformer.encoder import RA_Transformer_Encoder
+from models.encoder.transformer.encoder import Transformer_Encoder
+from models.encoder.lstm.encoder import LSTMEncoder
+from models.encoder.bert.encoder import BERT
 
 # from encoder.irnet.encoder import IRNetLSTMEncoder
 import src.relation as relation

@@ -14,9 +14,7 @@ import logging
 from src.dataset import Example
 from preprocess.rule import lf
 from preprocess.rule.semQL import *
-from decoder.qgm.utils import filter_datas
 import src.relation as relation
-from src.dataset import Batch
 from rule.noqgm.noqgm import NOQGM
 from rule.semql.semql import SemQL
 

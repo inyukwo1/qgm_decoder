@@ -2,8 +2,8 @@
 
 # import copy
 # import preprocess.rule.semQL as define_rule
-from src.models import nn_utils
-
+import torch
+import numpy as np
 
 class Example:
     def __init__(
@@ -145,32 +145,80 @@ class Batch(object):
         return len(self.examples)
 
     def table_dict_mask(self, table_dict):
-        return nn_utils.table_dict_to_mask_tensor(
+        return table_dict_to_mask_tensor(
             self.table_len, table_dict, cuda=self.cuda
         )
 
     @cached_property
     def pred_col_mask(self):
-        return nn_utils.pred_col_mask(self.col_pred, self.col_num)
+        return pred_col_mask(self.col_pred, self.col_num)
 
     @cached_property
     def schema_token_mask(self):
-        return nn_utils.length_array_to_mask_tensor(self.table_len, cuda=self.cuda)
+        return length_array_to_mask_tensor(self.table_len, cuda=self.cuda)
 
     @cached_property
     def table_token_mask(self):
-        return nn_utils.length_array_to_mask_tensor(self.col_num, cuda=self.cuda)
+        return length_array_to_mask_tensor(self.col_num, cuda=self.cuda)
 
     @cached_property
     def table_appear_mask(self):
-        return nn_utils.appear_to_mask_tensor(self.col_num, cuda=self.cuda)
+        return appear_to_mask_tensor(self.col_num, cuda=self.cuda)
 
     @cached_property
     def table_unk_mask(self):
-        return nn_utils.length_array_to_mask_tensor(
+        return length_array_to_mask_tensor(
             self.col_num, cuda=self.cuda, value=None
         )
 
     @cached_property
     def src_token_mask(self):
-        return nn_utils.length_array_to_mask_tensor(self.src_sents_len, cuda=self.cuda)
+        return length_array_to_mask_tensor(self.src_sents_len, cuda=self.cuda)
+
+
+def table_dict_to_mask_tensor(length_array, table_dict, cuda=False):
+    max_len = max(length_array)
+    batch_size = len(table_dict)
+
+    mask = np.ones((batch_size, max_len), dtype=np.uint8)
+    for i, ta_val in enumerate(table_dict):
+        for tt in ta_val:
+            mask[i][tt] = 0
+
+    mask = torch.ByteTensor(mask)
+    return mask.cuda() if cuda else mask
+
+
+def pred_col_mask(value, max_len):
+    max_len = max(max_len)
+    batch_size = len(value)
+    mask = np.ones((batch_size, max_len), dtype=np.uint8)
+    for v_ind, v_val in enumerate(value):
+        for v in v_val:
+            mask[v_ind][v] = 0
+    mask = torch.ByteTensor(mask)
+    return mask.cuda()
+
+def length_array_to_mask_tensor(length_array, cuda=False, value=None):
+    max_len = max(length_array)
+    batch_size = len(length_array)
+
+    mask = np.ones((batch_size, max_len), dtype=np.uint8)
+    for i, seq_len in enumerate(length_array):
+        mask[i][:seq_len] = 0
+
+    if value != None:
+        for b_id in range(len(value)):
+            for c_id, c in enumerate(value[b_id]):
+                if value[b_id][c_id] == [3]:
+                    mask[b_id][c_id] = 1
+
+    mask = torch.ByteTensor(mask)
+    return mask.cuda() if cuda else mask
+
+
+def appear_to_mask_tensor(length_array, cuda=False, value=None):
+    max_len = max(length_array)
+    batch_size = len(length_array)
+    mask = np.zeros((batch_size, max_len), dtype=np.float32)
+    return mask
