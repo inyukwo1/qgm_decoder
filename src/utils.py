@@ -284,12 +284,23 @@ def process(sql, db_data):
     process_dict["col_set_type"] = col_set_type
     process_dict["tab_set_type"] = tab_set_type
     process_dict["question_arg"] = question_arg  # for src encoding
+    process_dict["question_arg_type"] = question_arg_type
     process_dict["one_hot_type"] = one_hot_type
     process_dict["tab_cols"] = tab_cols
     process_dict["tab_ids"] = tab_ids
     process_dict["col_iter"] = col_iter
     process_dict["table_names"] = table_names
     process_dict["tab_set_iter"] = tab_set_iter  # for tab encoding
+
+    for c_id, col_ in enumerate(process_dict["col_set_iter"]):
+        for q_id, ori in enumerate(process_dict["q_iter_small"]):
+            if ori in col_:
+                process_dict["col_set_type"][c_id][0] += 1
+
+    for t_id, tab_ in enumerate(process_dict["table_names"]):
+        for q_id, ori in enumerate(process_dict["q_iter_small"]):
+            if ori in tab_:
+                process_dict["tab_set_type"][t_id][0] += 1
 
     return process_dict
 
@@ -328,8 +339,12 @@ def to_batch_seq(data_list):
                 question_arg[idx] = ["[value]"] + question_arg[idx]
             elif "table" in type:
                 question_arg[idx] = ["[table]"] + question_arg[idx]
-            elif "column" in type:
+            elif "col" in type:
                 question_arg[idx] = ["[column]"] + question_arg[idx]
+            elif "MOST" in type:
+                question_arg[idx] = ["[most]"] + question_arg[idx]
+            elif "MORE" in type:
+                question_arg[idx] = ["[more]"] + question_arg[idx]
 
         # column
         col_set_iter = [
@@ -350,12 +365,26 @@ def to_batch_seq(data_list):
         col_tab_dic = get_col_tab_dic(tab_cols, tab_ids, data)
         tab_col_dic = get_tab_col_dic(col_tab_dic)
 
+        # Hot type
+        process_dict = process(data, data["db"])
+        schema_linking(
+            process_dict["question_arg"],
+            process_dict["question_arg_type"],
+            process_dict["one_hot_type"],
+            process_dict["col_set_type"],
+            process_dict["col_set_iter"],
+            process_dict["tab_set_type"],
+            process_dict["table_names"],
+            data,
+        )
+
         example = Example(
             src_sent=question_arg,  # src encoding (length as well)
             tab_cols=col_set_iter,  # col for encoding
             col_num=len(col_set_iter),  # col length
             table_names=table_names,  # tab encoding
             table_len=len(table_names),  # tab length
+            col_hot_type=process_dict["col_set_type"],
             sql=data["query"],
             col_tab_dic=col_tab_dic,
             tab_col_dic=tab_col_dic,
@@ -467,25 +496,31 @@ def epoch_train(
 
 
 def epoch_acc(
-    model, batch_size, sql_data, model_name, return_details=False,
+    model, batch_size, sql_data, return_details=False,
 ):
     model.eval()
     pred = []
     gold = []
+    details_list = []
     example_list = []
     for st in tqdm(range(0, len(sql_data), batch_size)):
         ed = min(st + batch_size, len(sql_data))
         examples = sql_data[st:ed]
         examples.sort(key=lambda example: -len(example.src_sent))
         example_list += examples
-        pred += model.parse(examples)
+        output = model.parse(examples, return_details=return_details)
+        if return_details:
+            out, details = output
+            details_list += details
+        else:
+            pred += output
         gold += [example.gt for example in examples]
 
     # Calculate acc
     total_acc, is_correct_list = NOQGM.noqgm.cal_acc(pred, gold)
 
     if return_details:
-        return total_acc, is_correct_list, pred, gold, example_list
+        return total_acc, is_correct_list, pred, gold, example_list, details_list
     else:
         return total_acc
 
@@ -767,10 +802,8 @@ def init_log_checkpoint_path(args):
 
 
 def write_eval_result_as(
-    file_name, datas, is_corrects, accs, preds, golds, use_col_set=False
+    file_name, datas, is_corrects, accs, preds, golds
 ):
-    col_key = "col_set" if use_col_set else "col"
-
     def sort_dic(dic):
         if isinstance(dic, dict):
             dic = {key: sort_dic(dic[key]) for key in sorted(dic.keys())}
@@ -847,9 +880,9 @@ def write_eval_result_as(
             # Format column info
             col_infos = [
                 "({}-{}: {})".format(
-                    sql_json["col_table"][idx], idx, sql_json[col_key][idx]
+                    sql_json["col_table"][idx], idx, sql_json["col_set"][idx]
                 )
-                for idx in range(len(sql_json[col_key]))
+                for idx in range(len(sql_json["col_set"]))
             ]
             # Split line by 10 items
             for idx, col_info in enumerate(col_infos):

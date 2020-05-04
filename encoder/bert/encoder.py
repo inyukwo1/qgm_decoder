@@ -1,5 +1,8 @@
 import torch
 import torch.nn as nn
+from torch.autograd import Variable
+
+import numpy as np
 from transformers import *
 
 # Transformers has a unified API
@@ -36,12 +39,28 @@ class BERT(nn.Module):
         self.tab_lstm = torch.nn.LSTM(
             dim, dim // 2, batch_first=True, bidirectional=True
         )
+        self.col_type = nn.Linear(9, self.transformer_dim)
+
+    def input_type(self, values_list):
+        B = len(values_list)
+        val_len = []
+        for value in values_list:
+            val_len.append(len(value))
+        max_len = max(val_len)
+        # for the Begin and End
+        val_emb_array = np.zeros((B, max_len, values_list[0].shape[1]), dtype=np.float32)
+        for i in range(B):
+            val_emb_array[i, :val_len[i], :] = values_list[i][:, :]
+
+        val_inp = torch.from_numpy(val_emb_array).cuda()
+        val_inp_var = Variable(val_inp)
+        return val_inp_var
 
     def forward(self, batch):
         B = len(batch)
         sentences = batch.src_sents
         col_sets = batch.table_sents
-        table_sets = batch.table_names_iter
+        table_sets = batch.table_names
 
         questions = []
         question_lens = []

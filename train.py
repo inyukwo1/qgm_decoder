@@ -76,7 +76,6 @@ def train(cfg):
                 del pretrained_modeled[k]
         model.load_state_dict(pretrained_modeled)
 
-    # model.load_word_emb()
     model.word_emb = None if cfg.is_bert else utils.load_word_emb(cfg.glove_embed_path)
 
     # Log path
@@ -133,10 +132,10 @@ def train(cfg):
                 optimize_freq=cfg.optimize_freq,
             )
             train_acc = utils.epoch_acc(
-                model, cfg.batch_size, train_data, cfg.decoder_name
+                model, cfg.batch_size, train_data
             )
             val_acc = utils.epoch_acc(
-                model, cfg.batch_size, val_data, cfg.decoder_name
+                model, cfg.batch_size, val_data
             )
 
             # Logging to tensorboard
