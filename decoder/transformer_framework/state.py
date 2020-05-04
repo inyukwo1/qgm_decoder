@@ -121,6 +121,7 @@ class TransformerStatePred(TransformerState):
         TransformerState.__init__(
             self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
         )
+        self.probs: List = []
         self.preds: List[Action] = []
         self.nonterminal_symbol_stack: List[Symbol] = [grammar.start_symbol]
 
@@ -161,6 +162,10 @@ class TransformerStatePred(TransformerState):
         return invalid_indices
 
     def apply_pred(self, prod):
+        # Save action prob at current step
+        self.probs += [prod.cpu().numpy().tolist()]
+
+        # Select highest prob action
         pred_idx = torch.argmax(prod).item()
 
         current_symbol = self.nonterminal_symbol_stack.pop(0)

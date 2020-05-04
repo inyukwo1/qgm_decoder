@@ -51,7 +51,7 @@ class RA_Transformer_Encoder(nn.Module):
             d_model=dim, nhead=nhead, nrelation=N_RELATIONS
         )
         self.ra_transformer_encoder = RATransformerEncoder(
-            encoder_layer, num_layers=2 if self.encode_separately else layer_num
+            encoder_layer, num_layers=1 if self.encode_separately else layer_num
         )
 
     def forward(
@@ -66,10 +66,12 @@ class RA_Transformer_Encoder(nn.Module):
         col_mask,
         tab_mask,
         relation,
+        return_details=False,
     ):
         # LSTM
         if self.use_lstm:
             sen = self.encode_with_lstm(sen, sen_len, self.sen_lstm)
+            # Tab, Col 서로 연관 있는 애들 끼리 lstm으로 인코딩해야하지 않을까?
             col = self.encode_with_lstm(col, col_len, self.col_lstm)
             tab = self.encode_with_lstm(tab, tab_len, self.tab_lstm)
 
@@ -103,9 +105,14 @@ class RA_Transformer_Encoder(nn.Module):
         src = torch.cat([sen, col, tab], dim=0)
         src_key_padding_mask = torch.cat([sen_mask, col_mask, tab_mask], dim=1).bool()
 
-        encoded_src = self.ra_transformer_encoder(
-            src, relation, src_key_padding_mask=src_key_padding_mask
-        ).transpose(0, 1)
+        output = self.ra_transformer_encoder(
+            src, relation, src_key_padding_mask=src_key_padding_mask, return_details=return_details,
+        )
+        if return_details:
+            encoded_src, qk_weights_list, qk_relation_weights_list = output
+        else:
+            encoded_src = output
+        encoded_src = encoded_src.transpose(0, 1)
 
         # Get split points
         sen_idx = sen_max_len
@@ -120,7 +127,10 @@ class RA_Transformer_Encoder(nn.Module):
         encoded_col = encoded_src[:, sen_idx:col_idx, :]
         encoded_tab = encoded_src[:, col_idx:tab_idx, :]
 
-        return encoded_sen, encoded_col, encoded_tab
+        if return_details:
+            return encoded_sen, encoded_col, encoded_tab, qk_weights_list, qk_relation_weights_list
+        else:
+            return encoded_sen, encoded_col, encoded_tab
 
     def encode_with_lstm(self, src_emb, src_len, lstm):
         # Sort

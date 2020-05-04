@@ -15,20 +15,33 @@ class RATransformerEncoder(nn.Module):
         self.num_layers = num_layers
         self.norm = norm
 
-    def forward(self, src, relation, mask=None, src_key_padding_mask=None):
+    def forward(self, src, relation, mask=None, src_key_padding_mask=None, return_details=False):
         output = src
+        qk_weights_list = []
+        qk_relation_weights_list = []
 
         for layer in self.layers:
-            output = layer(
+            out = layer(
                 output,
                 relation,
                 src_mask=mask,
                 src_key_padding_mask=src_key_padding_mask,
+                return_details=return_details,
             )
+            if return_details:
+               output, qk_weights, qk_relation_weights = out
+               qk_weights_list += [qk_weights]
+               qk_relation_weights_list += [qk_relation_weights]
+            else:
+                output = out
 
         if self.norm is not None:
             output = self.norm(output)
-        return output
+
+        if return_details:
+            return output, qk_weights_list, qk_relation_weights_list
+        else:
+            return output
 
 
 class RATransformerEncoderLayer(nn.Module):
@@ -53,7 +66,7 @@ class RATransformerEncoderLayer(nn.Module):
         self.relation_k_emb = nn.Embedding(nrelation, self.self_attn.head_dim)
         self.relation_v_emb = nn.Embedding(nrelation, self.self_attn.head_dim)
 
-    def forward(self, src, relation=None, src_mask=None, src_key_padding_mask=None):
+    def forward(self, src, relation=None, src_mask=None, src_key_padding_mask=None, return_details=False):
         # Relation Embedding
         relation_k = self.relation_k_emb(relation) if relation is not None else None
         relation_v = self.relation_v_emb(relation) if relation is not None else None
@@ -67,7 +80,7 @@ class RATransformerEncoderLayer(nn.Module):
         relation_v2 = torch.where(tmp == zeros, zeros, relation_v)
 
         # self Multi-head Attention & Residual & Norm
-        src2 = self.self_attn(
+        output = self.self_attn(
             src,
             src,
             src,
@@ -75,7 +88,12 @@ class RATransformerEncoderLayer(nn.Module):
             relation_v=relation_v2,
             attn_mask=src_mask,
             key_padding_mask=src_key_padding_mask,
+            return_details=return_details,
         )
+        if return_details:
+            src2, qk_weights, qk_relation_weights = output
+        else:
+            src2 = output
         src = src + self.dropout(src2)
         src = self.norm1(src)
 
@@ -84,5 +102,7 @@ class RATransformerEncoderLayer(nn.Module):
         src = src + src2
         src = self.norm2(src)
 
-
-        return src
+        if return_details:
+            return src, qk_weights, qk_relation_weights
+        else:
+            return src

@@ -26,10 +26,14 @@ def evaluate(cfg):
     if cfg.cuda != -1:
         torch.cuda.set_device(cfg.cuda)
     # model = EnsembleWrapper(cfg)
-    model = SequentialEnsemble(cfg)
-    model.load_models(cfg.load_model)
+    # model = SequentialEnsemble(cfg)
+    model = EncoderDecoderModel(cfg)
+    model.load_model(cfg.load_model)
     if cfg.cuda != -1:
         model.cuda()
+
+    # load word embedding
+    model.word_emb = None if cfg.is_bert else utils.load_word_emb(cfg.glove_embed_path)
 
     # Load dataset
     train_data, val_data, table_data = utils.load_dataset(
@@ -39,8 +43,8 @@ def evaluate(cfg):
     # Evaluation
     log.info("Evaluation:")
 
-    dev_total_acc, dev_is_correct, dev_pred, dev_gold, dev_list = utils.epoch_acc(
-        model, cfg.batch_size, val_data, cfg.decoder_name, return_details=True)
+    dev_total_acc, dev_is_correct, dev_pred, dev_gold, dev_list, details_lists = utils.epoch_acc(
+        model, cfg.batch_size, val_data, return_details=True)
 
     # print("Train Acc: {}".format(train_total_acc["total"]))
     print("Dev Acc: {}".format(dev_total_acc["total"]))
@@ -55,7 +59,6 @@ def evaluate(cfg):
         dev_total_acc,
         dev_pred,
         dev_gold,
-        use_col_set=cfg.is_col_set,
     )
 
     utils.analyze_regarding_schema_size(

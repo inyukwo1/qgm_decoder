@@ -25,11 +25,10 @@ from framework.lazy_modules import (
 class RATransformerDecoder(nn.Module):
     def __init__(self, cfg):
         super(RATransformerDecoder, self).__init__()
-        is_bert = cfg.is_bert
         nhead = cfg.nhead
         layer_num = cfg.layer_num
         hidden_size = cfg.hidden_size
-        dim = 1024 if is_bert else hidden_size
+        dim = 1024 if cfg.encoder_name == "bert" else hidden_size
 
         self.dim = dim
         self.nhead = nhead

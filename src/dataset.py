@@ -53,12 +53,12 @@ class Example:
         self.db_id = db_id
         self.db = db
         self.data = data
+        self.col_hot_type = col_hot_type
+        # self.one_hot_type = one_hot_type
+        # self.tab_hot_type = tab_hot_type
         # self.tokenized_src_sent = tokenized_src_sent
         # self.vis_seq = vis_seq
         # self.tab_iter = tab_iter
-        # self.one_hot_type = one_hot_type
-        # self.col_hot_type = col_hot_type
-        # self.tab_hot_type = tab_hot_type
         # self.schema_len = schema_len
         # self.tab_ids = tab_ids
         # self.table_col_name = table_col_name
@@ -129,7 +129,7 @@ class Batch(object):
         #     [" ".join(x) for x in e.table_names] for e in self.examples
         # ]
         # self.src_type = [e.one_hot_type for e in self.examples]
-        # self.col_hot_type = [e.col_hot_type for e in self.examples]
+        self.col_hot_type = [e.col_hot_type for e in self.examples]
         # self.tab_hot_type = [e.tab_hot_type for e in self.examples]
         # self.table_names_iter = [e.tab_iter for e in self.examples]
         # self.tab_ids = [e.tab_ids for e in self.examples]

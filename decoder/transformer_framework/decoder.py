@@ -28,14 +28,13 @@ from framework.lazy_modules import (
 class TransformerDecoderFramework(nn.Module):
     def __init__(self, cfg):
         super(TransformerDecoderFramework, self).__init__()
-        is_bert = cfg.is_bert
-
         nhead = cfg.nhead
         layer_num = cfg.layer_num
         hidden_size = cfg.hidden_size
 
         # Decode Layers
-        dim = 1024 if is_bert else hidden_size
+        dim = 1024 if cfg.encoder_name == "bert" else hidden_size
+        nhead = 8 if cfg.encoder_name == "bert" else nhead
         self.dim = dim
         self.nhead = nhead
         self.layer_num = layer_num
@@ -99,6 +98,7 @@ class TransformerDecoderFramework(nn.Module):
         tab_lens,
         col_tab_dic,
         golds=None,
+        return_details=False,
     ):
         # Create states
         if golds:
@@ -264,4 +264,7 @@ class TransformerDecoderFramework(nn.Module):
         if golds:
             return TransformerStateGold.combine_loss(states)
         else:
-            return TransformerStatePred.get_preds(states)
+            if return_details:
+                return TransformerStatePred.get_preds(states), [state.probs for state in states]
+            else:
+                return TransformerStatePred.get_preds(states)

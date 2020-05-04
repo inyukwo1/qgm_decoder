@@ -1,6 +1,7 @@
 import numpy as np
 
 # import random
+import copy
 import torch
 import torch.nn as nn
 import torch.nn.utils
@@ -30,11 +31,10 @@ class EncoderDecoderModel(nn.Module):
     def __init__(self, cfg):
         super(EncoderDecoderModel, self).__init__()
         self.cfg = cfg
-        self.is_bert = cfg.is_bert
         self.is_cuda = cfg.cuda != -1
         self.encoder_name = cfg.encoder_name
         self.decoder_name = cfg.decoder_name
-        self.embed_size = 1024 if self.is_bert else 300
+        self.embed_size = 1024 if self.encoder_name == "bert" else 300
 
         # Decoder
         if self.decoder_name == "transformer":
@@ -68,15 +68,18 @@ class EncoderDecoderModel(nn.Module):
             raise RuntimeError("Unsupported encoder name")
 
         # Key embeddings
-        self.key_embs = nn.Embedding(4, 300).double().cuda()
+        self.key_embs = nn.Embedding(6, 300).double().cuda()
 
         if self.encoder_name != "bert":
             self.without_bert_params = list(self.parameters(recurse=True))
 
-    def load_model(self):
-        key_embs = self.decoder.load_model()
-        for idx, key_emb in enumerate(key_embs):
-            self.key_embs[idx].weight = nn.Parameter(key_emb.cuda())
+    def load_model(self, pretrained_model_path):
+        pretrained_model = torch.load(pretrained_model_path, map_location=lambda storage, loc: storage)
+        pretrained_modeled = copy.deepcopy(pretrained_model)
+        for k in pretrained_model.keys():
+            if k not in self.state_dict().keys():
+                del pretrained_modeled[k]
+        self.load_state_dict(pretrained_model)
 
     def gen_x_batch(self, q):
         B = len(q)
@@ -97,6 +100,10 @@ class EncoderDecoderModel(nn.Module):
                         emb_list.append(self.key_embs.weight[2])
                     elif w == "[value]":
                         emb_list.append(self.key_embs.weight[3])
+                    elif w == "[most]":
+                        emb_list.append(self.key_embs.weight[4])
+                    elif w == "[more]":
+                        emb_list.append(self.key_embs.weight[5])
                     else:
                         q_val.append(self.word_emb.get(w, self.word_emb["unk"]))
 
@@ -116,6 +123,10 @@ class EncoderDecoderModel(nn.Module):
                             emb_list.append(self.key_embs.weight[2])
                         elif w == "[value]":
                             emb_list.append(self.key_embs.weight[3])
+                        elif w == "[most]":
+                            emb_list.append(self.key_embs.weight[4])
+                        elif w == "[more]":
+                            emb_list.append(self.key_embs.weight[5])
                         else:
                             numpy_emb = self.word_emb.get(w, self.word_emb["unk"])
                             emb_list.append(torch.tensor(numpy_emb).cuda())
@@ -136,7 +147,7 @@ class EncoderDecoderModel(nn.Module):
                 val_emb_array[i, t, :] = val_embs[i][t]
         return val_emb_array
 
-    def encode(self, batch):
+    def encode(self, batch, return_details=False):
         enc_last_cell = None
         if self.encoder_name == "ra_transformer":
             src = self.gen_x_batch(batch.src_sents)
@@ -145,7 +156,7 @@ class EncoderDecoderModel(nn.Module):
 
             relation_matrix = relation.create_batch(batch.relation)
 
-            src_encodings, table_embeddings, schema_embeddings = self.encoder(
+            output = self.encoder(
                 src,
                 col,
                 tab,
@@ -156,7 +167,12 @@ class EncoderDecoderModel(nn.Module):
                 batch.table_token_mask,
                 batch.schema_token_mask,
                 relation_matrix,
+                return_details=return_details,
             )
+            if return_details:
+                src_encodings, table_embeddings, schema_embeddings, qk_weights_list, qk_relation_weights_list = output
+            else:
+                src_encodings, table_embeddings, schema_embeddings = output
         elif self.encoder_name == "transformer":
             (
                 pre_src_encodings,
@@ -188,7 +204,10 @@ class EncoderDecoderModel(nn.Module):
             enc_last_cell = torch.stack([item["last_cell"] for item in out])
         else:
             raise RuntimeError("Unsupported encoder name")
-        return src_encodings, table_embeddings, schema_embeddings, enc_last_cell
+        if return_details:
+            return src_encodings, table_embeddings, schema_embeddings, enc_last_cell, qk_weights_list, qk_relation_weights_list
+        else:
+            return src_encodings, table_embeddings, schema_embeddings, enc_last_cell
 
     def decode(
         self,
@@ -198,6 +217,7 @@ class EncoderDecoderModel(nn.Module):
         schema_embeddings,
         enc_last_cell,
         is_train=False,
+        return_details=False,
     ):
         if self.decoder_name == "lstm":
             output = self.decoder(
@@ -225,22 +245,7 @@ class EncoderDecoderModel(nn.Module):
                 batch.table_len,
                 batch.col_tab_dic,
                 batch.gt if is_train else None,
-            )
-            return output
-        elif self.decoder_name == "qgm":
-            b_indices = torch.arange(len(batch)).cuda()
-            self.decoder.set_variables(
-                self.is_bert,
-                src_encodings,
-                table_embeddings,
-                schema_embeddings,
-                batch.src_token_mask,
-                batch.table_token_mask,
-                batch.schema_token_mask,
-                batch.col_tab_dic,
-            )
-            output = self.decoder.decode(
-                b_indices, None, enc_last_cell, prev_box=None, gold_boxes=batch.qgm
+                return_details=return_details,
             )
             return output
         elif self.decoder_name == "semql":
@@ -266,24 +271,41 @@ class EncoderDecoderModel(nn.Module):
             raise RuntimeError("Unsupported Decoder Name")
         return output
 
-    def forward(self, examples, is_train=False):
+    def forward(self, examples, is_train=False, return_details=False):
         batch = Batch(examples, is_cuda=self.is_cuda)
         # Encode
-        src_encodings, table_embeddings, schema_embeddings, enc_last_cell = self.encode(
-            batch
+        encoder_output = self.encode(
+            batch, return_details=return_details,
         )
+        if return_details:
+            src_encodings, table_embeddings, schema_embeddings, enc_last_cell, qk_weights_list, qk_relation_weights_list = encoder_output
+        else:
+            src_encodings, table_embeddings, schema_embeddings, enc_last_cell = encoder_output
         # Decode
-        loss = self.decode(
+        decoder_output = self.decode(
             batch,
             src_encodings,
             table_embeddings,
             schema_embeddings,
             enc_last_cell,
             is_train=is_train,
+            return_details=return_details,
         )
-        return loss
+        if return_details:
+            output, probs_list = decoder_output
+            details = []
+            for qk_weights, qk_relation_weights, probs in zip(qk_weights_list, qk_relation_weights_list, probs_list):
+                detail = {
+                    "qk_weights": qk_weights,
+                    "qk_relation_weigths": qk_relation_weights,
+                    "probs": probs,
+                }
+                details += [detail]
+            return output, details
+        else:
+            return decoder_output
 
-    def parse(self, examples):
+    def parse(self, examples, return_details=False):
         with torch.no_grad():
-            pred = self.forward(examples, is_train=False)
+            pred = self.forward(examples, is_train=False, return_details=return_details)
             return pred
