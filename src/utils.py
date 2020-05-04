@@ -388,7 +388,6 @@ def to_batch_seq(data_list, table_data):
             sql=data["query"],
             col_tab_dic=col_tab_dic,
             tab_col_dic=tab_col_dic,
-            qgm=data["qgm"],
             relation=data["relation"] if "relation" in data else None,
             gt=data["gt"],
             db_id=data["db_id"],
