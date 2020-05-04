@@ -15,19 +15,6 @@ python setup.py install
 
 ## Running Code
 
-* ra-transformer encoder with qgm decoder:
-```bash
-python train.py encoder=ra_transformer decoder=transformer query_type=all batch_size=8 optimize_freq=16 tag=${something}
-```
-* lstm encoder with qgm decoder:
-```bash
-python train.py encoder=lstm decoder=transformer query_type=all batch_size=8 optimize_freq=16 tag=${something}
-```
-* bert encoder with qgm decoder:
-```bash
-python train.py encoder=bert decoder=transformer query_type=all batch_size=2 optimize_freq=8 tag=${something}
-```
-
 #### Data preparation
 
 * Download [Glove Embedding](https://nlp.stanford.edu/data/wordvecs/glove.42B.300d.zip) and put `glove.42B.300d` under `./data/` directory  
@@ -51,9 +38,6 @@ data
 ...
 ```
 
-#### Training
-
-Run `train.py` to train the model.
 
 ##### Arguments
 
@@ -87,14 +71,38 @@ config
      |-- job_logging
 ```
 
+#### Training
 * You can select config file or change any argument with the command line `python train.py cuda=1 model=qgm dataset=wikisql`
 * Or create your own config file under *config/train/* for convenience.
 
+##### Run `train.py` to train the model.
+
+
+* ra-transformer encoder with qgm decoder:
+```bash
+python train.py encoder=ra_transformer decoder=transformer batch_size=8 optimize_freq=16 tag=${something}
+```
+* lstm encoder with qgm decoder:
+```bash
+python train.py encoder=lstm decoder=transformer batch_size=8 optimize_freq=16 tag=${something}
+```
+* bert encoder with qgm decoder:
+```bash
+python train.py encoder=bert decoder=transformer batch_size=2 optimize_freq=4 tag=${something}
+```
+
 #### Testing
 
-* Run `eval.py` to evaluate the model
-* .result files will be generated for your analysis.
-* For down sizing schema set argument use_down_schema=True 
+* Eval trained model:
+```bash
+python eval.py encoder=ra_transformer decoder=transformer batch_size=1 load_model=logs/${date}/${something}/model/best_model.pt
+```
+* For down sizing schema set argument use_down_schema=True
+```bash
+python eval.py use_down_schema=true encoder=ra_transformer decoder=transformer batch_size=1 load_model=logs/${date}/${something}/model/best_model.pt
+```
+
+* Detailed results will be recorded at `logs/${data}/${something}/dev.result`
 
 ##### Arguments
 
