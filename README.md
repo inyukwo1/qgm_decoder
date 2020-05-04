@@ -103,6 +103,7 @@ python eval.py use_down_schema=true encoder=ra_transformer decoder=transformer b
 ```
 
 * Detailed results will be recorded at `logs/${data}/${something}/dev.result`
+* For parsed grammar, check `rule/noqgm/noqgm.manifesto`
 
 ##### Arguments
 
