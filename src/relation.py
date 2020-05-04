@@ -95,9 +95,9 @@ def create_relation(data, dbs, use_col_set=True):
 
     # Sen & Col
     qc_relation = parse_match_relation(tokens, column_name, "q", "c")
-    # qc_relation = append_db_content_relation("q", qc_relation, column_name, token_types)
+    qc_relation = append_db_content_relation("q", qc_relation, column_name, token_types)
     cq_relation = parse_match_relation(column_name, tokens, "c", "q")
-    # cq_relation = append_db_content_relation("c", cq_relation, column_name, token_types)
+    cq_relation = append_db_content_relation("c", cq_relation, column_name, token_types)
 
     # Sen & Tab
     qt_relation = parse_match_relation(tokens, table, "q", "t")

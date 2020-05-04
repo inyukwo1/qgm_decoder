@@ -84,6 +84,7 @@ class RAMultiheadAttention(nn.Module):
         key_padding_mask=None,
         need_weights=True,
         attn_mask=None,
+        return_details=False,
     ):
         # relation_k : [batch_size, k_len, k_len, dim_of_head]
         # relation_v : [batch_size, k_len, k_len, dim_of_head]
@@ -184,6 +185,31 @@ class RAMultiheadAttention(nn.Module):
                 "attn mask not implemented. check torch.nn.functional.multi_head_attention_forward"
             )
 
+        if return_details:
+            # attn_output_weights_k
+            attn_output_weights_k = attn_output_weights_k.view(
+                bsz, num_heads, tgt_len, src_len
+            )
+            attn_output_weights_k = attn_output_weights_k.masked_fill(
+                key_padding_mask.unsqueeze(1).unsqueeze(2), float("-inf")
+            )
+            attn_output_weights_k = attn_output_weights_k.view(
+                bsz * num_heads, tgt_len, src_len
+            )
+            attn_output_weights_k = nn.functional.softmax(attn_output_weights_k, dim=-1)
+
+            # attn_output_weights_relation_k
+            attn_output_weights_relation_k = attn_output_weights_relation_k.view(
+                bsz, num_heads, tgt_len, src_len
+            )
+            attn_output_weights_relation_k = attn_output_weights_relation_k.masked_fill(
+                key_padding_mask.unsqueeze(1).unsqueeze(2), float("-inf")
+            )
+            attn_output_weights_relation_k = attn_output_weights_relation_k.view(
+                bsz * num_heads, tgt_len, src_len
+            )
+            attn_output_weights_relation_k = nn.functional.softmax(attn_output_weights_relation_k, dim=-1)
+
         if key_padding_mask is not None:
             attn_output_weights = attn_output_weights.view(
                 bsz, num_heads, tgt_len, src_len
@@ -224,4 +250,7 @@ class RAMultiheadAttention(nn.Module):
         attn_output = attn_output.transpose(0, 1).reshape(tgt_len, bsz, embed_dim)
         attn_output = nn.functional.linear(attn_output, out_proj_weight, out_proj_bias)
 
-        return attn_output
+        if return_details:
+            return attn_output, attn_output_weights_k, attn_output_weights_relation_k
+        else:
+            return attn_output

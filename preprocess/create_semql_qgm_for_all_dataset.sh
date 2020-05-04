@@ -2,8 +2,9 @@
 
 semql_path="./preprocess/"
 qgm_path="./rule/qgm/"
+dataset_names=("wikisql" "wikitablequestions")
 #dataset_names=("spider" "wikisql" "wikitablequestions")
-dataset_names=("spider")
+#dataset_names=("spider")
 data_types=("train" "dev" "test")
 
 
@@ -39,16 +40,16 @@ do
         python sql2SemQL.py --data_path ${output} --table_path ${table_data} --output ${output}
         cd ../
 
-        data="../../data/${dataset_name}/${data_type}_original.json"
-        table_data="../../data/${dataset_name}/tables.json"
-        output="../../data/${dataset_name}/${data_type}.json"
-
-        cd ${qgm_path}
-        # Create QGM
-        echo "Start generate QGM from SQL"
-        python sql2qgm.py --db ${table_data} --source ${output} --destin ${output}
-        # Pretty print
-        python -m json.tool ${output} > a && mv a ${output}
-        cd ../../
+#        data="../../data/${dataset_name}/${data_type}_original.json"
+#        table_data="../../data/${dataset_name}/tables.json"
+#        output="../../data/${dataset_name}/${data_type}.json"
+#
+#        cd ${qgm_path}
+#        # Create QGM
+#        echo "Start generate QGM from SQL"
+#        python sql2qgm.py --db ${table_data} --source ${output} --destin ${output}
+#        # Pretty print
+#        python -m json.tool ${output} > a && mv a ${output}
+#        cd ../../
     done
 done

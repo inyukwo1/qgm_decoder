@@ -14,9 +14,8 @@ import logging
 from src.dataset import Example
 from preprocess.rule import lf
 from preprocess.rule.semQL import *
-from decoder.qgm.utils import filter_datas
 import src.relation as relation
-from src.dataset import Batch
+from rule.noqgm.noqgm import NOQGM
 from rule.semql.semql import SemQL
 
 
@@ -118,7 +117,7 @@ def get_table_colNames(tab_ids, tab_cols):
     return result
 
 
-def get_col_table_dict(tab_cols, tab_ids, sql):
+def get_col_tab_dic(tab_cols, tab_ids, sql):
     table_dict = {}
     for c_id, c_v in enumerate(sql["col_set"]):
         for cor_id, cor_val in enumerate(tab_cols):
@@ -134,6 +133,21 @@ def get_col_table_dict(tab_cols, tab_ids, sql):
     col_table_dict[0] = [x for x in range(len(table_dict) - 1)]
 
     return col_table_dict
+
+
+def get_tab_col_dic(col_tab_dic):
+    tab_col_dic = []
+    b_tmp = []
+    tab_len = len(col_tab_dic[0])
+    for t_idx in range(tab_len):
+        tab_tmp = [
+            idx
+            for idx in range(len(col_tab_dic))
+            if t_idx in col_tab_dic[idx]
+        ]
+        b_tmp += [tab_tmp]
+    tab_col_dic += [b_tmp]
+    return tab_col_dic
 
 
 def schema_linking(
@@ -268,6 +282,7 @@ def process(sql, db_data):
     process_dict["col_set_type"] = col_set_type
     process_dict["tab_set_type"] = tab_set_type
     process_dict["question_arg"] = question_arg  # for src encoding
+    process_dict["question_arg_type"] = question_arg_type
     process_dict["one_hot_type"] = one_hot_type
     process_dict["tab_cols"] = tab_cols
     process_dict["tab_ids"] = tab_ids
@@ -275,6 +290,16 @@ def process(sql, db_data):
     process_dict["table_names"] = table_names
     process_dict["tab_set_iter"] = tab_set_iter  # for tab encoding
     process_dict["question_arg_type"] = question_arg_type
+
+    for c_id, col_ in enumerate(process_dict["col_set_iter"]):
+        for q_id, ori in enumerate(process_dict["q_iter_small"]):
+            if ori in col_:
+                process_dict["col_set_type"][c_id][0] += 1
+
+    for t_id, tab_ in enumerate(process_dict["table_names"]):
+        for q_id, ori in enumerate(process_dict["q_iter_small"]):
+            if ori in tab_:
+                process_dict["tab_set_type"][t_id][0] += 1
 
     return process_dict
 
@@ -304,28 +329,23 @@ def to_batch_seq(data_list, table_data):
         # src
         table = table_data[data["db_id"]]
         question_arg = copy.deepcopy(data["question_arg"])
-        process_dict = process(data, table)
 
-        for c_id, col_ in enumerate(process_dict["col_set_iter"]):
-            for q_id, ori in enumerate(process_dict["q_iter_small"]):
-                if ori in col_:
-                    process_dict["col_set_type"][c_id][0] += 1
+        # Append [db], [value] types
+        assert len(question_arg) == len(data["question_arg_type"])
+        for idx, type in enumerate(data["question_arg_type"]):
+            if "db" in type:
+                question_arg[idx] = ["[db]"] + question_arg[idx]
+            elif "value" in type:
+                question_arg[idx] = ["[value]"] + question_arg[idx]
+            elif "table" in type:
+                question_arg[idx] = ["[table]"] + question_arg[idx]
+            elif "col" in type:
+                question_arg[idx] = ["[column]"] + question_arg[idx]
+            elif "MOST" in type:
+                question_arg[idx] = ["[most]"] + question_arg[idx]
+            elif "MORE" in type:
+                question_arg[idx] = ["[more]"] + question_arg[idx]
 
-        for t_id, tab_ in enumerate(process_dict["table_names"]):
-            for q_id, ori in enumerate(process_dict["q_iter_small"]):
-                if ori in tab_:
-                    process_dict["tab_set_type"][t_id][0] += 1
-
-        schema_linking(
-            process_dict["question_arg"],
-            process_dict["question_arg_type"],
-            process_dict["one_hot_type"],
-            process_dict["col_set_type"],
-            process_dict["col_set_iter"],
-            process_dict["tab_set_type"],
-            process_dict["table_names"],
-            data,
-        )
         # column
         col_set_iter = [
             [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
@@ -342,7 +362,21 @@ def to_batch_seq(data_list, table_data):
         # col table dic
         tab_cols = [col[1] for col in data["column_names"]]
         tab_ids = [col[0] for col in data["column_names"]]
-        col_table_dict = get_col_table_dict(tab_cols, tab_ids, data)
+        col_tab_dic = get_col_tab_dic(tab_cols, tab_ids, data)
+        tab_col_dic = get_tab_col_dic(col_tab_dic)
+
+        # Hot type
+        process_dict = process(data, data["db"])
+        schema_linking(
+            process_dict["question_arg"],
+            process_dict["question_arg_type"],
+            process_dict["one_hot_type"],
+            process_dict["col_set_type"],
+            process_dict["col_set_iter"],
+            process_dict["tab_set_type"],
+            process_dict["table_names"],
+            data,
+        )
 
         example = Example(
             src_sent=question_arg,  # src encoding (length as well)
@@ -350,22 +384,23 @@ def to_batch_seq(data_list, table_data):
             col_num=len(col_set_iter),  # col length
             table_names=table_names,  # tab encoding
             table_len=len(table_names),  # tab length
+            col_hot_type=process_dict["col_set_type"],
             sql=data["query"],
-            col_table_dict=col_table_dict,
+            col_tab_dic=col_tab_dic,
+            tab_col_dic=tab_col_dic,
             qgm=data["qgm"],
             relation=data["relation"] if "relation" in data else None,
             gt=data["gt"],
             db_id=data["db_id"],
             db=data["db"],
             data=data,
-            col_hot_type=process_dict["col_set_type"],
-            tab_hot_type=process_dict["tab_set_type"],
         )
 
         example.sql_json = copy.deepcopy(data)
         examples.append(example)
 
     examples.sort(key=lambda elem: len(elem.gt))
+
     return examples
 
 
@@ -406,7 +441,7 @@ def epoch_train(
         examples = sql_data[st:ed]
         examples.sort(key=lambda example: -len(example.src_sent))
 
-        result = model.forward(examples)
+        result = model.forward(examples, is_train=True)
         if decoder_name == "lstm":
             tmp = {key: [] for key in result[0].get_keys()}
             for losses in result:
@@ -461,75 +496,32 @@ def epoch_train(
 
 
 def epoch_acc(
-    model, batch_size, sql_data, model_name, return_details=False,
+    model, batch_size, sql_data, return_details=False,
 ):
     model.eval()
-    if model_name == "transformer":
-        pred = {
-            "preds": [],
-            "refined_preds": [],
-            "arbitrated_preds": [],
-            "initial_preds": [],
-        }
-    else:
-        pred = []
+    pred = []
     gold = []
+    details_list = []
     example_list = []
     for st in tqdm(range(0, len(sql_data), batch_size)):
         ed = min(st + batch_size, len(sql_data))
         examples = sql_data[st:ed]
         examples.sort(key=lambda example: -len(example.src_sent))
         example_list += examples
-        if model_name == "transformer":
-            tmp, _ = model.parse(examples)
-            pred["preds"] += tmp["preds"]
-            pred["refined_preds"] += tmp["refined_preds"]
-            pred["arbitrated_preds"] += tmp["arbitrated_preds"]
-            pred["initial_preds"] += tmp["initial_preds"]
+        output = model.parse(examples, return_details=return_details)
+        if return_details:
+            out, details = output
+            details_list += details
+            pred += out
         else:
-            pred += model.parse(examples)
-
-        if model_name == "lstm":
-            gold += [example.gt for example in examples]
-        elif model_name == "transformer":
-            gold += [example.gt for example in examples]
-        elif model_name == "qgm":
-            gold += [example.qgm for example in examples]
-        elif model_name == "semql":
-            gold += [example.gt for example in examples]
-        elif model_name == "ensemble":
-            for example in examples:
-                gold += [example.gt]
-        else:
-            raise RuntimeError("Unsupported model name")
+            pred += output
+        gold += [example.gt for example in examples]
 
     # Calculate acc
-    if model_name == "ensemble":
-        total_acc, is_correct_list = model.decoder.decoders[0].grammar.cal_acc(
-            pred, gold
-        )
-    elif model_name == "transformer":
-        total_acc_pred, is_correct_list_pred = SemQL.semql.cal_acc(pred["preds"], gold)
-        total_acc_refined, is_correct_list_refined = SemQL.semql.cal_acc(
-            pred["refined_preds"], gold
-        )
-        (total_acc_arbitrated, is_correct_list_arbitrated,) = SemQL.semql.cal_acc(
-            pred["arbitrated_preds"], gold
-        )
-        (total_acc_init_pred, is_correct_list_init_pred,) = SemQL.semql.cal_acc(
-            pred["initial_preds"], gold
-        )
-        return (
-            total_acc_pred,
-            total_acc_refined,
-            total_acc_arbitrated,
-            total_acc_init_pred,
-        )
-    else:
-        total_acc, is_correct_list = SemQL.semql.cal_acc(pred, gold)
+    total_acc, is_correct_list = NOQGM.noqgm.cal_acc(pred, gold)
 
     if return_details:
-        return total_acc, is_correct_list, pred, gold, example_list
+        return total_acc, is_correct_list, pred, gold, example_list, details_list
     else:
         return total_acc
 
@@ -549,14 +541,17 @@ def load_data_new(
     # Add db info
     for data in sql_data:
         db = table_data[data["db_id"]]
+        db["col_set"] = data["col_set"]
         data["db"] = db
         data["column_names"] = db["column_names"]
         # Append ground truth
-        gt_str = SemQL.create_data(data["qgm"])
-        gt_str = data["rule_label"]
 
-        gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
-        data["gt"] = gt
+        # gt_str = SemQL.create_data(data["qgm"])
+        gt_str = NOQGM.create_data(data["sql"], db)
+        if gt_str:
+            gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
+            data["gt"] = gt
+    sql_data = [item for item in sql_data if "gt" in item]
 
     # Filter some db
     if is_bert:
@@ -571,7 +566,7 @@ def load_data_new(
         ]
 
     # Filter data with qgm that has nested query
-    sql_data = filter_datas(sql_data, query_type)
+    # sql_data = filter_datas(sql_data, query_type)
 
     return sql_data[:10] if use_small else sql_data
 
@@ -633,7 +628,7 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type, use_down_schema):
 
 
 def down_schema(datas):
-    for data in datas:
+    for idx, data in enumerate(datas):
         selected_table_indices = list(
             set([item[1] for item in data["gt"] if item[0] == "T"])
         )
@@ -769,17 +764,15 @@ def create_sub_schema(selected_table_ids, table_names, column_names, col_set, gt
     # New gt
     if gt:
         new_gt = []
-        for item in gt:
-            if item[0] == "C":
-                ori_col = item[1]
-                new_col = column_mapping[ori_col]
+        for symbol, local_idx in gt:
+            if symbol == "C":
+                new_col = column_mapping[local_idx]
                 new_gt += [("C", new_col)]
-            elif item[0] == "T":
-                ori_tab = item[1]
-                new_tab = table_mapping[ori_tab]
+            elif symbol == "T":
+                new_tab = table_mapping[local_idx]
                 new_gt += [("T", new_tab)]
             else:
-                new_gt += [item]
+                new_gt += [(symbol, local_idx)]
 
     # Append
     dic = {}
@@ -813,10 +806,8 @@ def init_log_checkpoint_path(args):
 
 
 def write_eval_result_as(
-    file_name, datas, is_corrects, accs, preds, golds, use_col_set=False
+    file_name, datas, is_corrects, accs, preds, golds
 ):
-    col_key = "col_set" if use_col_set else "col"
-
     def sort_dic(dic):
         if isinstance(dic, dict):
             dic = {key: sort_dic(dic[key]) for key in sorted(dic.keys())}
@@ -893,9 +884,9 @@ def write_eval_result_as(
             # Format column info
             col_infos = [
                 "({}-{}: {})".format(
-                    sql_json["col_table"][idx], idx, sql_json[col_key][idx]
+                    sql_json["col_table"][idx], idx, sql_json["col_set"][idx]
                 )
-                for idx in range(len(sql_json[col_key]))
+                for idx in range(len(sql_json["col_set"]))
             ]
             # Split line by 10 items
             for idx, col_info in enumerate(col_infos):
@@ -968,53 +959,55 @@ def analyze_regarding_schema_size(examples, is_correct, preds, golds, table_data
         dbs.add(example.db_id)
         col_len = len(db["column_names"])
         tab_len = len(db["table_names"])
+        col_dic_key = (col_len, len(example.tab_cols))
+        tab_dic_key = (tab_len, len(example.table_names))
 
         # Initialize and count for col
-        if col_len not in col_acc_dic:
-            print("db: {} col_len: {}".format(example.db_id, col_len))
-            col_cnt_tab_cnt[col_len] = set()
-            col_cnt_tab_cnt[col_len].add(tab_len)
+        if col_dic_key not in col_acc_dic:
+            print("db: {} col_len: {}".format(example.db_id, col_dic_key))
+            col_cnt_tab_cnt[col_dic_key] = set()
+            col_cnt_tab_cnt[col_dic_key].add(tab_dic_key)
 
-            col_acc_dic[col_len] = 0
-            col_cnt_dic[col_len] = 1
+            col_acc_dic[col_dic_key] = 0
+            col_cnt_dic[col_dic_key] = 1
             # Detailed analysis
-            col_cnt_act_dic[col_len] = 0
-            col_cnt_col_dic[col_len] = 0
-            col_cnt_tab_dic[col_len] = 0
+            col_cnt_act_dic[col_dic_key] = 0
+            col_cnt_col_dic[col_dic_key] = 0
+            col_cnt_tab_dic[col_dic_key] = 0
         else:
-            col_cnt_dic[col_len] += 1
-            col_cnt_tab_cnt[col_len].add(tab_len)
+            col_cnt_dic[col_dic_key] += 1
+            col_cnt_tab_cnt[col_dic_key].add(tab_dic_key)
 
         # Initialize and count for tab
-        if tab_len not in tab_acc_dic:
-            tab_acc_dic[tab_len] = 0
-            tab_cnt_dic[tab_len] = 1
+        if tab_dic_key not in tab_acc_dic:
+            tab_acc_dic[tab_dic_key] = 0
+            tab_cnt_dic[tab_dic_key] = 1
 
             # Detailed analysis
-            tab_cnt_act_dic[tab_len] = 0
-            tab_cnt_col_dic[tab_len] = 0
-            tab_cnt_tab_dic[tab_len] = 0
+            tab_cnt_act_dic[tab_dic_key] = 0
+            tab_cnt_col_dic[tab_dic_key] = 0
+            tab_cnt_tab_dic[tab_dic_key] = 0
         else:
-            tab_cnt_dic[tab_len] += 1
+            tab_cnt_dic[tab_dic_key] += 1
 
         # Count correct
         if pred == gold:
-            tab_acc_dic[tab_len] += 1
-            col_acc_dic[col_len] += 1
+            tab_acc_dic[tab_dic_key] += 1
+            col_acc_dic[col_dic_key] += 1
         # Count wrong
         else:
             min_len = min(len(pred), len(gold))
             for idx in range(min_len):
                 if pred[idx] != gold[idx]:
                     if gold[idx][0] == "C":
-                        tab_cnt_col_dic[tab_len] += 1
-                        col_cnt_col_dic[col_len] += 1
+                        tab_cnt_col_dic[tab_dic_key] += 1
+                        col_cnt_col_dic[col_dic_key] += 1
                     elif gold[idx][0] == "T":
-                        tab_cnt_tab_dic[tab_len] += 1
-                        col_cnt_tab_dic[col_len] += 1
+                        tab_cnt_tab_dic[tab_dic_key] += 1
+                        col_cnt_tab_dic[col_dic_key] += 1
                     else:
-                        tab_cnt_act_dic[tab_len] += 1
-                        col_cnt_act_dic[col_len] += 1
+                        tab_cnt_act_dic[tab_dic_key] += 1
+                        col_cnt_act_dic[col_dic_key] += 1
                     break
 
     for key, item in sorted(col_acc_dic.items()):
@@ -1057,4 +1050,37 @@ def analyze_regarding_schema_size(examples, is_correct, preds, golds, table_data
     for tab_len in sorted(tab_cnt_col_cnt.keys()):
         col_len = tab_cnt_col_cnt[tab_len]
         print("tab_len: {} col_len: {}".format(tab_len, col_len))
-    print("number of db: {}".format(len(db)))
+    print("number of db: {}".format(len(dbs)))
+
+# Analysis
+def first_diff_symbol(pred, gold):
+    for idx in range(min(len(pred), len(gold))):
+        if pred[idx] != gold[idx]:
+            return pred[idx][0]
+    return None
+
+# Num of column in the select clause
+def wrong_in_select_col_num(pred, gold):
+    for idx in range(min(len(pred), len(gold))):
+        if pred[idx] != gold[idx] and pred[idx][0] == "Sel":
+            return True
+    return False
+
+def wrong_in_agg_op(pred, gold):
+    for idx in range(min(len(pred), len(gold))):
+        if pred[idx] != gold[idx] and pred[idx][0] == "A":
+            for idx2 in range(idx, -1, -1):
+                return True
+    return False
+
+def wrong_in_where_yes_no(pred, gold):
+    for idx in range(min(len(pred), len(gold))):
+        if pred[idx] != gold[idx] and pred[idx][0] == "Root":
+            return True
+    return False
+
+def wrong_in_where_op(pred, gold):
+    for idx in range(min(len(pred), len(gold))):
+        if pred[idx] != gold[idx] and pred[idx][0] == "Filter":
+            return True
+    return False

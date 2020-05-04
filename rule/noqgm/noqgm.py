@@ -1,50 +1,75 @@
 from typing import NewType
 from rule.grammar import Grammar
-from rule.semql.semql_loss import SemQL_Loss
+from rule.noqgm.noqgm_loss import NOQGM_Loss
 
 import rule.utils as utils
-
 
 SKETCH_SYMBOLS = ["C", "T"]
 
 # Singleton
-class SemQL(Grammar):
-    semql: "SemQL" = None
+class NOQGM(Grammar):
+    noqgm: "NOQGM" = None
 
     def __init__(self, emb_dim=300):
-        super(SemQL, self).__init__("./rule/semql/semql.manifesto", emb_dim)
-        SemQL.semql = self
+        super(NOQGM, self).__init__("./rule/noqgm/noqgm.manifesto", emb_dim)
+        NOQGM.noqgm = self
 
     def create_loss_object(self):
-        return SemQL_Loss(self.symbol_to_sid)
+        return NOQGM_Loss(self.symbol_to_sid)
 
     @classmethod
-    def create_data(cls, qgm_boxes):
-        # Simple query only
-        qgm_box = qgm_boxes[0]
+    def create_data(cls, sql, db):
+        # json to strings of actions
+        # No nested in the from clause
+        for item in sql["from"]["table_units"]:
+            if item[0] == "sql":
+                return None
+        if sql["intersect"] or sql["union"] or sql["except"]:
+            # Multiple
+            return None
+        elif sql["having"] or sql["groupby"] or sql["orderby"]:
+            return None
+        else:
+            # Single
+            # Root
+            if sql["where"]:
+                action = "Root(0) "
+            else:
+                action = "Root(1) "
+            # Sel
+            assert sql["select"], "Something is weird {}".format(sql["select"])
+            action += "Sel({}) ".format(len(sql["select"][1])-1)
+            for select in sql["select"][1]:
+                action += "A({}) ".format(select[0])
+                ori_col_id = select[1][1][1]
+                new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
+                if ori_col_id == 0:
+                    tab_id = sql["from"]["table_units"][0][1]
+                else:
+                    tab_id = db["column_names"][ori_col_id][0]
+                action += "C({}) ".format(new_col_id)
+                action += "T({}) ".format(tab_id)
 
-        actions = "Root({}) ".format(0 if qgm_box["body"]["local_predicates"] else 1)
+            for idx in range(0, len(sql["where"]), 2):
+                where_cond = sql["where"][idx]
+                if isinstance(where_cond[3], dict):
+                    return None
+                if len(sql["where"]) > idx+1:
+                    assert sql["where"][idx+1] in ["or", "and"]
+                    action += "Filter({}) ".format(0 if sql["where"][idx+1] == 'or' else 1)
+                op_id = where_cond[1] + 6 if where_cond[0] else where_cond[1] + 2
+                action += "Filter({}) ".format(op_id)
+                action += "A({}) ".format(where_cond[2][1][0])
+                ori_col_id = where_cond[2][1][1]
+                new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
+                if ori_col_id == 0:
+                    tab_id = sql["from"]["table_units"][0][1]
+                else:
+                    tab_id = db["column_names"][ori_col_id][0]
+                action += "C({}) ".format(new_col_id)
+                action += "T({}) ".format(tab_id)
 
-        # Sel
-        sel_len = len(qgm_box["head"])
-        actions += "Sel({}) ".format(sel_len - 1)
-        for idx, head in enumerate(qgm_box["head"]):
-            actions += "A({}) ".format(head[0])
-            actions += "C({}) ".format(head[1])
-            actions += "T({}) ".format(head[2])
-
-        # Filter
-        p_len = len(qgm_box["body"]["local_predicates"])
-        for idx, predicate in enumerate(qgm_box["body"]["local_predicates"]):
-            if idx + 1 < p_len:
-                actions += "Filter({}) ".format(0)
-            actions += "Filter({}) ".format(predicate[2] + 1)
-            actions += "A({}) ".format(predicate[0])
-            actions += "C({}) ".format(predicate[1][0])
-            actions += "T({}) ".format(predicate[1][1])
-
-        actions = actions.strip(" ")
-        return actions
+        return action[:-1]
 
     def cal_acc(self, pred_actions, gold_actions):
         assert len(pred_actions) == len(gold_actions), "Num diff: {}, {}".format(

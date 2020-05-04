@@ -30,7 +30,7 @@ class TransformerEncoder(Module):
         self.num_layers = num_layers
         self.norm = norm
 
-    def forward(self, src, mask=None, src_key_padding_mask=None):
+    def forward(self, src, mask=None, src_key_padding_mask=None, return_details=False):
         # type: (Tensor, Optional[Tensor], Optional[Tensor]) -> Tensor
         r"""Pass the input through the encoder layers in turn.
         Args:
@@ -41,16 +41,27 @@ class TransformerEncoder(Module):
             see the docs in Transformer class.
         """
         output = src
+        qk_weights_list = []
+        qk_relation_weights_list = []
 
         for mod in self.layers:
-            output = mod(
+            out = mod(
                 output, src_mask=mask, src_key_padding_mask=src_key_padding_mask
             )
+            if return_details:
+                output, qk_weights, qk_relation_weights = out
+                qk_weights_list += [qk_weights]
+                qk_relation_weights_list += [qk_relation_weights]
+            else:
+                output = out
 
         if self.norm is not None:
             output = self.norm(output)
 
-        return output
+        if return_details:
+            return output, qk_weights_list, qk_relation_weights_list
+        else:
+            return output
 
 
 class TransformerEncoderLayer(Module):
@@ -94,7 +105,7 @@ class TransformerEncoderLayer(Module):
             state["activation"] = F.relu
         super(TransformerEncoderLayer, self).__setstate__(state)
 
-    def forward(self, src, src_mask=None, src_key_padding_mask=None):
+    def forward(self, src, src_mask=None, src_key_padding_mask=None, return_details=False):
         # type: (Tensor, Optional[Tensor], Optional[Tensor]) -> Tensor
         r"""Pass the input through the encoder layer.
         Args:
@@ -104,15 +115,24 @@ class TransformerEncoderLayer(Module):
         Shape:
             see the docs in Transformer class.
         """
-        src2 = self.self_attn(
-            src, src, src, attn_mask=src_mask, key_padding_mask=src_key_padding_mask
+        output = self.self_attn(
+            src, src, src, attn_mask=src_mask, key_padding_mask=src_key_padding_mask, return_details=return_details
         )[0]
+        if return_details:
+            src2, qk_weights, qk_relation_weights = output
+        else:
+            src2 = output
+
         src = src + self.dropout1(src2)
         src = self.norm1(src)
         src2 = self.linear2(self.dropout(self.activation(self.linear1(src))))
         src = src + self.dropout2(src2)
         src = self.norm2(src)
-        return src
+
+        if return_details:
+            return src, qk_weights, qk_relation_weights
+        else:
+            return src
 
 
 def _get_clones(module, N):

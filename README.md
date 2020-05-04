@@ -23,7 +23,10 @@ python train.py encoder=ra_transformer decoder=transformer query_type=all batch_
 ```bash
 python train.py encoder=lstm decoder=transformer query_type=all batch_size=8 optimize_freq=16 tag=${something}
 ```
-* 
+* bert encoder with qgm decoder:
+```bash
+python train.py encoder=bert decoder=transformer query_type=all batch_size=2 optimize_freq=8 tag=${something}
+```
 
 #### Data preparation
 
@@ -89,7 +92,8 @@ config
 
 #### Testing
 
-Run `eval.py` to evaluate the model
+* Run `eval.py` to evaluate the model
+* .result files will be generated for your analysis. 
 
 ##### Arguments
 
@@ -102,3 +106,7 @@ Run `eval.py` to evaluate the model
 * After running train.py, run `tensorboard --logdir ./logs --bind_all --port [port_num]` in terminal
 * check http://[ip]:6006
 
+#### SQL Support
+
+* tested with simple query + join query.
+* other complex queries are not supported yet..

@@ -3,7 +3,7 @@ from rule.qgm.qgm_loss import QGM_Loss
 
 import rule.utils as utils
 
-SKETCH_SYMBOLS = ["A", "C", "T"]
+SKETCH_SYMBOLS = ["C", "T"]
 
 
 class QGM(Grammar):

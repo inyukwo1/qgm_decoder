@@ -24,6 +24,7 @@ class Grammar(nn.Module):
     def __init__(self, grammar_path, emb_dim=300):
         super(Grammar, self).__init__()
         # Symbol
+        self.name = None
         self.symbols = []
         self.terminals = []
         self.start_symbol = None
@@ -103,6 +104,8 @@ class Grammar(nn.Module):
             cur_state = None
             for line in lines:
                 cur_line += 1
+                if line[0] == "#":
+                    continue
                 line = line.split("#")[0].strip()
                 # Pass empty lines
                 if not line:
