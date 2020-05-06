@@ -196,6 +196,7 @@ class EncoderDecoderModel(nn.Module):
                 last_cell,
             ) = self.encoder(batch)
             enc_last_cell = last_cell
+            qk_weights_list = qk_relation_weights_list = []
         elif self.encoder_name == "lstm":
             out = self.encoder(batch)
             src_encodings = [item["src_encoding"] for item in out]

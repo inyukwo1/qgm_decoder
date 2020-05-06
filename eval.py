@@ -46,7 +46,8 @@ def evaluate(cfg):
     print("Dev Acc: {}".format(dev_total_acc["total"]))
 
     # train_out_path = os.path.join(log_path, "train.result")
-    dev_out_path = os.path.join(log_path, "dev.result")
+    out_file_tag = "_down_schema" if cfg.use_down_schema else ""
+    dev_out_path = os.path.join(log_path, "dev{}.result".format(out_file_tag))
 
     utils.write_eval_result_as(
         dev_out_path,
