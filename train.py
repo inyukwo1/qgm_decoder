@@ -77,6 +77,8 @@ def train(cfg):
         model.load_state_dict(pretrained_modeled)
 
     model.word_emb = None if cfg.is_bert else utils.load_word_emb(cfg.glove_embed_path)
+    if cfg.encoder_name == "lstm":
+        model.encoder.word_emb = model.word_emb
 
     # Log path
     log_model_path = os.path.join(log_path, "model")
