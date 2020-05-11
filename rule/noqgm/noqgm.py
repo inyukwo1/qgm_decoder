@@ -71,6 +71,89 @@ class NOQGM(Grammar):
 
         return action[:-1]
 
+    def to_sql(self, noqgm, data):
+        def get_num(action):
+            left = action.index("(")
+            right = action.index(")")
+            return int(action[left:right+1])
+
+        def get_symbol(action):
+            return action.split("(")[0]
+
+        def parse_ACT(noqgm, last_idx):
+            assert get_symbol(noqgm[last_idx]) == "A"
+            assert get_symbol(noqgm[last_idx+1]) == "C"
+            assert get_symbol(noqgm[last_idx+2]) == "T"
+
+            # Aggregation
+            agg_ops = ["none", "max", "min", "count", "sum", "avg"]
+            agg_num = get_num(noqgm[last_idx])
+
+            # Column and Table
+            col_name = str(get_num(noqgm[last_idx+1]))
+            tab_name = str(get_num(noqgm[last_idx+2]))
+
+            if agg_num != 0:
+                tmp = "{}()".format(agg_ops[agg_num], tab_name, col_name)
+            else:
+                tmp = "{}.{}".format(tab_name, col_name)
+            return tmp
+
+
+        def parse_where_clause(noqgm, cur_idx):
+            where_ops = ["or", "and", "Not", "Between", "=", ">", "<", ">=", "<=", "!=", "In", "Like", "Is", "Exists", "Not In", "Not Like"]
+            where = '{}'
+            while(cur_idx < len(noqgm)):
+                action = noqgm[cur_idx]
+                if get_symbol(action) == "Filter":
+                    # Do something here
+                    num = get_num(action)
+                    if num in [0, 1]:
+                        where = where.format("{} {} {}".format("{}", where_ops[num], "{}"))
+                    else:
+                        where = where.format("{} {} 'value'".format("{}", where_ops[num]))
+                    cur_idx += 1
+                elif get_symbol(action) == "A":
+                    tmp = parse_ACT(noqgm, cur_idx)
+                    where = where.format(tmp)
+                    cur_idx += 3
+                else:
+                    break
+            return where, cur_idx
+
+
+        def parse_select_clause(noqgm, cur_idx):
+            select = ''
+            while (cur_idx < len(noqgm)):
+                action = noqgm[cur_idx]
+                if get_symbol(action) == "Sel":
+                    cur_idx += 1
+                elif get_symbol(action) == "A":
+                    tmp = parse_ACT(noqgm, cur_idx)
+                    select += tmp
+                    cur_idx += 3
+                else:
+                    break
+            return select, cur_idx
+
+        def parse_from_clause(noqgm, sql):
+            # Get all tables
+            # Connect all tables
+            return "NOTHING"
+
+        sql = "SELECT {} FROM {}"
+        assert "Root" in noqgm[0], "weird : {}".format(noqgm)
+        root_num = get_num(noqgm[0])
+        cur_idx, select_clause = parse_select_clause(noqgm, 1)
+        if root_num == 0:
+            sql += " WHERE {}"
+            # Where clause
+            cur_idx, where_clause = parse_where_clause(noqgm, cur_idx)
+        from_clause = parse_from_clause(noqgm)
+
+        sql = sql.format(select_clause, from_clause, where_clause)
+        return sql
+
     def cal_acc(self, pred_actions, gold_actions):
         assert len(pred_actions) == len(gold_actions), "Num diff: {}, {}".format(
             len(pred_actions), len(gold_actions)

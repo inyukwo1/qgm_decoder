@@ -17,7 +17,7 @@ from preprocess.rule.semQL import *
 import src.relation as relation
 from rule.noqgm.noqgm import NOQGM
 from rule.semql.semql import SemQL
-
+from heat_map import *
 
 wordnet_lemmatizer = WordNetLemmatizer()
 log = logging.getLogger(__name__)
@@ -380,6 +380,7 @@ def to_batch_seq(data_list, table_data):
 
         example = Example(
             src_sent=question_arg,  # src encoding (length as well)
+            src_sent_type=process_dict["question_arg_type"],
             tab_cols=col_set_iter,  # col for encoding
             col_num=len(col_set_iter),  # col length
             table_names=table_names,  # tab encoding
@@ -567,7 +568,7 @@ def load_data_new(
     # Filter data with qgm that has nested query
     # sql_data = filter_datas(sql_data, query_type)
 
-    return sql_data[:10] if use_small else sql_data
+    return sql_data[:20] if use_small else sql_data
 
 
 def load_dataset(is_toy, is_bert, dataset_path, query_type, use_down_schema):
@@ -603,6 +604,10 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type, use_down_schema):
     # Load data
     train_data = load_data_new(train_path, table_data, is_toy, is_bert, query_type)
     val_data = load_data_new(val_path, table_data, is_toy, is_bert, query_type)
+
+    # # Append sql
+    # for data in train_data:
+    #     tmp = NOQGM.to_sql(data["gt"], data)
 
     # Create relations
     train_data = [
@@ -841,17 +846,18 @@ def write_eval_result_as(
             f.write("ans:    {}\n".format(ans))
             f.write("db_id:  {}\n".format(sql_json["db_id"]))
             f.write("SQL:    {}\n".format(sql_json["query"]))
+
             # Pretty print question and question type
             q_list = []
             q_type_list = []
-            for idx in range(len(sql_json["question_arg"])):
-                q = " ".join(sql_json["question_arg"][idx])
+            for idx_2 in range(len(sql_json["question_arg"])):
+                q = " ".join(sql_json["question_arg"][idx_2])
                 try:
-                    q_type = " ".join(sql_json["question_arg_type"][idx])
+                    q_type = " ".join(sql_json["question_arg_type"][idx_2])
                 except:
                     q_type = " ".join(
-                        [sql_json["question_arg_type"][idx][0]]
-                        + sql_json["question_arg_type"][idx][1]
+                        [sql_json["question_arg_type"][idx_2][0]]
+                        + sql_json["question_arg_type"][idx_2][1]
                     )
                 q_pad_len = max(len(q), len(q_type)) - len(q)
                 q_type_pad_len = max(len(q), len(q_type)) - len(q_type)
@@ -866,9 +872,7 @@ def write_eval_result_as(
             f.write("\nq:      | {} |\n".format(" | ".join(q_list)))
             f.write("q_type: | {} |\n".format(" | ".join(q_type_list)))
 
-            f.write(
-                "\ntable:  {}\n".format(
-                    str(
+            tab_tmp = str(
                         " ".join(
                             [
                                 "<{}: {}>".format(idx, sql_json["table_names"][idx])
@@ -876,21 +880,25 @@ def write_eval_result_as(
                             ]
                         )
                     )
-                )
+            f.write(
+                "\ntable:  {}\n".format(tab_tmp)
             )
             # To-Do: Need to print column's parent table as well
             f.write("column: ")
             # Format column info
             col_infos = [
                 "({}-{}: {})".format(
-                    sql_json["col_table"][idx], idx, sql_json["col_set"][idx]
+                    sql_json["col_table"][idx_2], idx_2, sql_json["col_set"][idx_2]
                 )
-                for idx in range(len(sql_json["col_set"]))
+                for idx_2 in range(len(sql_json["col_set"]))
             ]
             # Split line by 10 items
-            for idx, col_info in enumerate(col_infos):
-                if idx % 10 == 0 and idx != 0:
+            col_tmp = ""
+            for idx_2, col_info in enumerate(col_infos):
+                if idx_2 % 10 == 0 and idx_2 != 0:
                     f.write("\n\t")
+                    col_tmp += "\n\t"
+                col_tmp += "{} ".format(col_info)
                 f.write("{} ".format(col_info))
 
             f.write("\n\ngold:   {}\n".format(gold))
@@ -1083,3 +1091,39 @@ def wrong_in_where_op(pred, gold):
         if pred[idx] != gold[idx] and pred[idx][0] == "Filter":
             return True
     return False
+
+def save_data_for_analysis(tag, datas, pred, gold, details_list, dataset, save_path):
+    log = {
+        'tag': tag,
+        'dataset': [{
+            'name': dataset,
+            'path': '/home/hkkang/debugging/irnet_qgm_transformer/data/spider/',
+        }],
+        'data': [],
+        'grammar': ["{} -> {}".format(value[0],NOQGM.noqgm.actions[value[0]][value[1]]) for key, value in NOQGM.noqgm.aid_to_action.items()],
+    }
+
+    for idx, (data, details) in enumerate(zip(datas, details_list)):
+        data_log = {}
+        data_log['idx'] = idx
+        data_log['query'] = [' '.join(tmp) for tmp in data.src_sent]
+        data_log['columns'] = [' '.join(tmp) for tmp in data.tab_cols]
+        data_log['tables'] = [' '.join(tmp) for tmp in data.table_names]
+        data_log['db'] = data.db_id,
+        data_log['gold'] = gold[idx]
+        data_log['pred'] = pred[idx]
+        for layer_idx, (weight_tensors, relation_weight_tensors) in enumerate(zip(details['qk_weights'], details['qk_relation_weights'])):
+            weight_tensor_key = 'weight_tensors_{}'.format(layer_idx)
+            relation_tensor_key = 'relation_weight_tensors_{}'.format(layer_idx)
+            data_log[weight_tensor_key] = []
+            data_log[relation_tensor_key] = []
+            for head_idx, (head_weight_tensor, head_relation_weight_tensor) in enumerate(zip(weight_tensors, relation_weight_tensors)):
+                data_log[weight_tensor_key] += [head_weight_tensor.cpu().numpy().tolist()]
+                data_log[relation_tensor_key] += [head_relation_weight_tensor.cpu().numpy().tolist()]
+        data_log['pred_tensors'] = details["probs"]
+        log['data'] += [data_log]
+
+    # Save
+    log_file_path = os.path.join(save_path, 'result.pkl')
+    with open(log_file_path, 'wb') as f:
+        pickle.dump(log, f)

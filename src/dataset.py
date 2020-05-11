@@ -9,6 +9,7 @@ class Example:
     def __init__(
         self,
         src_sent,
+        src_sent_type=None,
         tgt_actions=None,
         tab_cols=None,
         col_num=None,
@@ -38,6 +39,7 @@ class Example:
         tokenized_src_sent=None,
     ):
         self.src_sent = src_sent
+        self.src_sent_type = src_sent_type
         self.tab_cols = tab_cols
         self.col_num = col_num
         self.sql = sql
@@ -106,6 +108,7 @@ class Batch(object):
         self.examples = examples
 
         self.src_sents = [e.src_sent for e in self.examples]
+        self.src_sents_type = [e.src_sent_type for e in self.examples]
         self.src_sents_len = [len(e.src_sent) for e in self.examples]
         self.table_sents = [e.tab_cols for e in self.examples]
         self.col_num = [e.col_num for e in self.examples]
