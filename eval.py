@@ -51,17 +51,10 @@ def evaluate(cfg):
     out_file_tag = "_down_schema" if cfg.use_down_schema else ""
     dev_out_path = os.path.join(log_path, "dev{}.result".format(out_file_tag))
 
-    # Write tensorboard file
-    tensorboard_log_path = os.path.join(log_path, "result")
-
-    print(tensorboard_log_path)
-    summary_writer = SummaryWriter(tensorboard_log_path)
     dataset = "spider"
-    summary_writer.add_text("datasets", dataset, 0)
-    summary_writer.add_text("{}_path".format(dataset), "/home/hkkang/debugging/irnet_qgm_transformer/data/", 0)
-
     # Create data for analysis
     tag = log_path.split("/")[-1]
+
     utils.save_data_for_analysis(tag, dev_list, dev_pred, dev_gold, details_lists, dataset, log_path)
 
     utils.write_eval_result_as(

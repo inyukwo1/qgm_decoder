@@ -1092,7 +1092,41 @@ def wrong_in_where_op(pred, gold):
             return True
     return False
 
-def save_data_for_analysis(tag, datas, pred, gold, details_list, dataset, save_path):
+def categorize(pred, gold):
+    where_flag = False
+    if pred == gold:
+        return 'None'
+    for idx in range(min(len(pred), len(gold))):
+        pred_action_symbol = pred[idx][0]
+        where_flag = where_flag or pred_action_symbol == "Filter"
+        if pred[idx] != gold[idx]:
+            # Determine why
+            if pred_action_symbol == "T":
+                reason = 'table'
+            elif pred_action_symbol == "C":
+                if pred[idx][1] == 0 or gold[idx][1] == 0:
+                    reason = 'column_start'
+                else:
+                    reason = 'column'
+            else:
+                # Structural reason
+                if pred_action_symbol == "Sel":
+                    reason = 'select_num_of_column'
+                elif pred_action_symbol == "A" and not where_flag:
+                    reason = 'select_agg'
+                elif pred_action_symbol == "Root":
+                    reason = 'where_existence'
+                elif pred_action_symbol == "Filter":
+                    if pred[idx][1] in [0, 1] or gold[idx][1] in [0,1]:
+                        reason = 'where_num'
+                    else:
+                        reason = 'where_operator'
+                else:
+                    raise RuntimeError("Should not be here")
+            return reason
+    raise RuntimeError("should not be here")
+
+def save_data_for_analysis(tag, datas, preds, golds, details_list, dataset, save_path):
     log = {
         'tag': tag,
         'dataset': [{
@@ -1102,25 +1136,64 @@ def save_data_for_analysis(tag, datas, pred, gold, details_list, dataset, save_p
         'data': [],
         'grammar': ["{} -> {}".format(value[0],NOQGM.noqgm.actions[value[0]][value[1]]) for key, value in NOQGM.noqgm.aid_to_action.items()],
     }
+    # Create folder for image
+    image_folder_path = os.path.join(save_path, "images")
+    if not os.path.exists(image_folder_path):
+        print(image_folder_path)
+        os.makedirs(image_folder_path)
 
-    for idx, (data, details) in enumerate(zip(datas, details_list)):
+    for idx in tqdm(range(len(datas))):
+        data = datas[idx]
+        details = details_list[idx]
+        
         data_log = {}
         data_log['idx'] = idx
         data_log['query'] = [' '.join(tmp) for tmp in data.src_sent]
         data_log['columns'] = [' '.join(tmp) for tmp in data.tab_cols]
         data_log['tables'] = [' '.join(tmp) for tmp in data.table_names]
         data_log['db'] = data.db_id,
-        data_log['gold'] = gold[idx]
-        data_log['pred'] = pred[idx]
+        data_log['gold'] = golds[idx]
+        data_log['pred'] = preds[idx]
+
+        # Create tensor image and save its path
         for layer_idx, (weight_tensors, relation_weight_tensors) in enumerate(zip(details['qk_weights'], details['qk_relation_weights'])):
             weight_tensor_key = 'weight_tensors_{}'.format(layer_idx)
             relation_tensor_key = 'relation_weight_tensors_{}'.format(layer_idx)
             data_log[weight_tensor_key] = []
             data_log[relation_tensor_key] = []
-            for head_idx, (head_weight_tensor, head_relation_weight_tensor) in enumerate(zip(weight_tensors, relation_weight_tensors)):
-                data_log[weight_tensor_key] += [head_weight_tensor.cpu().numpy().tolist()]
-                data_log[relation_tensor_key] += [head_relation_weight_tensor.cpu().numpy().tolist()]
-        data_log['pred_tensors'] = details["probs"]
+            for head_idx, (head_weight_tensor, relation_head_weight_tensor) in enumerate(zip(weight_tensors, relation_weight_tensors)):
+                # Create nl
+                nl = data_log["query"] + data_log["columns"] + data_log["tables"]
+                # weight tensor
+                value = head_weight_tensor.cpu().numpy()
+                image_path = os.path.join(image_folder_path, "{}_att_layer_{}_head_{}.png".format(idx, layer_idx, head_idx))
+                draw_heat_map(nl, value, 'att_layer_{}_head_{}'.format(layer_idx, head_idx), image_path)
+                data_log[weight_tensor_key] += [image_path]
+
+                # relation weight tensor
+                value = relation_head_weight_tensor.cpu().numpy()
+                image_path = os.path.join(image_folder_path, "{}_relation_att_layer_{}_head_{}.png".format(idx, layer_idx, head_idx))
+                draw_heat_map(nl, value, 'relation_att_layer_{}_head_{}'.format(layer_idx, head_idx), image_path)
+                data_log[relation_tensor_key] += [image_path]
+
+        # Create prob image and save its path
+        inference_key = 'inference'
+        data_log[inference_key] = []
+        for pred_idx, (value, pred_action) in enumerate(zip(details["probs"], preds[idx])):
+            key = "inference step {}".format(pred_idx)
+            if pred_action[0] == "C":
+                arg1 = data_log["columns"]
+            elif pred_action[0] == "T":
+                arg1 = data_log["tables"]
+            else:
+                arg1 = log["grammar"]
+            image_path = os.path.join(image_folder_path, "{}_inference_{}.png".format(idx, pred_idx))
+            draw_inference_score(arg1, value, key, image_path)
+            data_log[inference_key] += [image_path]
+
+
+        # Detailed Analysis with pred and gold
+        data_log['filter'] = categorize(preds[idx], golds[idx])
         log['data'] += [data_log]
 
     # Save
