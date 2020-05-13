@@ -33,14 +33,18 @@ class RA_Transformer_Encoder(nn.Module):
         if self.encode_separately:
             # Separated
             nl_encoder_layer = RATransformerEncoderLayer(
-                d_model=dim, nhead=nhead, nrelation=N_RELATIONS
+                d_model=dim, nhead=nhead, nrelation=N_RELATIONS,
+                change_relation_contribution=cfg.change_relation_contribution,
+                explicit_relation_feature=cfg.explicit_relation_feature,
             )
             self.nl_ra_transformer_encoder = RATransformerEncoder(
                 nl_encoder_layer, num_layers=2
             )
 
             schema_encoder_layer = RATransformerEncoderLayer(
-                d_model=dim, nhead=nhead, nrelation=N_RELATIONS
+                d_model=dim, nhead=nhead, nrelation=N_RELATIONS,
+                change_relation_contribution=cfg.change_relation_contribution,
+                explicit_relation_feature=cfg.explicit_relation_feature,
             )
             self.schema_ra_transformer_encoder = RATransformerEncoder(
                 schema_encoder_layer, num_layers=2
@@ -48,7 +52,9 @@ class RA_Transformer_Encoder(nn.Module):
 
         # Combined
         encoder_layer = RATransformerEncoderLayer(
-            d_model=dim, nhead=nhead, nrelation=N_RELATIONS
+            d_model=dim, nhead=nhead, nrelation=N_RELATIONS,
+            change_relation_contribution=cfg.change_relation_contribution,
+            explicit_relation_feature=cfg.explicit_relation_feature,
         )
         self.ra_transformer_encoder = RATransformerEncoder(
             encoder_layer, num_layers=1 if self.encode_separately else layer_num

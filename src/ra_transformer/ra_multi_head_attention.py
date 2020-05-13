@@ -13,6 +13,8 @@ class RAMultiheadAttention(nn.Module):
         add_zero_attn=False,
         kdim=None,
         vdim=None,
+        change_relation_contribution=False,
+        explicit_relation_feature=False,
     ):
         super(RAMultiheadAttention, self).__init__()
         self.embed_dim = embed_dim
@@ -53,6 +55,11 @@ class RAMultiheadAttention(nn.Module):
             self.bias_v = nn.parameter.Parameter(torch.empty(1, 1, embed_dim))
         else:
             self.bias_k = self.bias_v = None
+
+        self.explicit_relation_feature = explicit_relation_feature
+        self.change_relation_contribution = change_relation_contribution
+        if change_relation_contribution:
+            self.relation_parameter = nn.parameter.Parameter(torch.Tensor(num_heads, self.head_dim, 1))
 
         self.add_zero_attn = add_zero_attn
 
@@ -160,7 +167,14 @@ class RAMultiheadAttention(nn.Module):
         # q k
         attn_output_weights_k = torch.bmm(q, k.transpose(1, 2))
 
-        if qkv_same and relation_k is not None:
+        if self.change_relation_contribution:
+            r_k = relation_k.unsqueeze(1).expand(-1, num_heads, -1, -1, -1)
+            r_k = r_k.reshape(bsz * num_heads, tgt_len*tgt_len, head_dim)
+            relation_parameter = self.relation_parameter.expand(bsz, -1, -1, -1)
+            relation_parameter = relation_parameter.reshape(bsz*num_heads, -1, 1)
+            attn_output_weights_relation_k = torch.bmm(r_k, relation_parameter).view(bsz*num_heads,tgt_len, tgt_len)
+
+        elif qkv_same and relation_k is not None:
             # q r_k
             q = q.reshape(bsz * num_heads * tgt_len, 1, head_dim)
             r_k = relation_k.unsqueeze(1).expand(-1, num_heads, -1, -1, -1)
@@ -230,7 +244,7 @@ class RAMultiheadAttention(nn.Module):
         attn_output_v = torch.bmm(attn_output_weights, v)
 
         # qk v_k
-        if qkv_same and relation_v is not None:
+        if qkv_same and relation_v is not None and self.explicit_relation_feature:
             attn_output_weights = attn_output_weights.view(
                 bsz * num_heads * tgt_len, 1, tgt_len
             )
@@ -242,7 +256,7 @@ class RAMultiheadAttention(nn.Module):
         # Combine
         attn_output = (
             attn_output_v + attn_output_r_v
-            if qkv_same and relation_v is not None
+            if qkv_same and relation_v is not None and self.explicit_relation_feature
             else attn_output_v
         )
 

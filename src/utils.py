@@ -1095,7 +1095,7 @@ def wrong_in_where_op(pred, gold):
 def categorize(pred, gold):
     where_flag = False
     if pred == gold:
-        return 'None'
+        return True, 'None'
     for idx in range(min(len(pred), len(gold))):
         pred_action_symbol = pred[idx][0]
         where_flag = where_flag or pred_action_symbol == "Filter"
@@ -1123,8 +1123,7 @@ def categorize(pred, gold):
                         reason = 'where_operator'
                 else:
                     raise RuntimeError("Should not be here")
-            return reason
-    raise RuntimeError("should not be here")
+            return False, reason
 
 def save_data_for_analysis(tag, datas, preds, golds, details_list, dataset, save_path):
     log = {
