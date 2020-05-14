@@ -5,7 +5,7 @@ from src.ra_transformer.ra_transformer_encoder import (
     RATransformerEncoder,
     RATransformerEncoderLayer,
 )
-from src.relation import N_RELATIONS
+from src.relation import N_RELATIONS, RELATION_LIST
 
 
 class RA_Transformer_Encoder(nn.Module):
@@ -17,20 +17,30 @@ class RA_Transformer_Encoder(nn.Module):
         hidden_size = cfg.hidden_size
         dim = hidden_size
         self.is_bert = cfg.is_bert
-        self.use_lstm = cfg.use_lstm_encoder
-        self.encode_separately = cfg.use_separate_encoder
+        self.use_nl_lstm = cfg.use_nl_lstm_encoder
+        self.use_col_lstm = cfg.use_col_lstm_encoder
+        self.use_tab_lstm = cfg.use_tab_lstm_encoder
 
-        if self.use_lstm:
+        self.use_nl_rat = cfg.use_nl_rat_encoder
+        self.use_schema_rat = cfg.use_schema_rat_encoder
+
+        # layer num
+        nl_rat_num_layer = cfg.nl_rat_num_layer
+        schema_rat_num_layer = cfg.schema_rat_num_layer
+
+        if self.use_nl_lstm:
             self.sen_lstm = nn.LSTM(
                 dim, hidden_size // 2, bidirectional=True, batch_first=True
             )
+        if self.use_col_lstm:
             self.col_lstm = nn.LSTM(
                 dim, hidden_size // 2, bidirectional=True, batch_first=True
             )
+        if self.use_tab_lstm:
             self.tab_lstm = nn.LSTM(
                 dim, hidden_size // 2, bidirectional=True, batch_first=True
             )
-        if self.encode_separately:
+        if self.use_nl_rat:
             # Separated
             nl_encoder_layer = RATransformerEncoderLayer(
                 d_model=dim, nhead=nhead, nrelation=N_RELATIONS,
@@ -38,16 +48,16 @@ class RA_Transformer_Encoder(nn.Module):
                 explicit_relation_feature=cfg.explicit_relation_feature,
             )
             self.nl_ra_transformer_encoder = RATransformerEncoder(
-                nl_encoder_layer, num_layers=2
+                nl_encoder_layer, num_layers=nl_rat_num_layer,
             )
-
+        if self.use_schema_rat:
             schema_encoder_layer = RATransformerEncoderLayer(
                 d_model=dim, nhead=nhead, nrelation=N_RELATIONS,
                 change_relation_contribution=cfg.change_relation_contribution,
                 explicit_relation_feature=cfg.explicit_relation_feature,
             )
             self.schema_ra_transformer_encoder = RATransformerEncoder(
-                schema_encoder_layer, num_layers=2
+                schema_encoder_layer, num_layers=schema_rat_num_layer
             )
 
         # Combined
@@ -57,7 +67,7 @@ class RA_Transformer_Encoder(nn.Module):
             explicit_relation_feature=cfg.explicit_relation_feature,
         )
         self.ra_transformer_encoder = RATransformerEncoder(
-            encoder_layer, num_layers=1 if self.encode_separately else layer_num
+            encoder_layer, num_layers=layer_num
         )
 
     def forward(
@@ -75,10 +85,12 @@ class RA_Transformer_Encoder(nn.Module):
         return_details=False,
     ):
         # LSTM
-        if self.use_lstm:
+        if self.use_nl_lstm:
             sen = self.encode_with_lstm(sen, sen_len, self.sen_lstm)
-            # Tab, Col 서로 연관 있는 애들 끼리 lstm으로 인코딩해야하지 않을까?
+        # Tab, Col 서로 연관 있는 애들끼리 lstm으로 인코딩해야하지 않을까? (col set으로 안하면..)
+        if self.use_col_lstm:
             col = self.encode_with_lstm(col, col_len, self.col_lstm)
+        if self.use_tab_lstm:
             tab = self.encode_with_lstm(tab, tab_len, self.tab_lstm)
 
         # Get len
@@ -91,21 +103,22 @@ class RA_Transformer_Encoder(nn.Module):
         col = col.transpose(0, 1)
         tab = tab.transpose(0, 1)
 
-        if self.encode_separately:
+        if self.use_nl_rat:
             # encode NL
             nl_relation = relation[:, :sen_max_len, :sen_max_len]
             nl_src = sen
             nl_mask = sen_mask.bool()
             sen = self.nl_ra_transformer_encoder(nl_src, nl_relation, src_key_padding_mask=nl_mask)
 
+        if self.use_schema_rat:
             # encode schema
             schema_relation = relation[:, sen_max_len:, sen_max_len:]
             schema_src = torch.cat([col, tab], dim=0)
             schema_mask = torch.cat([col_mask, tab_mask], dim=1).bool()
             schema_out = self.schema_ra_transformer_encoder(schema_src, schema_relation, src_key_padding_mask=schema_mask)
 
-            col = schema_out[col_max_len:, :, :]
-            tab = schema_out[:col_max_len, :, :]
+            col = schema_out[:col_max_len, :, :]
+            tab = schema_out[col_max_len:, :, :]
 
         # Combine
         src = torch.cat([sen, col, tab], dim=0)

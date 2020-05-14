@@ -35,7 +35,7 @@ def train(cfg):
 
     # Load dataset
     train_data, val_data, table_data = utils.load_dataset(
-        cfg.toy, cfg.is_bert, cfg.dataset.path, cfg.query_type, cfg.use_down_schema
+        cfg.toy, cfg.is_bert, cfg.dataset.path, cfg.query_type, cfg.use_down_schema, cfg.remove_punctuation_marks
     )
 
     # Set optimizer

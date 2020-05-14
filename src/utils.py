@@ -527,7 +527,7 @@ def epoch_acc(
 
 
 def load_data_new(
-    sql_path, table_data, use_small=False, is_bert=False, query_type="simple"
+    sql_path, table_data, use_small=False, is_bert=False, query_type="simple", remove_punc=False,
 ):
     sql_data = []
     log.info("Loading data from {}".format(sql_path))
@@ -535,6 +535,11 @@ def load_data_new(
     with open(sql_path) as f:
         data = lower_keys(json.load(f))
         for datum in data:
+            # Filter out some datas
+            if remove_punc and datum['question_arg'][-1] in [['?'], ['.']]:
+                del datum['question_arg'][-1]
+                del datum['question_arg_type'][-1]
+
             if "FROM (" not in datum["query"]:
                 sql_data += [datum]
 
@@ -571,7 +576,7 @@ def load_data_new(
     return sql_data[:20] if use_small else sql_data
 
 
-def load_dataset(is_toy, is_bert, dataset_path, query_type, use_down_schema):
+def load_dataset(is_toy, is_bert, dataset_path, query_type, use_down_schema, remove_punc):
     # Get paths
     table_path = os.path.join(dataset_path, "tables.json")
     train_path = os.path.join(dataset_path, "train.json")
@@ -602,8 +607,8 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type, use_down_schema):
         table_data[key]["neighbors"] = neighbors
 
     # Load data
-    train_data = load_data_new(train_path, table_data, is_toy, is_bert, query_type)
-    val_data = load_data_new(val_path, table_data, is_toy, is_bert, query_type)
+    train_data = load_data_new(train_path, table_data, is_toy, is_bert, query_type, remove_punc)
+    val_data = load_data_new(val_path, table_data, is_toy, is_bert, query_type, remove_punc)
 
     # # Append sql
     # for data in train_data:

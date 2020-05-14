@@ -29,9 +29,8 @@ optimize_freq: 8
 
 # etc
 use_down_schema: false
-use_lstm_encoder: true
-use_separate_encoder: false
 rule: "noqgm"
+remove_punctuation_marks: false
 
 #
 cuda: 0 # -1 to disable

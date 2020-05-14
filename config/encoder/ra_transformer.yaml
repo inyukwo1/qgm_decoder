@@ -1,5 +1,16 @@
 encoder_name: ra_transformer
 layer_num: 3
 nhead: 6
-change_relation_contribution: False
-explicit_relation_feature: True
+change_relation_contribution: false
+explicit_relation_feature: false
+
+use_nl_lstm_encoder: true
+use_col_lstm_encoder: false
+use_tab_lstm_encoder: true
+
+use_nl_rat_encoder: false
+use_schema_rat_encoder: false
+
+nl_rat_num_layer: 2
+schema_rat_num_layer: 1
+
