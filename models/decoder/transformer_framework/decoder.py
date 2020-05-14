@@ -33,6 +33,7 @@ class TransformerDecoderFramework(nn.Module):
         # Decode Layers
         dim = 1024 if cfg.encoder_name == "bert" else hidden_size
         nhead = 8 if cfg.encoder_name == "bert" else nhead
+        self.cfg = cfg
         self.dim = dim
         self.nhead = nhead
         self.layer_num = layer_num
@@ -103,6 +104,7 @@ class TransformerDecoderFramework(nn.Module):
             state_class = TransformerStateGold
             states = [
                 TransformerStateGold(
+                    self.cfg,
                     self.grammar,
                     encoded_src[b_idx][: src_lens[b_idx]],
                     encoded_col[b_idx][: col_lens[b_idx]],

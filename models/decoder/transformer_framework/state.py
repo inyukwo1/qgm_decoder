@@ -7,7 +7,7 @@ from rule.grammar import Symbol, Action
 
 
 class TransformerState(State):
-    def __init__(self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic):
+    def __init__(self, cfg, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic):
         self.step_cnt = 0
         self.encoded_src = encoded_src
         self.encoded_col = encoded_col
@@ -54,6 +54,7 @@ class TransformerState(State):
 class TransformerStateGold(TransformerState):
     def __init__(
         self,
+        cfg,
         grammar,
         encoded_src,
         encoded_col,
@@ -62,8 +63,10 @@ class TransformerStateGold(TransformerState):
         gold: List[Action],
     ):
         TransformerState.__init__(
-            self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
+            self, cfg, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
         )
+        self.soft_labeling = cfg.soft_labeling
+        self.label_smoothing = cfg.label_smoothing
         self.gold: List[Action] = gold
         self.loss = NOQGM_Loss_New()
 
@@ -97,8 +100,8 @@ class TransformerStateGold(TransformerState):
         ]
         return invalid_indices
 
-    def apply_loss(self, idx, prod: torch.Tensor) -> None:
-        gold_action = self.gold[idx]
+    def apply_loss(self, step_idx, prod: torch.Tensor) -> None:
+        gold_action = self.gold[step_idx]
         gold_symbol = gold_action[0]
         if gold_symbol in {"C", "T"}:
             gold_action_idx = gold_action[1]
@@ -106,12 +109,32 @@ class TransformerStateGold(TransformerState):
             assert_dim([self.grammar.get_action_len()], prod)
             gold_action_idx = self.grammar.action_to_aid[gold_action]
         prev_actions: List[Action] = self.gold[: self.step_cnt]
-        self.loss.add(-prod[gold_action_idx], gold_symbol, prev_actions)
+        if self.soft_labeling:
+            # Info
+            pred_indices = (prod != float('-inf')).nonzero()
+            num_classes = len((prod != float('-inf')).nonzero())
+            # New labels
+            new_answer_label = (1-self.label_smoothing) + self.label_smoothing/num_classes
+            if num_classes == 1:
+                new_answer_label = (1-new_answer_label)
+            else:
+                new_non_answer_label = (1 - new_answer_label) / (num_classes-1)
+            # Sum
+            summed_score = 0
+            for pred_idx in pred_indices:
+                if pred_idx == gold_action_idx:
+                    summed_score += prod[pred_idx]*new_answer_label
+                else:
+                    summed_score += prod[pred_idx]*new_non_answer_label
+            self.loss.add(-summed_score, gold_symbol, prev_actions)
+        else:
+            self.loss.add(-prod[gold_action_idx], gold_symbol, prev_actions)
 
 
 class TransformerStatePred(TransformerState):
     def __init__(
         self,
+        cfg,
         grammar,
         encoded_src,
         encoded_col,
@@ -119,7 +142,7 @@ class TransformerStatePred(TransformerState):
         col_tab_dic,
     ):
         TransformerState.__init__(
-            self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
+            self, cfg, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
         )
         self.probs: List = []
         self.preds: List[Action] = []

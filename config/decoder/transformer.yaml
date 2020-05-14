@@ -2,3 +2,6 @@ decoder_name: transformer
 layer_num: 3
 nhead: 6
 use_relation: false
+
+soft_labeling: false
+label_smoothing: 0.1
