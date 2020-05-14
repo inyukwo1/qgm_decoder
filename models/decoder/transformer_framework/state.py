@@ -7,7 +7,7 @@ from rule.grammar import Symbol, Action
 
 
 class TransformerState(State):
-    def __init__(self, cfg, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic):
+    def __init__(self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic):
         self.step_cnt = 0
         self.encoded_src = encoded_src
         self.encoded_col = encoded_col
@@ -134,7 +134,6 @@ class TransformerStateGold(TransformerState):
 class TransformerStatePred(TransformerState):
     def __init__(
         self,
-        cfg,
         grammar,
         encoded_src,
         encoded_col,
@@ -142,7 +141,7 @@ class TransformerStatePred(TransformerState):
         col_tab_dic,
     ):
         TransformerState.__init__(
-            self, cfg, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
+            self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
         )
         self.probs: List = []
         self.preds: List[Action] = []
