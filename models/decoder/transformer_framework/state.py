@@ -63,7 +63,7 @@ class TransformerStateGold(TransformerState):
         gold: List[Action],
     ):
         TransformerState.__init__(
-            self, cfg, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
+            self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
         )
         self.soft_labeling = cfg.soft_labeling
         self.label_smoothing = cfg.label_smoothing
