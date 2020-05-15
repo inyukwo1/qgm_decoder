@@ -2,7 +2,7 @@ encoder_name: ra_transformer
 layer_num: 3
 nhead: 6
 change_relation_contribution: false
-explicit_relation_feature: false
+explicit_relation_feature: true
 
 use_nl_lstm_encoder: true
 use_col_lstm_encoder: false

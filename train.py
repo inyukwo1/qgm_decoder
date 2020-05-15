@@ -76,7 +76,29 @@ def train(cfg):
                 del pretrained_modeled[k]
         model.load_state_dict(pretrained_modeled)
 
+
     model.word_emb = None if cfg.is_bert else utils.load_word_emb(cfg.glove_embed_path)
+    model.train_glove = cfg.train_glove
+    if cfg.train_glove:
+        # Filter
+        tmp = {}
+        for datas in [train_data, val_data]:
+            for data in datas:
+                # src_sents, tab_cols, table_names
+                for words_list in [data.src_sent, data.tab_cols, data.table_names]:
+                    for words in words_list:
+                        for word in words:
+                            if word in model.word_emb:
+                                tmp[word] = model.word_emb[word]
+        tmp["unk"] = model.word_emb["unk"]
+        model.mapping = {}
+        model.word_emb = torch.nn.ParameterList([])
+        for idx, (key, value) in enumerate(tmp.items()):
+            model.mapping[key] = idx
+            model.word_emb.append(torch.nn.Parameter(torch.tensor(value)))
+
+        model.cuda()
+
     if cfg.encoder_name == "lstm":
         model.encoder.word_emb = model.word_emb
 

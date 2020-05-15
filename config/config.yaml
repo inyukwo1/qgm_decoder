@@ -31,6 +31,7 @@ optimize_freq: 8
 use_down_schema: false
 rule: "noqgm"
 remove_punctuation_marks: false
+train_glove: false
 
 #
 cuda: 0 # -1 to disable

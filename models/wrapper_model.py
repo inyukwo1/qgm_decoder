@@ -105,7 +105,10 @@ class EncoderDecoderModel(nn.Module):
                     elif w == "[more]":
                         emb_list.append(self.key_embs.weight[5])
                     else:
-                        q_val.append(self.word_emb.get(w, self.word_emb["unk"]))
+                        if self.train_glove:
+                            q_val.append(self.word_emb[self.mapping[w if w in self.mapping else "unk"]])
+                        else:
+                            q_val.append(self.word_emb.get(w, self.word_emb["unk"]))
 
                 print("Warning!")
                 raise RuntimeWarning("Check this logic")
@@ -128,8 +131,12 @@ class EncoderDecoderModel(nn.Module):
                         elif w == "[more]":
                             emb_list.append(self.key_embs.weight[5])
                         else:
-                            numpy_emb = self.word_emb.get(w, self.word_emb["unk"])
-                            emb_list.append(torch.tensor(numpy_emb).cuda())
+                            if self.train_glove:
+                                torch_emb = self.word_emb[self.mapping[w if w in self.mapping else "unk"]]
+                                emb_list.append(torch_emb)
+                            else:
+                                numpy_emb = self.word_emb.get(w, self.word_emb["unk"])
+                                emb_list.append(torch.tensor(numpy_emb).cuda())
                     if ws_len == 0:
                         raise Exception("word list should not be empty!")
                     elif ws_len == 1:
