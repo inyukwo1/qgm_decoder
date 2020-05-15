@@ -122,6 +122,7 @@ class TransformerStateGold(TransformerState):
             # Sum
             summed_score = 0
             for pred_idx in pred_indices:
+                pred_idx = int(pred_idx[0])
                 if pred_idx == gold_action_idx:
                     summed_score += prod[pred_idx]*new_answer_label
                 else:
