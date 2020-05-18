@@ -642,7 +642,13 @@ def load_dataset(model, is_toy, is_bert, dataset_path, query_type, use_down_sche
         append_bert_input(val_data, tokenizer)
 
         # Create cache
-        model.encoder.create_cache([train_data, val_data])
+        if model.encoder_name == "bert":
+            model.encoder.create_cache([train_data, val_data])
+        elif model.encoder_name == "ra_transformer":
+            model.bert.create_cache([train_data, val_data])
+            pass
+        else:
+            raise NotImplementedError("not implemented yet")
 
     return train_data, val_data, table_data
 

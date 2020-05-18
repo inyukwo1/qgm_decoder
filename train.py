@@ -43,7 +43,7 @@ def train(cfg):
         RAdam if cfg.optimizer == "radam" else eval("torch.optim.%s" % cfg.optimizer)
     )
     optimizer = optimizer_cls(model.without_bert_params, lr=cfg.lr)
-    if cfg.is_bert and cfg.train_bert:
+    if cfg.encoder_name == "bert" and cfg.train_bert:
         bert_optimizer = optimizer_cls(
             model.encoder.parameters(), lr=cfg.bert_lr
         )

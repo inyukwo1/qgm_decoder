@@ -47,6 +47,10 @@ class BERT(nn.Module):
         self.use_bert_cache = cfg.use_bert_cache
         self.bert_cache = {}
 
+        self.reduce_dim = cfg.reduce_dim
+        if self.reduce_dim:
+            self.linear_layer = nn.Linear(dim, 300)
+
     def create_cache(self, examples_list):
         if not self.use_bert_cache:
             return None
@@ -253,5 +257,10 @@ class BERT(nn.Module):
         col_type = self.input_type(batch.col_hot_type)
         col_type_var = self.col_type(col_type)
         table_embedding = table_embedding + col_type_var
+
+        if self.reduce_dim:
+            src_encodings = self.linear_layer(src_encodings)
+            table_embedding = self.linear_layer(table_embedding)
+            schema_embedding = self.linear_layer(schema_embedding)
 
         return src_encodings, table_embedding, schema_embedding, [item[0, :] for item in embedding]

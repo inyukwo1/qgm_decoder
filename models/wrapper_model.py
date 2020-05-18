@@ -32,6 +32,7 @@ class EncoderDecoderModel(nn.Module):
         super(EncoderDecoderModel, self).__init__()
         self.cfg = cfg
         self.is_cuda = cfg.cuda != -1
+        self.is_bert = cfg.is_bert
         self.encoder_name = cfg.encoder_name
         self.decoder_name = cfg.decoder_name
         self.embed_size = 1024 if self.encoder_name == "bert" else 300
@@ -64,6 +65,8 @@ class EncoderDecoderModel(nn.Module):
             self.encoder = Transformer_Encoder(cfg)
         elif self.encoder_name == "ra_transformer":
             self.encoder = RA_Transformer_Encoder(cfg)
+            if self.is_bert:
+                self.bert = BERT(cfg)
         else:
             raise RuntimeError("Unsupported encoder name")
 
@@ -157,9 +160,17 @@ class EncoderDecoderModel(nn.Module):
     def encode(self, batch, return_details=False):
         enc_last_cell = None
         if self.encoder_name == "ra_transformer":
-            src = self.gen_x_batch(batch.src_sents)
-            col = self.gen_x_batch(batch.table_sents)
-            tab = self.gen_x_batch(batch.table_names)
+            if self.is_bert:
+                (
+                    src,
+                    col,
+                    tab,
+                    last_cell,
+                ) = self.bert(batch)
+            else:
+                src = self.gen_x_batch(batch.src_sents)
+                col = self.gen_x_batch(batch.table_sents)
+                tab = self.gen_x_batch(batch.table_names)
 
             relation_matrix = relation.create_batch(batch.relation)
 
@@ -280,8 +291,8 @@ class EncoderDecoderModel(nn.Module):
         return output
 
     def forward(self, examples, is_train=False, return_details=False):
-        if self.encoder == "bert":
-            batch = Batch(examples, is_cuda=self.is_cuda, use_bert_cache=self.encoder.use_bert_encoder)
+        if self.encoder_name == "bert":
+            batch = Batch(examples, is_cuda=self.is_cuda, use_bert_cache=self.encoder.use_bert_cache)
         else:
             batch = Batch(examples, is_cuda=self.is_cuda)
         # Encode
