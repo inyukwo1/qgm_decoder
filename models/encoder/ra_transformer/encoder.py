@@ -23,6 +23,7 @@ class RA_Transformer_Encoder(nn.Module):
 
         self.use_nl_rat = cfg.use_nl_rat_encoder
         self.use_schema_rat = cfg.use_schema_rat_encoder
+        self.use_guided_attention = cfg.use_guided_attention
 
         # layer num
         nl_rat_num_layer = cfg.nl_rat_num_layer
@@ -108,43 +109,52 @@ class RA_Transformer_Encoder(nn.Module):
             nl_relation = relation[:, :sen_max_len, :sen_max_len]
             nl_src = sen
             nl_mask = sen_mask.bool()
-            sen = self.nl_ra_transformer_encoder(nl_src, nl_relation, src_key_padding_mask=nl_mask)
+            sen = self.nl_ra_transformer_encoder(nl_src, nl_src, nl_relation, src_key_padding_mask=nl_mask)
 
         if self.use_schema_rat:
             # encode schema
             schema_relation = relation[:, sen_max_len:, sen_max_len:]
             schema_src = torch.cat([col, tab], dim=0)
             schema_mask = torch.cat([col_mask, tab_mask], dim=1).bool()
-            schema_out = self.schema_ra_transformer_encoder(schema_src, schema_relation, src_key_padding_mask=schema_mask)
+            schema_out = self.schema_ra_transformer_encoder(schema_src, schema_src, schema_relation, src_key_padding_mask=schema_mask)
 
             col = schema_out[:col_max_len, :, :]
             tab = schema_out[col_max_len:, :, :]
 
         # Combine
-        src = torch.cat([sen, col, tab], dim=0)
-        src_key_padding_mask = torch.cat([sen_mask, col_mask, tab_mask], dim=1).bool()
+        if self.use_guided_attention:
+            schema = torch.cat([col, tab], dim=0)
+            schema_key_padding_mask = torch.cat([col_mask, tab_mask], dim=1).bool()
 
-        output = self.ra_transformer_encoder(
-            src, relation, src_key_padding_mask=src_key_padding_mask, return_details=return_details,
-        )
-        if return_details:
-            encoded_src, qk_weights_list, qk_relation_weights_list = output
+            output = self.ra_transformer_encoder(
+
+            )
+
         else:
-            encoded_src = output
-        encoded_src = encoded_src.transpose(0, 1)
+            src = torch.cat([sen, col, tab], dim=0)
+            src_key_padding_mask = torch.cat([sen_mask, col_mask, tab_mask], dim=1).bool()
 
-        # Get split points
-        sen_idx = sen_max_len
-        col_idx = sen_idx + col_max_len
-        tab_idx = col_idx + tab_max_len
-        assert tab_idx == src.shape[0], "Size doesn't match {} {}".format(
-            tab_idx, src.shape
-        )
+            output = self.ra_transformer_encoder(
+                src, src, relation, src_key_padding_mask=src_key_padding_mask, return_details=return_details,
+            )
+            if return_details:
+                encoded_src, qk_weights_list, qk_relation_weights_list = output
+            else:
+                encoded_src = output
+            encoded_src = encoded_src.transpose(0, 1)
 
-        # Split
-        encoded_sen = encoded_src[:, :sen_idx, :]
-        encoded_col = encoded_src[:, sen_idx:col_idx, :]
-        encoded_tab = encoded_src[:, col_idx:tab_idx, :]
+            # Get split points
+            sen_idx = sen_max_len
+            col_idx = sen_idx + col_max_len
+            tab_idx = col_idx + tab_max_len
+            assert tab_idx == src.shape[0], "Size doesn't match {} {}".format(
+                tab_idx, src.shape
+            )
+
+            # Split
+            encoded_sen = encoded_src[:, :sen_idx, :]
+            encoded_col = encoded_src[:, sen_idx:col_idx, :]
+            encoded_tab = encoded_src[:, col_idx:tab_idx, :]
 
         if return_details:
             return encoded_sen, encoded_col, encoded_tab, qk_weights_list, qk_relation_weights_list

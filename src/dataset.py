@@ -56,6 +56,8 @@ class Example:
         self.db = db
         self.data = data
         self.col_hot_type = col_hot_type
+        self.bert_input = None
+        self.bert_input_indices = None
         # self.one_hot_type = one_hot_type
         # self.tab_hot_type = tab_hot_type
         # self.tokenized_src_sent = tokenized_src_sent
@@ -104,7 +106,7 @@ class cached_property(object):
 
 
 class Batch(object):
-    def __init__(self, examples, grammar=None, is_cuda=False):
+    def __init__(self, examples, grammar=None, is_cuda=False, use_bert_cache=False):
         self.examples = examples
 
         self.src_sents = [e.src_sent for e in self.examples]
@@ -119,6 +121,11 @@ class Batch(object):
         self.qgm = [e.qgm for e in examples]
         self.relation = [e.relation for e in examples]
         self.gt = [e.gt for e in examples]
+        self.bert_input_indices = [e.bert_input_indices for e in examples]
+        if use_bert_cache:
+            self.bert_input = [e.bert_input for e in examples]
+        else:
+            self.bert_input = self._pad_bert_input(examples)
         # if examples[0].tgt_actions:
         #     self.max_action_num = max(len(e.tgt_actions) for e in self.examples)
         #     self.max_sketch_num = max(len(e.sketch) for e in self.examples)
@@ -143,6 +150,16 @@ class Batch(object):
 
         self.grammar = grammar
         self.cuda = is_cuda
+
+    def _pad_bert_input(self, examples):
+        lens = [item.bert_input_indices[-1][-1][-1] for item in examples]
+        max_len = max(lens)
+
+        bert_inputs = []
+        for idx, length in enumerate(lens):
+            bert_inputs += [examples[idx].bert_input + (" [PAD]" * (max_len - length))]
+
+        return bert_inputs
 
     def __len__(self):
         return len(self.examples)

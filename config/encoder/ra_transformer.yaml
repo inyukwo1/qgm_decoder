@@ -14,3 +14,4 @@ use_schema_rat_encoder: false
 nl_rat_num_layer: 2
 schema_rat_num_layer: 1
 
+use_guided_attention: false

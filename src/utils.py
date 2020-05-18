@@ -18,6 +18,7 @@ import src.relation as relation
 from rule.noqgm.noqgm import NOQGM
 from rule.semql.semql import SemQL
 from heat_map import *
+from transformers import *
 
 wordnet_lemmatizer = WordNetLemmatizer()
 log = logging.getLogger(__name__)
@@ -576,7 +577,7 @@ def load_data_new(
     return sql_data[:20] if use_small else sql_data
 
 
-def load_dataset(is_toy, is_bert, dataset_path, query_type, use_down_schema, remove_punc):
+def load_dataset(model, is_toy, is_bert, dataset_path, query_type, use_down_schema, remove_punc):
     # Get paths
     table_path = os.path.join(dataset_path, "tables.json")
     train_path = os.path.join(dataset_path, "train.json")
@@ -632,6 +633,16 @@ def load_dataset(is_toy, is_bert, dataset_path, query_type, use_down_schema, rem
     # Parse datasets into exampels:
     train_data = to_batch_seq(train_data, table_data)
     val_data = to_batch_seq(val_data, table_data)
+
+    # Append bert input data
+    if is_bert:
+        tokenzier_class, model_name = BertTokenizer, "bert-large-uncased"
+        tokenizer = tokenzier_class.from_pretrained(model_name)
+        append_bert_input(train_data, tokenizer)
+        append_bert_input(val_data, tokenizer)
+
+        # Create cache
+        model.encoder.create_cache([train_data, val_data])
 
     return train_data, val_data, table_data
 
@@ -1204,3 +1215,43 @@ def save_data_for_analysis(tag, datas, preds, golds, details_list, dataset, save
     log_file_path = os.path.join(save_path, 'result.pkl')
     with open(log_file_path, 'wb') as f:
         pickle.dump(log, f)
+
+
+def append_bert_input(examples, tokenizer):
+    if tokenizer.pad_token != '[PAD]':
+        raise NotImplementedError("Need to fix _pad_bert_input method in Batch class")
+    for example in examples:
+        sentence = example.src_sent
+        cols = example.tab_cols
+        tabs = example.table_names
+
+        bert_input = "[CLS]"
+        word_start_ends = []
+        col_start_ends = []
+        tab_start_ends = []
+        # NL
+        for word in sentence:
+            start = len(tokenizer.tokenize(bert_input))
+            bert_input += " {}".format(" ".join(word))
+            end = len(tokenizer.tokenize(bert_input))
+            word_start_ends.append((start, end))
+
+        # Cols
+        for col in cols:
+            start = len(tokenizer.tokenize(bert_input))
+            bert_input += " {} {}".format("[SEP]", " ".join(col))
+            end = len(tokenizer.tokenize(bert_input))
+            col_start_ends.append((start, end))
+
+        # Tabs
+        for tab in tabs:
+            start = len(tokenizer.tokenize(bert_input))
+            bert_input += " {} {}".format("[SEP]", " ".join(tab))
+            end = len(tokenizer.tokenize(bert_input))
+            tab_start_ends.append((start, end))
+
+        if end >= tokenizer.max_len:
+            raise RuntimeError("Bert input exceed {}".format(tokenizer.max_len))
+
+        example.bert_input = bert_input
+        example.bert_input_indices = [word_start_ends, col_start_ends, tab_start_ends]

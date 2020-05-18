@@ -15,33 +15,31 @@ class RATransformerEncoder(nn.Module):
         self.num_layers = num_layers
         self.norm = norm
 
-    def forward(self, src, relation, mask=None, src_key_padding_mask=None, return_details=False):
-        output = src
+    def forward(self, src, tgt, relation, mask=None, src_key_padding_mask=None, return_details=False):
         qk_weights_list = []
         qk_relation_weights_list = []
 
         for layer in self.layers:
-            out = layer(
-                output,
+            tgt = layer(
+                src,
+                tgt,
                 relation,
                 src_mask=mask,
                 src_key_padding_mask=src_key_padding_mask,
                 return_details=return_details,
             )
             if return_details:
-               output, qk_weights, qk_relation_weights = out
+               tgt, qk_weights, qk_relation_weights = tgt
                qk_weights_list += [qk_weights]
                qk_relation_weights_list += [qk_relation_weights]
-            else:
-                output = out
 
         if self.norm is not None:
-            output = self.norm(output)
+            tgt = self.norm(tgt)
 
         if return_details:
-            return output, qk_weights_list, qk_relation_weights_list
+            return tgt, qk_weights_list, qk_relation_weights_list
         else:
-            return output
+            return tgt
 
 
 class RATransformerEncoderLayer(nn.Module):
@@ -69,7 +67,7 @@ class RATransformerEncoderLayer(nn.Module):
         self.relation_k_emb = nn.Embedding(nrelation, self.self_attn.head_dim)
         self.relation_v_emb = nn.Embedding(nrelation, self.self_attn.head_dim)
 
-    def forward(self, src, relation=None, src_mask=None, src_key_padding_mask=None, return_details=False):
+    def forward(self, src, tgt, relation=None, src_mask=None, tgt_mask=None, src_key_padding_mask=None, return_details=False):
         # Relation Embedding
         relation_k = self.relation_k_emb(relation) if relation is not None else None
         relation_v = self.relation_v_emb(relation) if relation is not None else None
@@ -83,9 +81,9 @@ class RATransformerEncoderLayer(nn.Module):
         relation_v2 = torch.where(tmp == zeros, zeros, relation_v)
 
         # self Multi-head Attention & Residual & Norm
-        output = self.self_attn(
+        tgt = self.self_attn(
             src,
-            src,
+            tgt,
             src,
             relation_k=relation_k2,
             relation_v=relation_v2,
@@ -94,18 +92,18 @@ class RATransformerEncoderLayer(nn.Module):
             return_details=return_details,
         )
         if return_details:
-            src2, qk_weights, qk_relation_weights = output
+            tgt2, qk_weights, qk_relation_weights = tgt
         else:
-            src2 = output
-        src = src + self.dropout(src2)
-        src = self.norm1(src)
+            tgt2 = tgt
+        tgt = tgt + self.dropout(tgt2)
+        tgt = self.norm1(tgt)
 
         # FeedForward & Residual & Norm
-        src2 = self.feed_forward(src)
-        src = src + src2
-        src = self.norm2(src)
+        tgt2 = self.feed_forward(tgt)
+        tgt = tgt + tgt2
+        tgt = self.norm2(tgt)
 
         if return_details:
-            return src, qk_weights, qk_relation_weights
+            return tgt, qk_weights, qk_relation_weights
         else:
-            return src
+            return tgt

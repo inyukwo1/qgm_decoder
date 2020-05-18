@@ -1,3 +1,6 @@
 encoder_name: bert
 bert: 0
-lr: 1e-4
+bert_lr: 1e-4
+
+train_bert: true
+use_bert_cache: true

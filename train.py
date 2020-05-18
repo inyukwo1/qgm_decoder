@@ -34,7 +34,7 @@ def train(cfg):
         model.cuda()
 
     # Load dataset
-    train_data, val_data, table_data = utils.load_dataset(
+    train_data, val_data, table_data = utils.load_dataset(model,
         cfg.toy, cfg.is_bert, cfg.dataset.path, cfg.query_type, cfg.use_down_schema, cfg.remove_punctuation_marks
     )
 
@@ -43,9 +43,9 @@ def train(cfg):
         RAdam if cfg.optimizer == "radam" else eval("torch.optim.%s" % cfg.optimizer)
     )
     optimizer = optimizer_cls(model.without_bert_params, lr=cfg.lr)
-    if cfg.is_bert:
+    if cfg.is_bert and cfg.train_bert:
         bert_optimizer = optimizer_cls(
-            model.transformer_encoder.parameters(), lr=cfg.bert_lr
+            model.encoder.parameters(), lr=cfg.bert_lr
         )
     else:
         bert_optimizer = None

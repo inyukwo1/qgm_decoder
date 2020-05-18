@@ -242,7 +242,7 @@ class EncoderDecoderModel(nn.Module):
             )
             return output
         elif self.decoder_name == "transformer":
-            b_size = len(src_encodings)
+            b_size = len(batch)
             output = self.decoder(
                 b_size,
                 src_encodings,
@@ -280,7 +280,10 @@ class EncoderDecoderModel(nn.Module):
         return output
 
     def forward(self, examples, is_train=False, return_details=False):
-        batch = Batch(examples, is_cuda=self.is_cuda)
+        if self.encoder == "bert":
+            batch = Batch(examples, is_cuda=self.is_cuda, use_bert_cache=self.encoder.use_bert_encoder)
+        else:
+            batch = Batch(examples, is_cuda=self.is_cuda)
         # Encode
         encoder_output = self.encode(
             batch, return_details=return_details,
