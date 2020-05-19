@@ -48,9 +48,11 @@ class BERT(nn.Module):
             val_len.append(len(value))
         max_len = max(val_len)
         # for the Begin and End
-        val_emb_array = np.zeros((B, max_len, values_list[0].shape[1]), dtype=np.float32)
+        val_emb_array = np.zeros(
+            (B, max_len, values_list[0].shape[1]), dtype=np.float32
+        )
         for i in range(B):
-            val_emb_array[i, :val_len[i], :] = values_list[i][:, :]
+            val_emb_array[i, : val_len[i], :] = values_list[i][:, :]
 
         val_inp = torch.from_numpy(val_emb_array).cuda()
         val_inp_var = Variable(val_inp)

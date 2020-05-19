@@ -20,6 +20,7 @@ class SemQL(Grammar):
 
     @classmethod
     def create_data(cls, qgm_boxes):
+        assert False
         # Simple query only
         qgm_box = qgm_boxes[0]
 

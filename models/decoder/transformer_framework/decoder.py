@@ -53,7 +53,6 @@ class TransformerDecoderFramework(nn.Module):
             self.grammar = SemQL(dim)
 
         self.col_symbol_id = self.grammar.symbol_to_sid["C"]
-        self.tab_symbol_id = self.grammar.symbol_to_sid["T"]
 
     def action_to_embedding(
         self, state: TransformerState, action: Action
@@ -263,6 +262,9 @@ class TransformerDecoderFramework(nn.Module):
             return TransformerStateGold.combine_loss(states)
         else:
             if return_details:
-                return TransformerStatePred.get_preds(states), [state.probs for state in states]
+                return (
+                    TransformerStatePred.get_preds(states),
+                    [state.probs for state in states],
+                )
             else:
                 return TransformerStatePred.get_preds(states)

@@ -90,13 +90,17 @@ class RA_Transformer_Encoder(nn.Module):
             nl_relation = relation[:, :sen_max_len, :sen_max_len]
             nl_src = sen
             nl_mask = sen_mask.bool()
-            sen = self.nl_ra_transformer_encoder(nl_src, nl_relation, src_key_padding_mask=nl_mask)
+            sen = self.nl_ra_transformer_encoder(
+                nl_src, nl_relation, src_key_padding_mask=nl_mask
+            )
 
             # encode schema
             schema_relation = relation[:, sen_max_len:, sen_max_len:]
             schema_src = torch.cat([col, tab], dim=0)
             schema_mask = torch.cat([col_mask, tab_mask], dim=1).bool()
-            schema_out = self.schema_ra_transformer_encoder(schema_src, schema_relation, src_key_padding_mask=schema_mask)
+            schema_out = self.schema_ra_transformer_encoder(
+                schema_src, schema_relation, src_key_padding_mask=schema_mask
+            )
 
             col = schema_out[col_max_len:, :, :]
             tab = schema_out[:col_max_len, :, :]
@@ -106,7 +110,10 @@ class RA_Transformer_Encoder(nn.Module):
         src_key_padding_mask = torch.cat([sen_mask, col_mask, tab_mask], dim=1).bool()
 
         output = self.ra_transformer_encoder(
-            src, relation, src_key_padding_mask=src_key_padding_mask, return_details=return_details,
+            src,
+            relation,
+            src_key_padding_mask=src_key_padding_mask,
+            return_details=return_details,
         )
         if return_details:
             encoded_src, qk_weights_list, qk_relation_weights_list = output
@@ -128,7 +135,13 @@ class RA_Transformer_Encoder(nn.Module):
         encoded_tab = encoded_src[:, col_idx:tab_idx, :]
 
         if return_details:
-            return encoded_sen, encoded_col, encoded_tab, qk_weights_list, qk_relation_weights_list
+            return (
+                encoded_sen,
+                encoded_col,
+                encoded_tab,
+                qk_weights_list,
+                qk_relation_weights_list,
+            )
         else:
             return encoded_sen, encoded_col, encoded_tab
 
