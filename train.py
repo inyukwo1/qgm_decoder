@@ -12,6 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 from src import utils
 from rule.semql.semql import SemQL
 from models.wrapper_model import EncoderDecoderModel
+
 # from models.LSTMEncoderQGMTransformerDecoder import LSTMEncoderQGMTransformerDecoder
 
 log = logging.getLogger(__name__)
@@ -122,42 +123,32 @@ def train(cfg):
         # Evaluation
         if not epoch % cfg.eval_freq or epoch == cfg.max_epoch:
             log.info("Evaluation:")
-            val_loss = utils.epoch_train(
-                model,
-                optimizer,
-                bert_optimizer,
-                cfg.batch_size,
-                val_data,
-                cfg.clip_grad,
-                cfg.decoder_name,
-                is_train=False,
-                optimize_freq=cfg.optimize_freq,
-            )
-            train_acc = utils.epoch_acc(
-                model, cfg.batch_size, train_data
-            )
-            val_acc = utils.epoch_acc(
-                model, cfg.batch_size, val_data
-            )
+            # val_loss = utils.epoch_train(
+            #     model,
+            #     optimizer,
+            #     bert_optimizer,
+            #     cfg.batch_size,
+            #     val_data,
+            #     cfg.clip_grad,
+            #     cfg.decoder_name,
+            #     is_train=False,
+            #     optimize_freq=cfg.optimize_freq,
+            # )
+            # train_acc = utils.epoch_acc(model, cfg.batch_size, train_data)
+            val_acc = utils.epoch_acc(model, cfg.batch_size, val_data)
 
             # Logging to tensorboard
-            utils.logging_to_tensorboard(
-                summary_writer,
-                "{}_train_acc/".format(dataset_name),
-                train_acc,
-                epoch,
-            )
-            utils.logging_to_tensorboard(
-                summary_writer,
-                "{}_val_loss/".format(dataset_name),
-                val_loss,
-                epoch,
-            )
+            # utils.logging_to_tensorboard(
+            #     summary_writer, "{}_train_acc/".format(dataset_name), train_acc, epoch,
+            # )
+            # utils.logging_to_tensorboard(
+            #     summary_writer, "{}_val_loss/".format(dataset_name), val_loss, epoch,
+            # )
             utils.logging_to_tensorboard(
                 summary_writer, "{}_val_acc/".format(dataset_name), val_acc, epoch,
             )
             # Print Accuracy
-            log.info("Total Train Acc: {}".format(train_acc["total"]))
+            # log.info("Total Train Acc: {}".format(train_acc["total"]))
             log.info("Total Val Acc: {}\n".format(val_acc["total"]))
 
             # Save if total_acc is higher
@@ -165,20 +156,16 @@ def train(cfg):
                 best_val_acc = val_acc["total"]
                 log.info("Saving new best model with acc: {}".format(best_val_acc))
                 torch.save(
-                    model.state_dict(),
-                    os.path.join(log_model_path, "best_model.pt"),
+                    model.state_dict(), os.path.join(log_model_path, "best_model.pt"),
                 )
                 with open(os.path.join(log_path, "best_model.log"), "a") as f:
-                    f.write(
-                        "Epoch: {} Train Acc: {} Val Acc:{}".format(
-                            epoch, train_acc, best_val_acc
-                        )
-                    )
+                    f.write("Epoch: {}  Val Acc:{}".format(epoch, best_val_acc))
 
         # Change learning rate
         scheduler.step()
         if scheduler_bert:
             scheduler_bert.step()
+
 
 if __name__ == "__main__":
     train()

@@ -263,6 +263,9 @@ class TransformerDecoderFramework(nn.Module):
             return TransformerStateGold.combine_loss(states)
         else:
             if return_details:
-                return TransformerStatePred.get_preds(states), [state.probs for state in states]
+                return (
+                    TransformerStatePred.get_preds(states),
+                    [state.probs for state in states],
+                )
             else:
                 return TransformerStatePred.get_preds(states)

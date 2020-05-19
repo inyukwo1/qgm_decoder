@@ -31,9 +31,7 @@ Is
 <symbol_end>
 
 <grammar_start>
-Root ::= Sel Filter | Sel
-Sel ::= A | A A | A A A | A A A A | A A A A A
-Filter ::= or Filter Filter | and Filter Filter | Not A | Between A | = A | > A | < A | >= A | <= A | != A | In A | Like A | Is A | Exists A | NotIn A | NotLike A
+Root ::= A | A A | A A A | A A A A | A A A A A | A A A A A A | A A A A A A A | A A A A A A A A
 A ::= none C | max C | min C | count C | sum C | avg C
 C ::= T
 T ::= none

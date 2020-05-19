@@ -140,11 +140,7 @@ def get_tab_col_dic(col_tab_dic):
     b_tmp = []
     tab_len = len(col_tab_dic[0])
     for t_idx in range(tab_len):
-        tab_tmp = [
-            idx
-            for idx in range(len(col_tab_dic))
-            if t_idx in col_tab_dic[idx]
-        ]
+        tab_tmp = [idx for idx in range(len(col_tab_dic)) if t_idx in col_tab_dic[idx]]
         b_tmp += [tab_tmp]
     tab_col_dic += [b_tmp]
     return tab_col_dic
@@ -804,9 +800,7 @@ def init_log_checkpoint_path(args):
     return save_path
 
 
-def write_eval_result_as(
-    file_name, datas, is_corrects, accs, preds, golds
-):
+def write_eval_result_as(file_name, datas, is_corrects, accs, preds, golds):
     def sort_dic(dic):
         if isinstance(dic, dict):
             dic = {key: sort_dic(dic[key]) for key in sorted(dic.keys())}
@@ -1051,12 +1045,14 @@ def analyze_regarding_schema_size(examples, is_correct, preds, golds, table_data
         print("tab_len: {} col_len: {}".format(tab_len, col_len))
     print("number of db: {}".format(len(dbs)))
 
+
 # Analysis
 def first_diff_symbol(pred, gold):
     for idx in range(min(len(pred), len(gold))):
         if pred[idx] != gold[idx]:
             return pred[idx][0]
     return None
+
 
 # Num of column in the select clause
 def wrong_in_select_col_num(pred, gold):
@@ -1065,6 +1061,7 @@ def wrong_in_select_col_num(pred, gold):
             return True
     return False
 
+
 def wrong_in_agg_op(pred, gold):
     for idx in range(min(len(pred), len(gold))):
         if pred[idx] != gold[idx] and pred[idx][0] == "A":
@@ -1072,11 +1069,13 @@ def wrong_in_agg_op(pred, gold):
                 return True
     return False
 
+
 def wrong_in_where_yes_no(pred, gold):
     for idx in range(min(len(pred), len(gold))):
         if pred[idx] != gold[idx] and pred[idx][0] == "Root":
             return True
     return False
+
 
 def wrong_in_where_op(pred, gold):
     for idx in range(min(len(pred), len(gold))):

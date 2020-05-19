@@ -45,9 +45,7 @@ class TransformerEncoder(Module):
         qk_relation_weights_list = []
 
         for mod in self.layers:
-            out = mod(
-                output, src_mask=mask, src_key_padding_mask=src_key_padding_mask
-            )
+            out = mod(output, src_mask=mask, src_key_padding_mask=src_key_padding_mask)
             if return_details:
                 output, qk_weights, qk_relation_weights = out
                 qk_weights_list += [qk_weights]
@@ -105,7 +103,9 @@ class TransformerEncoderLayer(Module):
             state["activation"] = F.relu
         super(TransformerEncoderLayer, self).__setstate__(state)
 
-    def forward(self, src, src_mask=None, src_key_padding_mask=None, return_details=False):
+    def forward(
+        self, src, src_mask=None, src_key_padding_mask=None, return_details=False
+    ):
         # type: (Tensor, Optional[Tensor], Optional[Tensor]) -> Tensor
         r"""Pass the input through the encoder layer.
         Args:
@@ -116,7 +116,12 @@ class TransformerEncoderLayer(Module):
             see the docs in Transformer class.
         """
         output = self.self_attn(
-            src, src, src, attn_mask=src_mask, key_padding_mask=src_key_padding_mask, return_details=return_details
+            src,
+            src,
+            src,
+            attn_mask=src_mask,
+            key_padding_mask=src_key_padding_mask,
+            return_details=return_details,
         )[0]
         if return_details:
             src2, qk_weights, qk_relation_weights = output

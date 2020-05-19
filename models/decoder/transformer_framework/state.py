@@ -111,12 +111,7 @@ class TransformerStateGold(TransformerState):
 
 class TransformerStatePred(TransformerState):
     def __init__(
-        self,
-        grammar,
-        encoded_src,
-        encoded_col,
-        encoded_tab,
-        col_tab_dic,
+        self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic,
     ):
         TransformerState.__init__(
             self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
@@ -127,10 +122,7 @@ class TransformerStatePred(TransformerState):
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
-        return (
-            state.nonterminal_symbol_stack != []
-            and state.step_cnt < 60
-        )
+        return state.nonterminal_symbol_stack != [] and state.step_cnt < 60
 
     @classmethod
     def get_preds(

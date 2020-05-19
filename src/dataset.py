@@ -5,6 +5,7 @@
 import torch
 import numpy as np
 
+
 class Example:
     def __init__(
         self,
@@ -145,9 +146,7 @@ class Batch(object):
         return len(self.examples)
 
     def table_dict_mask(self, table_dict):
-        return table_dict_to_mask_tensor(
-            self.table_len, table_dict, cuda=self.cuda
-        )
+        return table_dict_to_mask_tensor(self.table_len, table_dict, cuda=self.cuda)
 
     @cached_property
     def pred_col_mask(self):
@@ -167,9 +166,7 @@ class Batch(object):
 
     @cached_property
     def table_unk_mask(self):
-        return length_array_to_mask_tensor(
-            self.col_num, cuda=self.cuda, value=None
-        )
+        return length_array_to_mask_tensor(self.col_num, cuda=self.cuda, value=None)
 
     @cached_property
     def src_token_mask(self):
@@ -198,6 +195,7 @@ def pred_col_mask(value, max_len):
             mask[v_ind][v] = 0
     mask = torch.ByteTensor(mask)
     return mask.cuda()
+
 
 def length_array_to_mask_tensor(length_array, cuda=False, value=None):
     max_len = max(length_array)

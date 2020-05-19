@@ -208,7 +208,9 @@ class RAMultiheadAttention(nn.Module):
             attn_output_weights_relation_k = attn_output_weights_relation_k.view(
                 bsz * num_heads, tgt_len, src_len
             )
-            attn_output_weights_relation_k = nn.functional.softmax(attn_output_weights_relation_k, dim=-1)
+            attn_output_weights_relation_k = nn.functional.softmax(
+                attn_output_weights_relation_k, dim=-1
+            )
 
         if key_padding_mask is not None:
             attn_output_weights = attn_output_weights.view(
