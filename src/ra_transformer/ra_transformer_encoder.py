@@ -81,7 +81,7 @@ class RATransformerEncoderLayer(nn.Module):
         relation_v2 = torch.where(tmp == zeros, zeros, relation_v)
 
         # self Multi-head Attention & Residual & Norm
-        tgt = self.self_attn(
+        tgt2 = self.self_attn(
             src,
             tgt,
             src,
@@ -92,9 +92,7 @@ class RATransformerEncoderLayer(nn.Module):
             return_details=return_details,
         )
         if return_details:
-            tgt2, qk_weights, qk_relation_weights = tgt
-        else:
-            tgt2 = tgt
+            tgt2, qk_weights, qk_relation_weights = tgt2
         tgt = tgt + self.dropout(tgt2)
         tgt = self.norm1(tgt)
 
