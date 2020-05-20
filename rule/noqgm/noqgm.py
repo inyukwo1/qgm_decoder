@@ -33,9 +33,9 @@ class NOQGM(Grammar):
             # Single
             # Root
             if sql["where"]:
-                action = "Root1(1) "
+                action = "Root1(1) Sel(0) "
             else:
-                action = "Root1(0) "
+                action = "Root1(0) Sel(0) "
             # Sel
             assert sql["select"], "Something is weird {}".format(sql["select"])
             for select in sql["select"][1]:
