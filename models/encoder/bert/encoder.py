@@ -27,6 +27,9 @@ MODELS = [
 ]
 
 
+log = logging.getLogger(__name__)
+
+
 class BERT(nn.Module):
     def __init__(self, cfg):
         super(BERT, self).__init__()
@@ -35,7 +38,8 @@ class BERT(nn.Module):
         model_class, tokenizer_class, pretrained_weight, dim = MODELS[cfg.bert]
         self.bert_encoder = model_class.from_pretrained(pretrained_weight)
         self.tokenizer = tokenizer_class.from_pretrained(pretrained_weight)
-        # self.tokenizer.add_special_tokens({"additional_special_tokens": ["[table]", "[column]", "[value]"]})
+        # self.special_tokens = {"additional_special_tokens": ["[table]", "[column]", "[value]", "[db]"]}
+        # self.tokenizer.add_special_tokens(self.special_tokens)
         self.transformer_dim = dim
         self.col_lstm = torch.nn.LSTM(
             dim, dim // 2, batch_first=True, bidirectional=True
@@ -55,37 +59,41 @@ class BERT(nn.Module):
         if not self.use_bert_cache:
             return None
 
-        for examples in examples_list:
-            for idx in tqdm(range(len(examples))):
-                example = examples[idx]
-                question = example.bert_input
-                encoded_question = self.tokenizer.encode(question, add_special_tokens=False)
-                encoded_question = torch.tensor(encoded_question).unsqueeze(0).cuda()
-                embedding = self.bert_encoder(encoded_question)[0].squeeze(0).cpu().detach().numpy()
-
-                # indices
-                word_start_end, col_start_end, tab_start_end = example.bert_input_indices
-
-                # split question
-                question_encodings = [sum(embedding[st:ed]) / (ed-st) for st, ed in word_start_end]
-
-                # split col
-                cols = [np.expand_dims(embedding[st:ed], axis=0)for st, ed in col_start_end]
-
-                # Split tab
-                tabs = [np.expand_dims(embedding[st:ed], axis=0) for st, ed in tab_start_end]
-
-                self.bert_cache[question] = [question_encodings, cols, tabs]
-
         cache_path = "./data"
         cache_name = "bert_cache.pkl"
         save_path = os.path.join(cache_path, cache_name)
         if cache_name in os.listdir("./data"):
+            log.info("Loading bert cache")
             with open(save_path, "rb") as f:
                 self.bert_cache = pickle.load(f)
+            log.info("Loading bert done")
         else:
+            log.info("Creating bert cache")
+            for examples in examples_list:
+                for idx in tqdm(range(len(examples))):
+                    example = examples[idx]
+                    question = example.bert_input
+                    encoded_question = self.tokenizer.encode(question, add_special_tokens=False)
+                    encoded_question = torch.tensor(encoded_question).unsqueeze(0).cuda()
+                    embedding = self.bert_encoder(encoded_question)[0].squeeze(0).cpu().detach().numpy()
+
+                    # indices
+                    word_start_end, col_start_end, tab_start_end = example.bert_input_indices
+
+                    # split question
+                    question_encodings = [sum(embedding[st:ed]) / (ed-st) for st, ed in word_start_end]
+
+                    # split col
+                    cols = [np.expand_dims(embedding[st:ed], axis=0)for st, ed in col_start_end]
+
+                    # Split tab
+                    tabs = [np.expand_dims(embedding[st:ed], axis=0) for st, ed in tab_start_end]
+
+                    self.bert_cache[question] = [question_encodings, cols, tabs]
+            log.info("Saving bert cache")
             with open(save_path, "wb") as f:
                 pickle.dump(self.bert_cache, f)
+            log.info("Saving bert cache done")
 
     def input_type(self, values_list):
         B = len(values_list)
@@ -169,6 +177,8 @@ class BERT(nn.Module):
             for b_idx, question in enumerate(questions):
                 # question_without_pad = question.replace("[PAD]", "").strip()
                 # one_q_encodings, col_encodings, tab_encodings = self.bert_cache[question_without_pad]
+                if question not in self.bert_cache:
+                    exit()
                 one_q_encodings, col_encodings, tab_encodings = self.bert_cache[question]
 
                 one_q_encodings = torch.tensor(one_q_encodings).cuda()

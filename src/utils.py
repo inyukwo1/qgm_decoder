@@ -519,7 +519,12 @@ def epoch_acc(
         gold += [example.gt for example in examples]
 
     # Calculate acc
-    total_acc, is_correct_list = NOQGM.noqgm.cal_acc(pred, gold)
+    if model.cfg.rule == "noqgm":
+        total_acc, is_correct_list = NOQGM.noqgm.cal_acc(pred, gold)
+    elif model.cfg.rule == "semql":
+        total_acc, is_correct_list = SemQL.semql.cal_acc(pred, gold)
+    else:
+        raise NotImplementedError("not yet")
 
     if return_details:
         return total_acc, is_correct_list, pred, gold, example_list, details_list
@@ -528,7 +533,7 @@ def epoch_acc(
 
 
 def load_data_new(
-    sql_path, table_data, use_small=False, is_bert=False, query_type="simple", remove_punc=False,
+    sql_path, table_data, use_small=False, is_bert=False, query_type="simple", remove_punc=False, cfg=None,
 ):
     sql_data = []
     log.info("Loading data from {}".format(sql_path))
@@ -550,11 +555,17 @@ def load_data_new(
         db["col_set"] = data["col_set"]
         data["db"] = db
         data["column_names"] = db["column_names"]
-        # Append ground truth
 
-        # gt_str = SemQL.create_data(data["qgm"])
-        gt_str = NOQGM.create_data(data["sql"], db)
-        if gt_str:
+        # Append ground truth
+        if cfg.rule == "noqgm":
+            gt_str = NOQGM.create_data(data["sql"], db)
+        elif cfg.rule == "semql":
+            # gt_str = SemQL.create_data(data["qgm"])
+            gt_str = data["rule_label"]
+        else:
+            raise NotImplementedError("not yet")
+
+        if gt_str and NOQGM.create_data(data["sql"], db) and gt_str != True:
             gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
             data["gt"] = gt
     sql_data = [item for item in sql_data if "gt" in item]
@@ -577,7 +588,7 @@ def load_data_new(
     return sql_data[:20] if use_small else sql_data
 
 
-def load_dataset(model, is_toy, is_bert, dataset_path, query_type, use_down_schema, remove_punc):
+def load_dataset(model, is_toy, is_bert, dataset_path, query_type, use_down_schema, remove_punc, cfg):
     # Get paths
     table_path = os.path.join(dataset_path, "tables.json")
     train_path = os.path.join(dataset_path, "train.json")
@@ -608,8 +619,8 @@ def load_dataset(model, is_toy, is_bert, dataset_path, query_type, use_down_sche
         table_data[key]["neighbors"] = neighbors
 
     # Load data
-    train_data = load_data_new(train_path, table_data, is_toy, is_bert, query_type, remove_punc)
-    val_data = load_data_new(val_path, table_data, is_toy, is_bert, query_type, remove_punc)
+    train_data = load_data_new(train_path, table_data, is_toy, is_bert, query_type, remove_punc, cfg)
+    val_data = load_data_new(val_path, table_data, is_toy, is_bert, query_type, remove_punc, cfg)
 
     # # Append sql
     # for data in train_data:
@@ -636,19 +647,16 @@ def load_dataset(model, is_toy, is_bert, dataset_path, query_type, use_down_sche
 
     # Append bert input data
     if is_bert:
-        tokenzier_class, model_name = BertTokenizer, "bert-large-uncased"
-        tokenizer = tokenzier_class.from_pretrained(model_name)
-        append_bert_input(train_data, tokenizer)
-        append_bert_input(val_data, tokenizer)
-
-        # Create cache
         if model.encoder_name == "bert":
-            model.encoder.create_cache([train_data, val_data])
+            bert_encoder = model.encoder
         elif model.encoder_name == "ra_transformer":
-            model.bert.create_cache([train_data, val_data])
-            pass
+            bert_encoder = model.bert
         else:
-            raise NotImplementedError("not implemented yet")
+            raise NotImplementedError("not yet")
+
+        append_bert_input(train_data, bert_encoder.tokenizer)
+        append_bert_input(val_data, bert_encoder.tokenizer)
+        bert_encoder.create_cache([train_data, val_data])
 
     return train_data, val_data, table_data
 
@@ -1226,7 +1234,10 @@ def save_data_for_analysis(tag, datas, preds, golds, details_list, dataset, save
 def append_bert_input(examples, tokenizer):
     if tokenizer.pad_token != '[PAD]':
         raise NotImplementedError("Need to fix _pad_bert_input method in Batch class")
-    for example in examples:
+
+    log.info("Tokenizing with bert")
+    for idx in tqdm(range(len(examples))):
+        example = examples[idx]
         sentence = example.src_sent
         cols = example.tab_cols
         tabs = example.table_names

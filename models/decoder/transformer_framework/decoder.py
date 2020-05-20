@@ -45,13 +45,16 @@ class TransformerDecoderFramework(nn.Module):
         self.infer_symbol_affine_layer = LazyLinear(dim, dim)
         self.infer_tgt_linear_layer = LazyLinear(dim * 2, dim)
         self.infer_out_linear_layer = LazyLinear(dim, dim)
+        # self.infer_out_linear_layer2 = LazyLinear(dim, dim)
         self.infer_action_similarity = LazyCalculateSimilarity(dim, dim)
         self.infer_column_similarity = LazyCalculateSimilarity(dim, dim)
         self.infer_table_similarity = LazyCalculateSimilarity(dim, dim)
         if cfg.rule == "noqgm":
             self.grammar = NOQGM(dim)
-        else:
+        elif cfg.rule == "semql":
             self.grammar = SemQL(dim)
+        else:
+            raise NotImplementedError("not yet")
 
         self.col_symbol_id = self.grammar.symbol_to_sid["C"]
         self.tab_symbol_id = self.grammar.symbol_to_sid["T"]
@@ -195,6 +198,16 @@ class TransformerDecoderFramework(nn.Module):
             prev_tensor_dict.update({"decoder_out": decoder_out_promise})
             return prev_tensor_dict
 
+        def pass_infer_out_linear2(
+            state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
+        ) -> Dict[str, TensorPromise]:
+            decoder_out: torch.Tensor = prev_tensor_dict["decoder_out"].result
+            decoder_out_promise: TensorPromise = self.infer_out_linear_layer2.forward_later(
+                decoder_out
+            )
+            prev_tensor_dict.update({"decoder_out": decoder_out_promise})
+            return prev_tensor_dict
+
         def calc_prod(
             state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
         ) -> List[TensorPromise]:
@@ -256,6 +269,7 @@ class TransformerDecoderFramework(nn.Module):
                 .Then(combine_embeddings)
                 .Then(pass_infer_transformer)
                 .Then(pass_infer_out_linear)
+                # .Then(pass_infer_out_linear2)
                 .Then(calc_prod)
                 .Then(apply_prod)
             )

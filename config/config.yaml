@@ -35,7 +35,7 @@ reduce_dim: true
 
 # etc
 use_down_schema: false
-rule: "noqgm"
+rule: "noqgm" # or semql
 remove_punctuation_marks: false
 train_glove: false
 

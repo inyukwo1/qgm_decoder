@@ -125,11 +125,7 @@ class RA_Transformer_Encoder(nn.Module):
         if self.use_guided_attention:
             schema = torch.cat([col, tab], dim=0)
             schema_key_padding_mask = torch.cat([col_mask, tab_mask], dim=1).bool()
-
-            output = self.ra_transformer_encoder(
-
-            )
-
+            raise NotImplementedError("not yet")
         else:
             src = torch.cat([sen, col, tab], dim=0)
             src_key_padding_mask = torch.cat([sen_mask, col_mask, tab_mask], dim=1).bool()

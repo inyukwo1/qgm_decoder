@@ -3,6 +3,7 @@ from typing import List, Dict
 from models.framework.sequential_monad import State
 from models.framework.utils import assert_dim
 from rule.noqgm.noqgm_loss import NOQGM_Loss_New
+from rule.semql.semql_loss import SemQL_Loss_New
 from rule.grammar import Symbol, Action
 
 
@@ -68,7 +69,12 @@ class TransformerStateGold(TransformerState):
         self.soft_labeling = cfg.soft_labeling
         self.label_smoothing = cfg.label_smoothing
         self.gold: List[Action] = gold
-        self.loss = NOQGM_Loss_New()
+        if cfg.rule == "noqgm":
+            self.loss = NOQGM_Loss_New()
+        elif cfg.rule == "semql":
+            self.loss = SemQL_Loss_New()
+        else:
+            raise NotImplementedError("not yet")
 
     @classmethod
     def is_to_infer(cls, state) -> bool:

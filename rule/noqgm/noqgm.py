@@ -27,8 +27,10 @@ class NOQGM(Grammar):
         if sql["intersect"] or sql["union"] or sql["except"]:
             # Multiple
             return None
-        elif sql["having"] or sql["groupby"] or sql["orderby"]:
+        elif sql["having"]:
             return None
+        elif sql["groupby"] or sql["orderby"]:
+            return True
         else:
             # Single
             # Root

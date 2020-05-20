@@ -19,6 +19,11 @@ class SemQL(Grammar):
         return SemQL_Loss(self.symbol_to_sid)
 
     @classmethod
+    def create_data(cls, data):
+        raise NotImplementedError("need implementation")
+        return None
+
+    @classmethod
     def create_data(cls, qgm_boxes):
         # Simple query only
         qgm_box = qgm_boxes[0]

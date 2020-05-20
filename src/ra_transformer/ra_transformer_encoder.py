@@ -15,13 +15,13 @@ class RATransformerEncoder(nn.Module):
         self.num_layers = num_layers
         self.norm = norm
 
-    def forward(self, src, tgt, relation, mask=None, src_key_padding_mask=None, return_details=False):
+    def forward(self, src, tgt, relation, mask=None, src_key_padding_mask=None, return_details=False, is_guided=False):
         qk_weights_list = []
         qk_relation_weights_list = []
 
         for layer in self.layers:
             tgt = layer(
-                src,
+                src if is_guided else tgt,
                 tgt,
                 relation,
                 src_mask=mask,

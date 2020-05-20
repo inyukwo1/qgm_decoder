@@ -291,10 +291,7 @@ class EncoderDecoderModel(nn.Module):
         return output
 
     def forward(self, examples, is_train=False, return_details=False):
-        if self.encoder_name == "bert":
-            batch = Batch(examples, is_cuda=self.is_cuda, use_bert_cache=self.encoder.use_bert_cache)
-        else:
-            batch = Batch(examples, is_cuda=self.is_cuda)
+        batch = Batch(examples, is_cuda=self.is_cuda, use_bert_cache=self.cfg.use_bert_cache)
         # Encode
         encoder_output = self.encode(
             batch, return_details=return_details,

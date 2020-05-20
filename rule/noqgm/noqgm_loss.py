@@ -9,7 +9,6 @@ class NOQGM_Loss(Loss):
         # Symbols
         self.root = symbol_to_sid["Root"]
         self.sel = symbol_to_sid["Sel"]
-        self.n = symbol_to_sid["N"]
         self.filter = symbol_to_sid["Filter"]
         self.a = symbol_to_sid["A"]
         self.c = symbol_to_sid["C"]
@@ -52,7 +51,6 @@ class NOQGM_Loss_New(Loss):
         # Symbols
         self.root = "Root"
         self.sel = "Sel"
-        self.n = "N"
         self.filter = "Filter"
         self.a = "A"
         self.c = "C"
