@@ -24,9 +24,6 @@ class RA_Transformer_Encoder(nn.Module):
             self.sen_lstm = nn.LSTM(
                 dim, hidden_size // 2, bidirectional=True, batch_first=True
             )
-            self.col_lstm = nn.LSTM(
-                dim, hidden_size // 2, bidirectional=True, batch_first=True
-            )
             self.tab_lstm = nn.LSTM(
                 dim, hidden_size // 2, bidirectional=True, batch_first=True
             )
@@ -71,8 +68,6 @@ class RA_Transformer_Encoder(nn.Module):
         # LSTM
         if self.use_lstm:
             sen = self.encode_with_lstm(sen, sen_len, self.sen_lstm)
-            # Tab, Col 서로 연관 있는 애들 끼리 lstm으로 인코딩해야하지 않을까?
-            col = self.encode_with_lstm(col, col_len, self.col_lstm)
             tab = self.encode_with_lstm(tab, tab_len, self.tab_lstm)
 
         # Get len
@@ -102,8 +97,8 @@ class RA_Transformer_Encoder(nn.Module):
                 schema_src, schema_relation, src_key_padding_mask=schema_mask
             )
 
-            col = schema_out[col_max_len:, :, :]
-            tab = schema_out[:col_max_len, :, :]
+            col = schema_out[:col_max_len, :, :]
+            tab = schema_out[col_max_len:, :, :]
 
         # Combine
         src = torch.cat([sen, col, tab], dim=0)
