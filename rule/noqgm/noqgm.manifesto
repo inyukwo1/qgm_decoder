@@ -32,8 +32,8 @@ Is
 
 <grammar_start>
 Root ::= Sel Filter | Sel
-Sel ::= A | A A | A A A | A A A A | A A A A A | A A A A A A | A A A A A A A | A A A A A A A A
-Filter ::= A | A A | A A A | A A A A | A A A A A | A A A A A A | A A A A A A A | A A A A A A A A
+Sel ::= A | A A | A A A | A A A A | A A A A A
+Filter ::= C | C C | C C C | C C C C | C C C C C
 A ::= none C | max C | min C | count C | sum C | avg C
 C ::= T
 T ::= none
