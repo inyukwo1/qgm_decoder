@@ -33,9 +33,9 @@ class NOQGM(Grammar):
             # Single
             # Root
             if sql["where"]:
-                action = "Root1(1) Sel(0) "
+                action = "Root1(1) "
             else:
-                action = "Root1(0) Sel(0) "
+                action = "Root1(0) "
             # Sel
             assert sql["select"], "Something is weird {}".format(sql["select"])
             for select in sql["select"][1]:
@@ -53,7 +53,6 @@ class NOQGM(Grammar):
                     action += "Filter(0) "
                 op_id = where_cond[1] - 1
                 action += "Filter({}) ".format(op_id)
-                action += "A({}) ".format(where_cond[2][1][0])
                 ori_col_id = where_cond[2][1][1]
                 new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
                 action += "C({}) ".format(new_col_id)

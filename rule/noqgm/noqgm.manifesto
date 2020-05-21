@@ -1,7 +1,6 @@
 <symbol_start>
 Root1
 Filter
-Sel
 N
 A
 C
@@ -18,9 +17,8 @@ and
 <symbol_end>
 
 <grammar_start>
-Root1 ::= Sel | Sel Filter
-Filter ::= and Filter Filter | = A | < A | > A
-Sel ::= A
+Root1 ::= A | A Filter
+Filter ::= and Filter Filter | = C | < C | > C
 A ::= none C | max C | min C | count C | sum C | avg C
 C ::= none
 <grammar_end>
