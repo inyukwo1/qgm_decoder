@@ -36,6 +36,7 @@ class EncoderDecoderModel(nn.Module):
         self.encoder_name = cfg.encoder_name
         self.decoder_name = cfg.decoder_name
         self.embed_size = 1024 if self.encoder_name == "bert" else 300
+        self.train_glove = cfg.train_glove
 
         # Decoder
         if self.decoder_name == "transformer":

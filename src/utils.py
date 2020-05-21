@@ -1125,7 +1125,7 @@ def wrong_in_where_op(pred, gold):
 def categorize(pred, gold):
     where_flag = False
     if pred == gold:
-        return True, 'None'
+        return 'None'
     for idx in range(min(len(pred), len(gold))):
         pred_action_symbol = pred[idx][0]
         where_flag = where_flag or pred_action_symbol == "Filter"
@@ -1153,7 +1153,7 @@ def categorize(pred, gold):
                         reason = 'where_operator'
                 else:
                     raise RuntimeError("Should not be here")
-            return False, reason
+            return reason
 
 def save_data_for_analysis(tag, datas, preds, golds, details_list, dataset, save_path):
     log = {
@@ -1178,6 +1178,7 @@ def save_data_for_analysis(tag, datas, preds, golds, details_list, dataset, save
         data_log = {}
         data_log['idx'] = idx
         data_log['query'] = [' '.join(tmp) for tmp in data.src_sent]
+        data_log['sql'] = data.sql
         data_log['columns'] = [' '.join(tmp) for tmp in data.tab_cols]
         data_log['tables'] = [' '.join(tmp) for tmp in data.table_names]
         data_log['db'] = data.db_id,
@@ -1196,13 +1197,13 @@ def save_data_for_analysis(tag, datas, preds, golds, details_list, dataset, save
                 # weight tensor
                 value = head_weight_tensor.cpu().numpy()
                 image_path = os.path.join(image_folder_path, "{}_att_layer_{}_head_{}.png".format(idx, layer_idx, head_idx))
-                draw_heat_map(nl, value, 'att_layer_{}_head_{}'.format(layer_idx, head_idx), image_path)
+                # draw_heat_map(nl, value, 'att_layer_{}_head_{}'.format(layer_idx, head_idx), image_path)
                 data_log[weight_tensor_key] += [image_path]
 
                 # relation weight tensor
                 value = relation_head_weight_tensor.cpu().numpy()
                 image_path = os.path.join(image_folder_path, "{}_relation_att_layer_{}_head_{}.png".format(idx, layer_idx, head_idx))
-                draw_heat_map(nl, value, 'relation_att_layer_{}_head_{}'.format(layer_idx, head_idx), image_path)
+                # draw_heat_map(nl, value, 'relation_att_layer_{}_head_{}'.format(layer_idx, head_idx), image_path)
                 data_log[relation_tensor_key] += [image_path]
 
         # Create prob image and save its path
@@ -1217,7 +1218,7 @@ def save_data_for_analysis(tag, datas, preds, golds, details_list, dataset, save
             else:
                 arg1 = log["grammar"]
             image_path = os.path.join(image_folder_path, "{}_inference_{}.png".format(idx, pred_idx))
-            draw_inference_score(arg1, value, key, image_path)
+            # draw_inference_score(arg1, value, key, image_path)
             data_log[inference_key] += [image_path]
 
 

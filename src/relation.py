@@ -57,6 +57,7 @@ def create_relation(data, dbs, use_col_set=True):
     """
     * has not been considered in depths
     """
+
     db = dbs[data["db_id"]]
 
     tokens = data["question_arg"]

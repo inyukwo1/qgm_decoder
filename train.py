@@ -78,7 +78,7 @@ def train(cfg):
 
 
     model.word_emb = None if cfg.is_bert else utils.load_word_emb(cfg.glove_embed_path)
-    model.train_glove = cfg.train_glove
+
     if cfg.train_glove:
         # Filter
         tmp = {}
