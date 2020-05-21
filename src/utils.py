@@ -1134,8 +1134,10 @@ def categorize(pred, gold):
             if pred_action_symbol == "T":
                 reason = 'table'
             elif pred_action_symbol == "C":
-                if pred[idx][1] == 0 or gold[idx][1] == 0:
-                    reason = 'column_star'
+                if pred[idx][1] == 0:
+                    reason = 'column_pred_star'
+                elif gold[idx][1] == 0:
+                    reason = 'column_gold_star'
                 else:
                     reason = 'column'
             else:
