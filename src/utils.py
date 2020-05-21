@@ -1134,12 +1134,17 @@ def categorize(pred, gold):
             if pred_action_symbol == "T":
                 reason = 'table'
             elif pred_action_symbol == "C":
-                if pred[idx][1] == 0:
-                    reason = 'column_pred_star'
-                elif gold[idx][1] == 0:
-                    reason = 'column_gold_star'
+                # In WHERE clause
+                if "Filter" in [item[0] for item in pred[:idx]]:
+                    reason = 'column_where'
+                # In SELECT clause
                 else:
-                    reason = 'column'
+                    if pred[idx][1] == 0:
+                        reason = 'column_select_pred_star'
+                    elif gold[idx][1] == 0:
+                        reason = 'column_select_gold_star'
+                    else:
+                        reason = 'column_select'
             else:
                 # Structural reason
                 if pred_action_symbol == "Sel":
