@@ -24,15 +24,62 @@ export function createPreviews(dataInfo){
     fragment.appendChild(messageElement);
     return fragment;
   }
+  // Create table
+  const table = createElement('table', "table");
+
   for (let [tag, value] of Object.entries(dataInfo)){
-    const element = createElement('div', tag);
-    const textPreviewEL = createElement('textarea', tag.concat('-text'))
-    textPreviewEL.textContent = value;
-    textPreviewEL.rows = '2';
-    textPreviewEL.cols = '150';
-    element.appendChild(textPreviewEL);
-    fragment.appendChild(element);
+    // create row
+    const row = createElement('tr', 'tr_'.concat(tag));
+
+    // tag
+    const left_element = createElement('td', 'td_tag_'.concat(tag));
+    left_element.textContent = tag.toUpperCase();
+    row.appendChild(left_element);
+
+    //create right value
+    if (tag == 'columns' || tag == 'tables'){
+      //create sub table
+      const entities = ''.concat(value).split(',');
+      const sub_table = createElement('table', "sub_table_".concat(tag));
+      entities.forEach(function(item, index){
+        const sub_row = createElement('tr', 'tr_'.concat(index));
+        const sub_left_element = createElement('td', 'td_left');
+        const sub_right_element = createElement('td', 'td_right');
+        // Set value
+        sub_left_element.textContent = index;
+        sub_right_element.textContent = item;
+        // Set size
+        sub_left_element.width = '30';
+
+        sub_row.appendChild(sub_left_element);
+        sub_row.appendChild(sub_right_element);
+        sub_table.appendChild(sub_row);
+      });
+      row.appendChild(sub_table);
+    }
+    else{
+      const right_element = createElement('textarea', 'td_'.concat(tag));
+      if (tag == 'query'){
+        right_element.textContent = value.join(' ');
+      }
+      else if (tag == 'gold' || tag == 'pred'){
+        const str = [];
+        for (const item of value){
+          str.push(item.join('(').concat(')'));
+        }
+        right_element.textContent = str.join(', ');
+      }
+      else{
+        right_element.textContent = value;
+      }
+      right_element.rows = '2';
+      right_element.cols = '127';
+      row.appendChild(right_element);
+    }
+
+    table.appendChild(row);
   }
+  fragment.appendChild(table);
   return fragment;
 }
 

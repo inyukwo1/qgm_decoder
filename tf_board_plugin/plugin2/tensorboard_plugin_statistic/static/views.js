@@ -92,6 +92,8 @@ export function createStatisticViews(dataInfo){
     const textPreviewEl = createElement('textarea', 'num');
     tagNameEl.textContent = filter_tag;
     textPreviewEl.textContent = num;
+    textPreviewEl.cols = '120';
+    textPreviewEl.rows = '3';
     previewEl.appendChild(tagNameEl);
     previewEl.appendChild(textPreviewEl);
     fragment.appendChild(previewEl);
