@@ -116,6 +116,11 @@ python eval.py use_down_schema=true encoder=ra_transformer decoder=transformer b
 * After running train.py, run `tensorboard --logdir ./logs --bind_all --port [port_num]` in terminal
 * check http://[ip]:6006
 
+#### tensorboard plugin
+
+* To install tensorboard, run  `cd ./tf_board_plugin && sh ./setup.sh`.
+* after running eval.py, run tensorboard for the analysis.
+
 #### SQL Support
 
 * tested with simple query + join query.
