@@ -1132,7 +1132,10 @@ def categorize(pred, gold):
         if pred[idx] != gold[idx]:
             # Determine why
             if pred_action_symbol == "T":
-                reason = 'table'
+                if "Filter" in [item[0] for item in pred[:idx]]:
+                    reason = 'table_where'
+                else:
+                    reason = 'table_select'
             elif pred_action_symbol == "C":
                 # In WHERE clause
                 if "Filter" in [item[0] for item in pred[:idx]]:
