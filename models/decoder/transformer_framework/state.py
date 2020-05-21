@@ -50,6 +50,9 @@ class TransformerState(State):
     def impossible_table_indices(self, idx) -> List[int]:
         pass
 
+    def is_sel_mode(self):
+        pass
+
 
 class TransformerStateGold(TransformerState):
     def __init__(
@@ -107,6 +110,16 @@ class TransformerStateGold(TransformerState):
             gold_action_idx = self.grammar.action_to_aid[gold_action]
         prev_actions: List[Action] = self.gold[: self.step_cnt]
         self.loss.add(-prod[gold_action_idx], gold_symbol, prev_actions)
+
+    def is_sel_mode(self):
+        if self.get_current_symbol() == "Root":
+            return False
+        for i in range(self.step_cnt, -1, -1):
+            if self.gold[i][0] == "Sel":
+                return True
+            elif self.gold[i][0] == "Filter":
+                return False
+        assert False
 
 
 class TransformerStatePred(TransformerState):
@@ -176,3 +189,16 @@ class TransformerStatePred(TransformerState):
             new_nonterminal_symbols + self.nonterminal_symbol_stack
         )
         self.preds.append(action)
+
+    def is_sel_mode(self):
+        if self.get_current_symbol() in ["Root", "Filter"]:
+            return False
+        if self.get_current_symbol() == "Sel":
+            return True
+        history_symbols = self.get_history_symbols()
+        for i in range(self.step_cnt - 1, -1, -1):
+            if history_symbols[i] == "Sel":
+                return True
+            elif history_symbols[i] == "Filter":
+                return False
+        assert False

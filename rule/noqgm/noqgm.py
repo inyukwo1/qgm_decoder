@@ -58,6 +58,8 @@ class NOQGM(Grammar):
                 where_cond = sql["where"][idx]
                 if isinstance(where_cond[3], dict):
                     return None
+                op_id = where_cond[1] + 4 if where_cond[0] else where_cond[1]
+                action += "B({}) ".format(op_id)
                 ori_col_id = where_cond[2][1][1]
                 new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
                 if ori_col_id == 0:

@@ -6,6 +6,7 @@ N
 A
 C
 T
+B
 none
 max
 min
@@ -33,8 +34,9 @@ Is
 <grammar_start>
 Root ::= Sel Filter | Sel
 Sel ::= A | A A | A A A | A A A A | A A A A A
-Filter ::= C | C C | C C C | C C C C | C C C C C
+Filter ::= B | B B | B B B | B B B B | B B B B B
 A ::= none C | max C | min C | count C | sum C | avg C
+B ::=  Not C | Between C | = C | > C | < C | >= C | <= C | != C | In C | Like C | Is C | Exists C | NotIn C | NotLike C
 C ::= T
 T ::= none
 <grammar_end>
