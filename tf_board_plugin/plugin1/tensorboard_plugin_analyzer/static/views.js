@@ -58,7 +58,7 @@ export function createPreviews(dataInfo){
       row.appendChild(sub_table);
     }
     else{
-      const right_element = createElement('textarea', 'td_'.concat(tag));
+      const right_element = createElement('td', 'td_'.concat(tag));
       if (tag == 'query'){
         right_element.textContent = value.join(' ');
       }
