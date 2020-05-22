@@ -38,11 +38,17 @@ class NOQGM(Grammar):
                 action = "Root1(0) "
             # Sel
             assert sql["select"], "Something is weird {}".format(sql["select"])
+            action += "Sel(0) Sel1(0) Sel2(0) "
             for select in sql["select"][1]:
                 action += "A({}) ".format(select[0])
                 ori_col_id = select[1][1][1]
                 new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
+                if ori_col_id == 0:
+                    tab_id = sql["from"]["table_units"][0][1]
+                else:
+                    tab_id = db["column_names"][ori_col_id][0]
                 action += "C({}) ".format(new_col_id)
+                action += "T({}) ".format(tab_id)
 
             for idx in range(0, len(sql["where"]), 2):
                 where_cond = sql["where"][idx]
@@ -52,10 +58,15 @@ class NOQGM(Grammar):
                     assert sql["where"][idx + 1] in ["and"]
                     action += "Filter(0) "
                 op_id = where_cond[1] - 1
-                action += "Filter({}) ".format(op_id)
+                action += "Filter({}) Filter1(0) Filter2(0) ".format(op_id)
                 ori_col_id = where_cond[2][1][1]
                 new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
+                if ori_col_id == 0:
+                    tab_id = sql["from"]["table_units"][0][1]
+                else:
+                    tab_id = db["column_names"][ori_col_id][0]
                 action += "C({}) ".format(new_col_id)
+                action += "T({}) ".format(tab_id)
 
         return action[:-1]
 

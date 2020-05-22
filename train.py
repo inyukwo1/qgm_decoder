@@ -134,7 +134,7 @@ def train(cfg):
             #     is_train=False,
             #     optimize_freq=cfg.optimize_freq,
             # )
-            # train_acc = utils.epoch_acc(model, cfg.batch_size, train_data)
+            train_acc = utils.epoch_acc(model, cfg.batch_size, train_data)
             val_acc = utils.epoch_acc(model, cfg.batch_size, val_data)
 
             # Logging to tensorboard

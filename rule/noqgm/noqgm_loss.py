@@ -84,5 +84,5 @@ class NOQGM_Loss_New(Loss):
         elif action_node == self.t:
             key = "quantifier_tab"
         else:
-            raise RuntimeError("Should not be here")
+            key = "head_num"
         return key

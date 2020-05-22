@@ -1,7 +1,13 @@
 <symbol_start>
 Root1
+Sel
+Sel1
+Sel2
 Filter
+Filter1
+Filter2
 N
+T
 A
 C
 none
@@ -17,8 +23,14 @@ and
 <symbol_end>
 
 <grammar_start>
-Root1 ::= A | A Filter
-Filter ::= and Filter Filter | = C | < C | > C
+Root1 ::= Sel | Sel Filter
+Sel ::= Sel1
+Sel1 ::= Sel2
+Sel2 ::= A
+Filter ::= and Filter Filter | = Filter1 | < Filter1 | > Filter1
+Filter1 ::= Filter2
+Filter2 ::= C
 A ::= none C | max C | min C | count C | sum C | avg C
-C ::= none
+C ::= T
+T ::= none
 <grammar_end>
