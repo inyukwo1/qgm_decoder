@@ -35,7 +35,7 @@ Is
 Root ::= Sel Filter
 Sel ::= none | A | A A | A A A | A A A A | A A A A A
 Filter ::= none | B | B B | B B B | B B B B | B B B B B
-A ::= none C | max C | min C | count C | sum C | avg C
+A ::= C
 B ::=  Not A | Between A | = A | > A | < A | >= A | <= A | != A | In A | Like A | Is A | Exists A | NotIn A | NotLike A
 C ::= T
 T ::= none
