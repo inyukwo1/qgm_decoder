@@ -33,11 +33,11 @@ Is
 
 <grammar_start>
 Root ::= Sel Filter
-Sel ::= none | A | A A | A A A | A A A A | A A A A A
-Filter ::= none | B Filter
-A ::= none C | max C | min C | count C | sum C | avg C
-B ::=  Not A | Between A | = A | > A | < A | >= A | <= A | != A | In A | Like A | Is A | Exists A | NotIn A | NotLike A
-C ::= T
+Sel ::= none | C A | C A C A | C A C A C A | C A C A C A C A | C A C A C A C A C A
+Filter ::= none | B | B B | B B B | B B B B | B B B B B
+B ::=  Not C A | Between C A | = C A | > C A | < C A | >= C A | <= C A | != C A | In C A | Like C A | Is C A | Exists C A | NotIn C A | NotLike C A
+A ::= none T | max T | min T | count T | sum T | avg T
+C ::= none
 T ::= none
 <grammar_end>
 

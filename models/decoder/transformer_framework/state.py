@@ -177,7 +177,7 @@ class TransformerStatePred(TransformerState):
         if current_symbol == "C":
             assert_dim([len(self.col_tab_dic)], prod)
             action: Action = (current_symbol, pred_idx)
-            new_nonterminal_symbols = ["T"]
+            new_nonterminal_symbols = []
         elif current_symbol == "T":
             assert_dim([len(self.col_tab_dic[0])], prod)
             action: Action = (current_symbol, pred_idx)
