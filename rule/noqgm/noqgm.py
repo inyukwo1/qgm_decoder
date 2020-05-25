@@ -37,6 +37,7 @@ class NOQGM(Grammar):
             action = "Root(0) "
             action += "Sel({}) ".format(len(sql["select"][1]))
             for select in sql["select"][1]:
+                action += "A({}) ".format(select[0])
                 ori_col_id = select[1][1][1]
                 new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
                 if ori_col_id == 0:
@@ -45,7 +46,6 @@ class NOQGM(Grammar):
                     tab_id = db["column_names"][ori_col_id][0]
                 action += "C({}) ".format(new_col_id)
                 action += "T({}) ".format(tab_id)
-                action += "A({}) ".format(select[0])
                 col_num += 1
             action += "Filter({}) ".format((len(sql["where"]) + 1) // 2)
 
@@ -61,9 +61,9 @@ class NOQGM(Grammar):
                     tab_id = sql["from"]["table_units"][0][1]
                 else:
                     tab_id = db["column_names"][ori_col_id][0]
+                action += "A({}) ".format(where_cond[2][1][0])
                 action += "C({}) ".format(new_col_id)
                 action += "T({}) ".format(tab_id)
-                action += "A({}) ".format(where_cond[2][1][0])
                 col_num += 1
 
         return action[:-1]
