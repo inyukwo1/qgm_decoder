@@ -407,6 +407,7 @@ def epoch_train(
     sql_data,
     clip_grad,
     decoder_name,
+    validation_func,
     is_train=True,
     optimize_freq=1,
 ):
@@ -482,6 +483,9 @@ def epoch_train(
                 optimizer.zero_grad()
                 if bert_optimizer:
                     bert_optimizer.zero_grad()
+            if idx % (batch_size * (len(sql_data) // 5)) == 0:
+                validation_func()
+                model.train()
 
     # Average loss
     for key in total_loss.keys():

@@ -33,12 +33,12 @@ class NOQGM(Grammar):
             # Single
             # Root
             if sql["where"]:
-                action = "Root1(1) "
+                action = "Root(0) "
             else:
-                action = "Root1(0) "
+                action = "Root(1) "
             # Sel
             assert sql["select"], "Something is weird {}".format(sql["select"])
-            action += "Sel(0) Sel1(0) Sel2(0) "
+            action += "Sel({}) ".format(len(sql["select"][1]) - 1)
             for select in sql["select"][1]:
                 action += "A({}) ".format(select[0])
                 ori_col_id = select[1][1][1]
@@ -55,10 +55,13 @@ class NOQGM(Grammar):
                 if isinstance(where_cond[3], dict):
                     return None
                 if len(sql["where"]) > idx + 1:
-                    assert sql["where"][idx + 1] in ["and"]
-                    action += "Filter(0) "
-                op_id = where_cond[1] - 1
-                action += "Filter({}) Filter1(0) Filter2(0) ".format(op_id)
+                    assert sql["where"][idx + 1] in ["or", "and"]
+                    action += "Filter({}) ".format(
+                        0 if sql["where"][idx + 1] == "or" else 1
+                    )
+                op_id = where_cond[1] + 6 if where_cond[0] else where_cond[1] + 2
+                action += "Filter({}) ".format(op_id)
+                action += "A({}) ".format(where_cond[2][1][0])
                 ori_col_id = where_cond[2][1][1]
                 new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
                 if ori_col_id == 0:

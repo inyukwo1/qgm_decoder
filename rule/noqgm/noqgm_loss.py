@@ -67,9 +67,8 @@ class NOQGM_Loss_New(Loss):
             prev_symbols = [
                 prev_action[0]
                 for prev_action in prev_actions
-                if prev_action[0] in ["Root1", "Filter"]
+                if prev_action[0] in ["Sel", "Filter"]
             ]
-            assert len(prev_symbols) > 0, "Wrong prev_actions: {}".format(prev_actions)
             key = "head_agg" if prev_symbols[-1] == "Sel" else "predicate_agg"
         elif action_node == self.filter:
             key = "predicate_num"
@@ -77,9 +76,8 @@ class NOQGM_Loss_New(Loss):
             prev_symbols = [
                 prev_action[0]
                 for prev_action in prev_actions
-                if prev_action[0] in ["Root1", "Filter"]
+                if prev_action[0] in ["Sel", "Filter"]
             ]
-            assert len(prev_symbols) > 0, "Wrong prev_actions: {}".format(prev_actions)
             key = "head_col" if prev_symbols[-1] == "Sel" else "predicate_col"
         elif action_node == self.t:
             key = "quantifier_tab"

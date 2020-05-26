@@ -1,36 +1,50 @@
 <symbol_start>
-Root1
+Root
 Sel
-Sel1
-Sel2
 Filter
-Filter1
-Filter2
 N
-T
 A
 C
+T
 none
 max
 min
 count
 sum
 avg
+Not
+Between
+Like
+NotLike
 and
+or
+In
+NotIn
+Exists
+Is
 =
+!=
 <
 >
+<=
+>=
 <symbol_end>
 
 <grammar_start>
-Root1 ::= Sel | Sel Filter
-Sel ::= Sel1
-Sel1 ::= Sel2
-Sel2 ::= A
-Filter ::= and Filter Filter | = Filter1 | < Filter1 | > Filter1
-Filter1 ::= Filter2
-Filter2 ::= C
+Root ::= Sel Filter | Sel
+Sel ::= A | A A | A A A | A A A A | A A A A A
+Filter ::= or Filter Filter | and Filter Filter | Not A | Between A | = A | > A | < A | >= A | <= A | != A | In A | Like A | Is A | Exists A | NotIn A | NotLike A
 A ::= none C | max C | min C | count C | sum C | avg C
 C ::= T
 T ::= none
 <grammar_end>
+
+# "Sel" is for the SELECT Clause
+# "Filter" is for the WHERE Clause
+# "A" is for Aggregation operator
+# "C" is for the column idx
+# "T" is for the table idx
+
+
+
+
