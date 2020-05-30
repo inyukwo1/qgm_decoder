@@ -37,7 +37,7 @@ class TransformerDecoderFramework(nn.Module):
         self.nhead = nhead
         self.layer_num = layer_num
         self.use_relation = cfg.use_relation
-        self.decoding_length = 8
+        self.decoding_length = 16
         self.padding_action_tensor = nn.Parameter(torch.rand(self.dim))
         self.padding_symbol_tensor = nn.Parameter(torch.rand(self.dim))
 
