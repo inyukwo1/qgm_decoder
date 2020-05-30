@@ -64,21 +64,16 @@ class NOQGM_Loss_New(Loss):
         elif action_node == self.sel:
             key = "head_num"
         elif action_node == self.a:
-            prev_symbols = [
-                prev_action[0]
-                for prev_action in prev_actions
-                if prev_action[0] in ["Sel", "Filter"]
-            ]
-            key = "head_agg" if prev_symbols[-1] == "Sel" else "predicate_agg"
+            key = "head_agg"
         elif action_node == self.filter:
             key = "predicate_num"
         elif action_node == self.c:
             prev_symbols = [
                 prev_action[0]
                 for prev_action in prev_actions
-                if prev_action[0] in ["Sel", "Filter"]
+                if prev_action[0] in ["Root", "Filter"]
             ]
-            key = "head_col" if prev_symbols[-1] == "Sel" else "predicate_col"
+            key = "head_col" if prev_symbols[-1] == "Root" else "predicate_col"
         elif action_node == self.t:
             key = "quantifier_tab"
         else:
