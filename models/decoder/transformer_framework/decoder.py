@@ -37,7 +37,6 @@ class TransformerDecoderFramework(nn.Module):
         self.nhead = nhead
         self.layer_num = layer_num
         self.use_relation = cfg.use_relation
-        self.decoding_length = 24
         self.padding_action_tensor = nn.Parameter(torch.rand(self.dim))
         self.padding_symbol_tensor = nn.Parameter(torch.rand(self.dim))
 
@@ -71,9 +70,11 @@ class TransformerDecoderFramework(nn.Module):
             return self.grammar.action_emb(action_idx)
 
     def symbol_list_to_embedding(self, symbol_list: List[Symbol]) -> torch.Tensor:
-        symbol_ids_list: List[SymbolId] = [
-            self.grammar.symbol_to_sid[symbol] for symbol in symbol_list
-        ]
+        symbol_ids_list: List[SymbolId] = []
+        for symbol in symbol_list:
+            if symbol == "C":
+                symbol_ids_list += [self.grammar.symbol_to_sid["<="]] * 4
+            symbol_ids_list += [self.grammar.symbol_to_sid[symbol]]
         symbol_ids_tensor = torch.tensor(symbol_ids_list).long().cuda()
         symbol_embeddings = self.grammar.symbol_emb(symbol_ids_tensor)
         return symbol_embeddings
@@ -131,13 +132,15 @@ class TransformerDecoderFramework(nn.Module):
             state: TransformerState, _
         ) -> Dict[str, TensorPromise]:
             history_actions: List[Action] = state.get_history_actions()
-            history_action_embeddings: List[torch.Tensor] = [
-                self.action_to_embedding(state, action) for action in history_actions
-            ]
+            history_action_embeddings: List[torch.Tensor] = []
+            for action in history_actions:
+                if action[0] == "C":
+                    history_action_embeddings += [self.padding_action_tensor] * 4
+                history_action_embeddings += [self.action_to_embedding(state, action)]
+            if state.get_current_symbol() == "C":
+                history_action_embeddings += [self.padding_action_tensor] * 4
             current_action_embedding = self.onedim_zero_tensor()
             history_action_embeddings += [current_action_embedding]
-            while len(history_action_embeddings) < self.decoding_length:
-                history_action_embeddings += [self.padding_action_tensor]
             action_embeddings = torch.stack(history_action_embeddings, dim=0)
             action_embeddings_promise: TensorPromise = self.infer_action_affine_layer.forward_later(
                 action_embeddings
@@ -151,11 +154,6 @@ class TransformerDecoderFramework(nn.Module):
             current_symbol: Symbol = state.get_current_symbol()
             history_symbols += [current_symbol]
             symbol_embeddings = self.symbol_list_to_embedding(history_symbols)
-            padding = [self.padding_symbol_tensor] * (
-                self.decoding_length - len(history_symbols)
-            )
-            padding = torch.stack(padding, dim=0)
-            symbol_embeddings = torch.cat((symbol_embeddings, padding), dim=0)
             symbol_embeddings_promise: TensorPromise = self.infer_symbol_affine_layer.forward_later(
                 symbol_embeddings
             )
@@ -233,11 +231,17 @@ class TransformerDecoderFramework(nn.Module):
                 return prod
 
             decoder_out: torch.Tensor = prev_tensor_dict["decoder_out"].result
+            c_cnt = 0
+            for symbol in state.get_history_symbols():
+                if symbol == "C":
+                    c_cnt += 1
 
             current_symbol: Symbol = state.get_current_symbol()
+            if current_symbol == "C":
+                c_cnt += 1
             assert current_symbol != None
             promise_prod: TensorPromise = calc_prod_with_idx_and_symbol(
-                state.step_cnt, current_symbol
+                state.step_cnt + c_cnt * 4, current_symbol
             )
             prev_tensor_dict.update({"infer_prod": promise_prod})
             return prev_tensor_dict
