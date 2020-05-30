@@ -37,6 +37,9 @@ class TransformerDecoderFramework(nn.Module):
         self.nhead = nhead
         self.layer_num = layer_num
         self.use_relation = cfg.use_relation
+        self.decoding_length = 8
+        self.padding_action_tensor = nn.Parameter(torch.rand(self.dim))
+        self.padding_symbol_tensor = nn.Parameter(torch.rand(self.dim))
 
         # For inference
         self.infer_transformer = LazyTransformerDecoder(dim, nhead, layer_num)
@@ -133,6 +136,8 @@ class TransformerDecoderFramework(nn.Module):
             ]
             current_action_embedding = self.onedim_zero_tensor()
             history_action_embeddings += [current_action_embedding]
+            while len(history_action_embeddings) < self.decoding_length:
+                history_action_embeddings += [self.padding_action_tensor]
             action_embeddings = torch.stack(history_action_embeddings, dim=0)
             action_embeddings_promise: TensorPromise = self.infer_action_affine_layer.forward_later(
                 action_embeddings
@@ -146,6 +151,11 @@ class TransformerDecoderFramework(nn.Module):
             current_symbol: Symbol = state.get_current_symbol()
             history_symbols += [current_symbol]
             symbol_embeddings = self.symbol_list_to_embedding(history_symbols)
+            padding = [self.padding_symbol_tensor] * (
+                self.decoding_length - len(history_symbols)
+            )
+            padding = torch.stack(padding, dim=0)
+            symbol_embeddings = torch.cat((symbol_embeddings, padding), dim=0)
             symbol_embeddings_promise: TensorPromise = self.infer_symbol_affine_layer.forward_later(
                 symbol_embeddings
             )
