@@ -14,6 +14,7 @@ import nltk
 import os
 import pickle
 import sqlite3
+from tqdm import tqdm
 from utils import (
     symbol_filter,
     re_lemma,
@@ -29,6 +30,9 @@ from utils import (
 from utils import AGG, wordnet_lemmatizer
 from utils import load_dataSets
 import re
+
+
+SKIP_WORDS = ["he", "the"]
 
 
 def process_datas(datas, args, dataset_name):
@@ -58,7 +62,8 @@ def process_datas(datas, args, dataset_name):
         if "origin_question_toks" not in d:
             d["origin_question_toks"] = d["question_toks"]
 
-    for entry in datas:
+    for idx in tqdm(range(len(datas))):
+        entry = datas[idx]
         db_id = entry["db_id"]
         if db_id not in db_values:
             schema_json = schema_dict[db_id]
@@ -95,14 +100,17 @@ def process_datas(datas, args, dataset_name):
                     cursor.execute('SELECT "{}" FROM "{}"'.format(col, table))
                     col = entry["names"][col_idx]
                     value_set = set()
-                    try:
-                        for val in cursor.fetchall():
-                            if isinstance(val[0], str):
-                                value_set.add(str(val[0].lower()))
-                                value_set.add(lemma(str(val[0].lower())))
-
-                    except:
-                        print("not utf8 value")
+                    for val in cursor.fetchall():
+                        if isinstance(val[0], str):
+                            val_str = val[0].lower()
+                            value_set.add(val_str)
+                            if val_str not in SKIP_WORDS:
+                                val_str = wordnet_lemmatizer.lemmatize(val_str)
+                            value_set.add(val_str)
+                        elif isinstance(val[0], int) or isinstance(val[0], float):
+                            continue
+                        else:
+                            print("check this out: {}".format(val))
                     if col in col_value_set:
                         col_value_set[col] |= value_set
                     else:
@@ -116,7 +124,7 @@ def process_datas(datas, args, dataset_name):
                 r"[^,.():;\"`?! ]+|[,.():;\"?!]", entry["question"].replace("'", " ' ")
             )
         ]
-        question_toks = [wordnet_lemmatizer.lemmatize(x) for x in origin_question_toks]
+        question_toks = [x if x in SKIP_WORDS else wordnet_lemmatizer.lemmatize(x) for x in origin_question_toks]
 
         entry["question_toks"] = origin_question_toks
 
@@ -124,7 +132,7 @@ def process_datas(datas, args, dataset_name):
         table_names_pattern = []
 
         for y in entry["table_names"]:
-            x = [wordnet_lemmatizer.lemmatize(x.lower()) for x in y.split(" ")]
+            x = [x if x in SKIP_WORDS else wordnet_lemmatizer.lemmatize(x.lower()) for x in y.split(" ")]
             table_names.append(" ".join(x))
             x = [re_lemma(x.lower()) for x in y.split(" ")]
             table_names_pattern.append(" ".join(x))
@@ -136,7 +144,7 @@ def process_datas(datas, args, dataset_name):
         header_toks_list_pattern = []
 
         for y in entry["col_set"]:
-            x = [wordnet_lemmatizer.lemmatize(x.lower()) for x in y.split(" ")]
+            x = [x if x in SKIP_WORDS else wordnet_lemmatizer.lemmatize(x.lower()) for x in y.split(" ")]
             header_toks.append(" ".join(x))
             header_toks_list.append(x)
 
@@ -247,7 +255,7 @@ def process_datas(datas, args, dataset_name):
             end_idx, values = group_values(origin_question_toks, idx, num_toks)
             if values and (len(values) > 1 or question_toks[idx - 1] not in ["?", "."]):
                 tmp_toks = [
-                    wordnet_lemmatizer.lemmatize(x) for x in question_toks[idx:end_idx]
+                    x if x in SKIP_WORDS else wordnet_lemmatizer.lemmatize(x) for x in question_toks[idx:end_idx]
                 ]
                 assert len(tmp_toks) > 0, print(
                     question_toks[idx:end_idx], values, question_toks, idx, end_idx
