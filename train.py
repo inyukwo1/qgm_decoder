@@ -3,16 +3,21 @@ import copy
 import hydra
 import logging
 import datetime
+import random
+import math
 
 import torch
 import torch.optim as optim
 from radam import RAdam
+from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
 from src import utils
 from rule.semql.semql import SemQL
 from models.wrapper_model import EncoderDecoderModel
 # from models.LSTMEncoderQGMTransformerDecoder import LSTMEncoderQGMTransformerDecoder
+from optimizer import *
+
 
 log = logging.getLogger(__name__)
 
@@ -51,9 +56,12 @@ def train(cfg):
         bert_optimizer = None
     log.info("Enable Learning Rate Scheduler: {}".format(cfg.lr_scheduler))
     if cfg.lr_scheduler:
-        scheduler = optim.lr_scheduler.MultiStepLR(
-            optimizer, milestones=cfg.milestones, gamma=cfg.lr_scheduler_gamma,
-        )
+        # scheduler = optim.lr_scheduler.MultiStepLR(
+        #     optimizer, milestones=cfg.milestones, gamma=cfg.lr_scheduler_gamma,
+        # )
+        scheduler = WarmUpMultiStepLR(optimizer,
+                                      warmup_steps=cfg.max_step_cnt/20,
+                                      )
         scheduler_bert = (
             optim.lr_scheduler.MultiStepLR(
                 bert_optimizer, milestones=cfg.milestones, gamma=cfg.lr_scheduler_gamma,
@@ -113,36 +121,67 @@ def train(cfg):
         os.mkdir(log_model_path)
 
     best_val_acc = 0
-    for epoch in range(1, cfg.max_epoch):
+    step_per_epoch = math.ceil(len(train_data) / cfg.batch_size)
+    for step_cnt in tqdm(range(0, cfg.max_step_cnt)):
         log.info(
-            "\nEpoch: {}  lr: {:.2e}  step: {}  Time: {}".format(
-                epoch,
+            "\nEpoch: {}  lr: {:.3e}  step: {}  Time: {}".format(
+                int(step_cnt / step_per_epoch) + 1,
                 scheduler.optimizer.param_groups[0]["lr"],
                 scheduler.optimizer._step_count,
                 str(datetime.datetime.now()).split(".")[0],
-            )
+                )
         )
 
         # Training
-        train_loss = utils.epoch_train(
+        # create sub train data
+        idx1 = int(step_cnt % step_per_epoch) * cfg.batch_size
+        if (step_cnt+1) % step_per_epoch or not len(train_data) % cfg.batch_size:
+            idx2 = cfg.batch_size
+        else:
+            idx2 = len(train_data) % cfg.batch_size
+
+        mini_batch = train_data[idx1:idx1+idx2]
+
+        train_loss, train_loss_dic = utils.train(
             model,
-            optimizer,
-            bert_optimizer,
-            cfg.batch_size,
-            train_data,
-            cfg.clip_grad,
+            mini_batch,
             cfg.decoder_name,
-            optimize_freq=cfg.optimize_freq,
         )
+
+        train_loss.backward()
+        if step_cnt % cfg.optimize_freq == 0 and step_cnt:
+            if cfg.clip_grad > 0.0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.clip_grad)
+            optimizer.step()
+            if bert_optimizer:
+                bert_optimizer.step()
+            optimizer.zero_grad()
+            if bert_optimizer:
+                bert_optimizer.zero_grad()
+
+        # Shuffle
+        if not step_cnt % step_per_epoch and step_cnt:
+            # shuffle
+            def chunks(lst, n):
+                for i in range(0, len(lst), n):
+                    yield lst[i: i + n]
+            new_train_data = []
+            for train_data_chunk in chunks(train_data, cfg.batch_size * 3):
+                random.shuffle(train_data_chunk)
+                new_train_data += [train_data_chunk]
+            random.shuffle(new_train_data)
+            train_data = []
+            for train_data_chunk in new_train_data:
+                train_data += train_data_chunk
 
         dataset_name = cfg.dataset.name
 
         utils.logging_to_tensorboard(
-            summary_writer, "{}_train_loss/".format(dataset_name), train_loss, epoch
+            summary_writer, "{}_train_loss/".format(dataset_name), train_loss_dic, scheduler.optimizer._step_count
         )
 
         # Evaluation
-        if not epoch % cfg.eval_freq or epoch == cfg.max_epoch:
+        if not step_cnt % cfg.eval_freq and step_cnt or step_cnt == cfg.max_step_cnt:
             log.info("Evaluation:")
             val_loss = utils.epoch_train(
                 model,
@@ -161,22 +200,26 @@ def train(cfg):
             val_acc = utils.epoch_acc(
                 model, cfg.batch_size, val_data
             )
-
+            utils.logging_to_tensorboard(
+                summary_writer,
+                "lr",
+                scheduler.optimizer.param_groups[0]["lr"],
+            )
             # Logging to tensorboard
             utils.logging_to_tensorboard(
                 summary_writer,
                 "{}_train_acc/".format(dataset_name),
                 train_acc,
-                epoch,
+                scheduler.optimizer._step_count,
             )
             utils.logging_to_tensorboard(
                 summary_writer,
                 "{}_val_loss/".format(dataset_name),
                 val_loss,
-                epoch,
+                scheduler.optimizer._step_count,
             )
             utils.logging_to_tensorboard(
-                summary_writer, "{}_val_acc/".format(dataset_name), val_acc, epoch,
+                summary_writer, "{}_val_acc/".format(dataset_name), val_acc, scheduler.optimizer._step_count,
             )
             # Print Accuracy
             log.info("Total Train Acc: {}".format(train_acc["total"]))
@@ -192,15 +235,16 @@ def train(cfg):
                 )
                 with open(os.path.join(log_path, "best_model.log"), "a") as f:
                     f.write(
-                        "Epoch: {} Train Acc: {} Val Acc:{}".format(
-                            epoch, train_acc, best_val_acc
+                        "Step: {} Train Acc: {} Val Acc:{}".format(
+                            scheduler.optimizer._step_count, train_acc, best_val_acc
                         )
                     )
 
-        # Change learning rate
-        scheduler.step()
-        if scheduler_bert:
-            scheduler_bert.step()
+        if not step_cnt % cfg.eval_freq and step_cnt:
+            # Change learning rate
+            scheduler.step()
+            if scheduler_bert:
+                scheduler_bert.step()
 
 if __name__ == "__main__":
     train()

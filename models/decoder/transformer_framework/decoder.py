@@ -18,6 +18,7 @@ from models.framework.sequential_monad import (
 )
 from models.framework.lazy_modules import (
     LazyLinear,
+    LazyReLULinear,
     LazyTransformerDecoder,
     LazyCalculateSimilarity,
 )
@@ -45,7 +46,7 @@ class TransformerDecoderFramework(nn.Module):
         self.infer_symbol_affine_layer = LazyLinear(dim, dim)
         self.infer_tgt_linear_layer = LazyLinear(dim * 2, dim)
         self.infer_out_linear_layer = LazyLinear(dim, dim)
-        # self.infer_out_linear_layer2 = LazyLinear(dim, dim)
+        # self.infer_out_linear_layer2 = LazyReLULinear(dim, dim)
         self.infer_action_similarity = LazyCalculateSimilarity(dim, dim)
         self.infer_column_similarity = LazyCalculateSimilarity(dim, dim)
         self.infer_table_similarity = LazyCalculateSimilarity(dim, dim)

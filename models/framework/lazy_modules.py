@@ -87,6 +87,42 @@ class LazyLinear(nn.Module, LazyModule):
             for length, computed_tensor in zip(tensor_length, computed_tensors)
         ]
 
+class LazyReLULinear(nn.Module, LazyModule):
+    def __init__(self, in_dim, out_dim):
+        super(LazyReLULinear, self).__init__()
+        LazyModule.__init__(self)
+        self.pre_module = nn.ReLU()
+        self.module = nn.Linear(in_dim, out_dim)
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+
+    def assert_input(self, *inputs):
+        [tensor] = inputs
+        assert isinstance(tensor, torch.Tensor)
+        if len(tensor.size()) == 1:
+            assert_dim([self.in_dim], tensor)
+        elif len(tensor.size()) == 1:
+            assert_dim([None, self.in_dim], tensor)
+
+    def compute(self):
+        tensor_list = [inputs[0] for inputs in self.later_buffer]
+        tensor_length = [len(item) for item in tensor_list]
+
+        stacked_tensors = torch.zeros(
+            len(tensor_list), max(tensor_length), tensor_list[0].shape[-1]
+        ).cuda()
+        for idx, _tensor in enumerate(tensor_list):
+            stacked_tensors[idx][: len(_tensor)] = _tensor
+
+        stacked_tensors = self.pre_module(stacked_tensors)
+        computed_tensors = self.module(stacked_tensors)
+
+        # Split
+        self.done_buffer = [
+            computed_tensor[:length]
+            for length, computed_tensor in zip(tensor_length, computed_tensors)
+        ]
+
 
 class LazyLSTMCell(nn.Module, LazyModule):
     def __init__(self, in_dim, out_dim):

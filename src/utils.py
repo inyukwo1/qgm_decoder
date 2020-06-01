@@ -405,6 +405,57 @@ def to_batch_seq(data_list, table_data):
     return examples
 
 
+def train(
+    model,
+    batch,
+    decoder_name,
+
+):
+    model.train()
+    total_loss = {}
+    batch.sort(key=lambda example: -len(example.src_sent))
+
+    result = model.forward(batch, is_train=True)
+    if decoder_name == "lstm":
+        tmp = {key: [] for key in result[0].get_keys()}
+        for losses in result:
+            for key, item in losses.get_dic().items():
+                tmp[key] += [item]
+        tmp = {key: torch.mean(torch.stack(item)) for key, item in tmp.items()}
+        loss = tmp["sketch"] + tmp["detail"]
+
+        # Save
+        if not total_loss:
+            total_loss = {key: [] for key in result[0].get_keys()}
+        for key, item in tmp.items():
+            total_loss[key] += [float(item)]
+    elif decoder_name == "transformer":
+        loss = result.loss_dic["sketch"] + result.loss_dic["detail"]
+
+        # Save
+        if not total_loss:
+            total_loss = {key: [] for key in result.get_keys()}
+        for key, item in result.loss_dic.items():
+            total_loss[key] += [float(item)]
+
+    elif decoder_name == "semql":
+        loss = result.loss_dic["sketch"] + result.loss_dic["detail"]
+
+        # Save
+        if not total_loss:
+            total_loss = {key: [] for key in result.get_keys()}
+        for key, item in result.loss_dic.items():
+            total_loss[key] += [float(item)]
+    else:
+        raise RuntimeError("Unsupported model")
+
+    # Average loss
+    for key in total_loss.keys():
+        total_loss[key] = sum(total_loss[key]) / len(total_loss[key])
+
+    return loss, total_loss
+
+
 def epoch_train(
     model,
     optimizer,
