@@ -93,7 +93,7 @@ class TransformerStateGold(TransformerState):
         return self.gold[self.step_cnt][0] if self.step_cnt < len(self.gold) else None
 
     def invalid_table_indices(self, idx) -> List[int]:
-        prev_col_idx = self.gold[idx - 1][1]
+        prev_col_idx = self.gold[idx - 2][1]
         valid_indices = self.col_tab_dic[prev_col_idx]
         invalid_indices = [
             idx for idx in self.col_tab_dic[0] if idx not in valid_indices
@@ -159,7 +159,7 @@ class TransformerStatePred(TransformerState):
         )
 
     def invalid_table_indices(self, idx) -> List[int]:
-        prev_col_idx = self.preds[idx - 1][1]
+        prev_col_idx = self.preds[idx - 2][1]
         valid_indices = self.col_tab_dic[prev_col_idx]
         invalid_indices = [
             idx for idx in self.col_tab_dic[0] if idx not in valid_indices
