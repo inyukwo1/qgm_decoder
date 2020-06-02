@@ -122,7 +122,7 @@ class TransformerStatePred(TransformerState):
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
-        return state.nonterminal_symbol_stack != [] and state.step_cnt < 8
+        return state.nonterminal_symbol_stack != [] and state.step_cnt < 7
 
     @classmethod
     def get_preds(
