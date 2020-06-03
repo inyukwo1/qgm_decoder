@@ -23,6 +23,7 @@ from transformers import *
 wordnet_lemmatizer = WordNetLemmatizer()
 log = logging.getLogger(__name__)
 
+SKIP_WORDS = ["he", "the"]
 
 def idx2seq(seq, indices, cur_idx):
     if indices[cur_idx]:
@@ -204,7 +205,7 @@ def schema_linking(
             question_arg[count_q] = ["[db]"] + question_arg[count_q]
             for col_name_idx in range(1, len(t_q)):
                 c_cand = [
-                    wordnet_lemmatizer.lemmatize(v).lower()
+                    v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v).lower()
                     for v in t_q[col_name_idx].split(" ")
                 ]
                 col_set_type[col_set_iter.index(c_cand)][4] = 5
@@ -236,7 +237,7 @@ def process(sql, db_data):
 
     origin_sql = sql["question_toks"]
     table_names = [
-        [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
+        [v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
         for x in db_data["table_names"]
     ]
 
@@ -246,18 +247,18 @@ def process(sql, db_data):
     tab_ids = [col[0] for col in db_data["column_names"]]
 
     col_set_iter = [
-        [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
+        [v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
         for x in sql["col_set"]
     ]
     tab_set_iter = [
-        [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
+        [v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
         for x in sql["table_names"]
     ]
     col_iter = [
-        [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
+        [v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
         for x in tab_cols
     ]
-    q_iter_small = [wordnet_lemmatizer.lemmatize(x).lower() for x in origin_sql]
+    q_iter_small = [x.lower() if x in SKIP_WORDS else wordnet_lemmatizer.lemmatize(x).lower() for x in origin_sql]
     question_arg = copy.deepcopy(sql["question_arg"])
     question_arg_type = sql["question_arg_type"]
     one_hot_type = np.zeros((len(question_arg_type), 7))
@@ -349,14 +350,13 @@ def to_batch_seq(data_list, table_data):
 
         # column
         col_set_iter = [
-            [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
-            for x in data["col_set"]
+            [v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v) for v in x.split(" ")] for x in data["col_set"]
         ]
         col_set_iter[0] = ["count", "number", "many"]
 
         # table
         table_names = [
-            [wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
+            [v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v) for v in x.split(" ")]
             for x in data["table_names"]
         ]
 

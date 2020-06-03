@@ -110,7 +110,7 @@ def process_datas(datas, args, dataset_name):
                         elif isinstance(val[0], int) or isinstance(val[0], float):
                             continue
                         else:
-                            print("check this out: {}".format(val))
+                            print("check this out: db:{} tab:{} col:{} val:{}".format(db_id, table, col, val))
                     if col in col_value_set:
                         col_value_set[col] |= value_set
                     else:

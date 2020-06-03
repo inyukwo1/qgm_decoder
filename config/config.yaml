@@ -18,13 +18,13 @@ clip_grad: 5
 lr: 1e-3
 batch_size: 16
 lr_scheduler: true
-lr_scheduler_gamma: 5e-1
-milestones: [40, 70]
+lr_scheduler_gamma: 1e-1
+milestones: [2000, 3000]
 optimizer: radam
 query_type: simple
 max_step_cnt: 4000
 #max_epoch: 100
-eval_freq: 50
+eval_freq: 4
 optimize_freq: 8
 
 # bert

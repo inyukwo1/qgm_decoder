@@ -2,10 +2,11 @@
 
 semql_path="./preprocess/"
 qgm_path="./rule/qgm/"
-dataset_names=("wikisql" "wikitablequestions")
+#dataset_names=("wikisql" "wikitablequestions")
 #dataset_names=("spider" "wikisql" "wikitablequestions")
-#dataset_names=("spider")
-data_types=("train" "dev" "test")
+dataset_names=("spider")
+data_types=("train" "dev")
+#data_types=("train" "dev" "test")
 
 
 echo "Start download NLTK data"
