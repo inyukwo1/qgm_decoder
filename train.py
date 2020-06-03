@@ -141,6 +141,21 @@ def train(cfg):
                 )
         )
 
+        # Shuffle
+        if cnt % cnts_per_epoch == 0:
+            # shuffle
+            def chunks(lst, n):
+                for i in range(0, len(lst), n):
+                    yield lst[i: i + n]
+            new_train_data = []
+            for train_data_chunk in chunks(train_data, cfg.batch_size * 3):
+                random.shuffle(train_data_chunk)
+                new_train_data += [train_data_chunk]
+            random.shuffle(new_train_data)
+            shuffled_train_data = []
+            for train_data_chunk in new_train_data:
+                shuffled_train_data += train_data_chunk
+
         # Training
         # create sub train data
         batch_front = cnt % cnts_per_epoch
@@ -149,7 +164,7 @@ def train(cfg):
         else:
             batch_rear = batch_front + (len(train_data) % cfg.batch_size)
         print("front: {} rear:{}".format(batch_front, batch_rear))
-        mini_batch = train_data[batch_front:batch_rear]
+        mini_batch = shuffled_train_data[batch_front:batch_rear]
 
         train_loss, train_loss_dic = utils.train(
             model,
@@ -169,21 +184,6 @@ def train(cfg):
                 bert_optimizer.step()
                 bert_optimizer.zero_grad()
                 scheduler_bert.step()
-
-        # Shuffle
-        if (cnt % cnts_per_epoch == 0) and cnt:
-            # shuffle
-            def chunks(lst, n):
-                for i in range(0, len(lst), n):
-                    yield lst[i: i + n]
-            new_train_data = []
-            for train_data_chunk in chunks(train_data, cfg.batch_size * 3):
-                random.shuffle(train_data_chunk)
-                new_train_data += [train_data_chunk]
-            random.shuffle(new_train_data)
-            train_data = []
-            for train_data_chunk in new_train_data:
-                train_data += train_data_chunk
 
         dataset_name = cfg.dataset.name
         utils.logging_to_tensorboard(
