@@ -56,14 +56,14 @@ def train(cfg):
         bert_optimizer = None
     log.info("Enable Learning Rate Scheduler: {}".format(cfg.lr_scheduler))
     if cfg.lr_scheduler:
-        # scheduler = optim.lr_scheduler.MultiStepLR(
-        #     optimizer, milestones=cfg.milestones, gamma=cfg.lr_scheduler_gamma,
-        # )
-        scheduler = WarmUpMultiStepLR(optimizer,
-                                      warmup_steps=cfg.max_step_cnt/20,
-                                      milestones=cfg.milestones,
-                                      gamma=cfg.lr_scheduler_gamma,
-                                      )
+        scheduler = optim.lr_scheduler.MultiStepLR(
+            optimizer, milestones=cfg.milestones, gamma=cfg.lr_scheduler_gamma,
+        )
+        # scheduler = WarmUpMultiStepLR(optimizer,
+        #                               warmup_steps=cfg.max_step_cnt/20,
+        #                               milestones=cfg.milestones,
+        #                               gamma=cfg.lr_scheduler_gamma,
+        #                               )
         scheduler_bert = (
             optim.lr_scheduler.MultiStepLR(
                 bert_optimizer, milestones=cfg.milestones, gamma=cfg.lr_scheduler_gamma,
@@ -125,16 +125,17 @@ def train(cfg):
     train_data.sort(key=lambda item: len(item.src_sent) + item.table_len + item.col_num)
 
     best_val_acc = 0
-    steps_per_epoch = math.ceil(len(train_data) / cfg.batch_size)
-    for cnt in tqdm(range(0, cfg.max_step_cnt * steps_per_epoch)):
-        epoch = int(cnt / steps_per_epoch) + 1
+    cnts_per_epoch = math.ceil(len(train_data) / cfg.batch_size)
+    for cnt in tqdm(range(0, cfg.max_step_cnt * cnts_per_epoch)):
+        epoch = int(cnt / cnts_per_epoch) + 1
         step_cnt = scheduler.optimizer._step_count
         is_to_step = (cnt % cfg.optimize_freq) == 0 and cnt
 
         log.info(
-            "\nEpoch: {}  lr: {:.3e}  step: {}  Time: {}".format(
+            "\nEpoch: {}  lr: {:.3e} cnt:{} step: {}  Time: {}".format(
                 epoch,
                 scheduler.optimizer.param_groups[0]["lr"],
+                cnt,
                 step_cnt,
                 str(datetime.datetime.now()).split(".")[0],
                 )
@@ -142,12 +143,12 @@ def train(cfg):
 
         # Training
         # create sub train data
-        batch_front = cnt % steps_per_epoch
-        if (step_cnt+1) % steps_per_epoch or not len(train_data) % cfg.batch_size:
+        batch_front = cnt % cnts_per_epoch
+        if (cnt+1) % cnts_per_epoch or not len(train_data) % cfg.batch_size:
             batch_rear = batch_front + cfg.batch_size
         else:
             batch_rear = batch_front + (len(train_data) % cfg.batch_size)
-
+        print("front: {} rear:{}".format(batch_front, batch_rear))
         mini_batch = train_data[batch_front:batch_rear]
 
         train_loss, train_loss_dic = utils.train(
@@ -170,7 +171,7 @@ def train(cfg):
                 scheduler_bert.step()
 
         # Shuffle
-        if (cnt % steps_per_epoch == 0) and cnt:
+        if (cnt % cnts_per_epoch == 0) and cnt:
             # shuffle
             def chunks(lst, n):
                 for i in range(0, len(lst), n):
@@ -189,7 +190,7 @@ def train(cfg):
             summary_writer, "{}_train_loss/".format(dataset_name), train_loss_dic, step_cnt
         )
         # Evaluation
-        if (step_cnt % (steps_per_epoch * cfg.eval_freq)) == 0 and step_cnt or step_cnt == cfg.max_step_cnt:
+        if (cnt % (cnts_per_epoch * cfg.eval_freq)) == 0 and cnt or step_cnt == cfg.max_step_cnt:
             log.info("Evaluation:")
             val_loss = utils.epoch_train(
                 model,
