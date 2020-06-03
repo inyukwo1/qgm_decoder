@@ -1,7 +1,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-# -*- coding: utf-8 -*-
 """
 # @Time    : 2019/5/24
 # @Author  : Jiaqi&Zecheng
@@ -32,7 +31,7 @@ from utils import load_dataSets
 import re
 
 
-SKIP_WORDS = ["he", "the"]
+SKIP_WORDS = ["he", "the", "has", "have"]
 
 
 def process_datas(datas, args, dataset_name):
