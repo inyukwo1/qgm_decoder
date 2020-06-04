@@ -99,17 +99,20 @@ def process_datas(datas, args, dataset_name):
                     cursor.execute('SELECT "{}" FROM "{}"'.format(col, table))
                     col = entry["names"][col_idx]
                     value_set = set()
-                    for val in cursor.fetchall():
-                        if isinstance(val[0], str):
-                            val_str = val[0].lower()
-                            value_set.add(val_str)
-                            if val_str not in SKIP_WORDS:
-                                val_str = wordnet_lemmatizer.lemmatize(val_str)
-                            value_set.add(val_str)
-                        elif isinstance(val[0], int) or isinstance(val[0], float):
-                            continue
-                        else:
-                            print("check this out: db:{} tab:{} col:{} val:{}".format(db_id, table, col, val))
+                    try:
+                      for val in cursor.fetchall():
+                          if isinstance(val[0], str):
+                              val_str = val[0].lower()
+                              value_set.add(val_str)
+                              if val_str not in SKIP_WORDS:
+                                  val_str = wordnet_lemmatizer.lemmatize(val_str)
+                              value_set.add(val_str)
+                          elif isinstance(val[0], int) or isinstance(val[0], float):
+                              continue
+                          else:
+                              print("check this out: db:{} tab:{} col:{} val:{}".format(db_id, table, col, val))
+                    except:
+                      print("bad utf-8?")
                     if col in col_value_set:
                         col_value_set[col] |= value_set
                     else:
