@@ -41,8 +41,8 @@ RELATION_LIST = [
     "qq_2",  # 36
     # 0: identical #1: Dependent #2: Dependent Reversed #3: ETC
     "identical",
-    "dep",
-    "dep_rev",
+    "depen",
+    "depen_rev",
     "no_dep",  # 40
     "qc_db",
     "cq_db",  # 42
@@ -142,7 +142,6 @@ RELATION_LIST = [
 RELATION_TYPE = {key: idx for idx, key in enumerate(RELATION_LIST)}
 N_RELATIONS = len(RELATION_TYPE)
 
-
 def create_relation(data, dbs, use_col_set=True):
     """
     * has not been considered in depths
@@ -182,7 +181,8 @@ def create_relation(data, dbs, use_col_set=True):
     question_relations = (
         data["question_relation"] if "question_relation" in data else None
     )
-    qq_relation = parse_q_q_relation(data["question_arg"], question_relations)
+    USE_DEP = False
+    qq_relation = parse_q_q_relation(USE_DEP, data["question_arg"], question_relations)
 
     # Sen & Col
     qc_relation = parse_match_relation(tokens, column_name, "q", "c")
@@ -354,25 +354,44 @@ def parse_c_c_relation(cols, foreign_keys, fp_relations):
     return relations
 
 
-def parse_q_q_relation(sentence, relation_matrix):
-    USE_DEP = False
-    if USE_DEP and relation_matrix:
-        new_relation_matrix = []
-        for relations in relation_matrix:
-            new_relation_matrix += [
-                [RELATION_TYPE[str(relation)] for relation in relations]
-            ]
-        return new_relation_matrix
-    else:
-        relations = []
+def parse_q_q_relation(USE_DEP, sentence, relation_matrix):
+    USE_SELECTED_DEP = False
+    SELECTED_RELATIONS = ["amod", "prep", "cc", "conj", "pobj"]
+    SELECTED_RELATIONS += [item + "_rev" for item in SELECTED_RELATIONS]
+
+    qq_relations = []
+    if USE_SELECTED_DEP:
+        # Default
         question_length = len(sentence)
         for idx_1 in range(question_length):
             tmp = []
             for idx_2 in range(question_length):
                 key = "qq_" + str(max(min(idx_1 - idx_2, 2), -2))
                 tmp += [RELATION_TYPE[key]]
-            relations += [tmp]
-        return relations
+            qq_relations += [tmp]
+
+        # Change positional to dependency info
+        assert relation_matrix, "Empty relation matrix"
+        for idx_1, relations in enumerate(relation_matrix):
+            for idx_2, relation in enumerate(relations):
+                if relation in SELECTED_RELATIONS:
+                    qq_relations[idx_1][idx_2] = RELATION_TYPE[relation]
+
+    elif USE_DEP:
+        assert relation_matrix, "Empty relation matrix"
+        for relations in relation_matrix:
+            qq_relations += [
+                [RELATION_TYPE[relation] for relation in relations]
+            ]
+    else:
+        question_length = len(sentence)
+        for idx_1 in range(question_length):
+            tmp = []
+            for idx_2 in range(question_length):
+                key = "qq_" + str(max(min(idx_1 - idx_2, 2), -2))
+                tmp += [RELATION_TYPE[key]]
+            qq_relations += [tmp]
+    return qq_relations
 
 
 def append_db_content_relation(
