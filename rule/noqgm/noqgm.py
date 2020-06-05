@@ -85,6 +85,8 @@ class NOQGM(Grammar):
             "local_predicate_op",
             "local_predicate_agg",
             "local_predicate_col",
+            "col",
+            "table",
         ]
         acc = {key: 0.0 for key in keys}
 
@@ -107,6 +109,12 @@ class NOQGM(Grammar):
             acc["detail"] += detail_is_correct
             acc["sketch"] += sketch_is_correct
             acc["total"] += total_is_correct
+            acc["col"] += [item for item in g_actions if item[0] == "C"] == [
+                item for item in p_actions if item[0] == "C"
+            ]
+            acc["table"] += [item for item in g_actions if item[0] == "T"] == [
+                item for item in p_actions if item[0] == "T"
+            ]
 
             # More specific accs
             # Head num: Check sel
