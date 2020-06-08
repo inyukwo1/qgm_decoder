@@ -48,9 +48,9 @@ def train(cfg):
         RAdam if cfg.optimizer == "radam" else eval("torch.optim.%s" % cfg.optimizer)
     )
     optimizer = optimizer_cls(model.without_bert_params, lr=cfg.lr)
-    if cfg.encoder_name == "bert" and cfg.train_bert:
+    if cfg.is_bert and cfg.train_bert:
         bert_optimizer = optimizer_cls(
-            model.encoder.parameters(), lr=cfg.bert_lr
+            model.bert.parameters(), lr=cfg.bert_lr
         )
     else:
         bert_optimizer = None
@@ -140,7 +140,6 @@ def train(cfg):
                 str(datetime.datetime.now()).split(".")[0],
                 )
         )
-
         # Shuffle
         if cnt % cnts_per_epoch == 0:
             # shuffle
@@ -155,7 +154,6 @@ def train(cfg):
             shuffled_train_data = []
             for train_data_chunk in new_train_data:
                 shuffled_train_data += train_data_chunk
-
         # Training
         # create sub train data
         batch_front = cnt % cnts_per_epoch * cfg.batch_size
@@ -164,15 +162,12 @@ def train(cfg):
         else:
             batch_rear = batch_front + (len(train_data) % cfg.batch_size)
         mini_batch = shuffled_train_data[batch_front:batch_rear]
-
         train_loss, train_loss_dic = utils.train(
             model,
             mini_batch,
             cfg.decoder_name,
         )
-
         train_loss.backward()
-
         if is_to_step:
             if cfg.clip_grad > 0.0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.clip_grad)
@@ -185,12 +180,12 @@ def train(cfg):
                 scheduler_bert.step()
 
         dataset_name = cfg.dataset.name
-        utils.logging_to_tensorboard(
-            summary_writer, "{}_train_loss/".format(dataset_name), train_loss_dic, step_cnt
-        )
         # Evaluation
         if (cnt % (cnts_per_epoch * cfg.eval_freq)) == 0 and cnt or step_cnt == cfg.max_step_cnt:
             log.info("Evaluation:")
+            utils.logging_to_tensorboard(
+                summary_writer, "{}_train_loss/".format(dataset_name), train_loss_dic, step_cnt
+            )
             val_loss = utils.epoch_train(
                 model,
                 optimizer,

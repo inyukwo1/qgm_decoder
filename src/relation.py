@@ -142,10 +142,12 @@ RELATION_LIST = [
 RELATION_TYPE = {key: idx for idx, key in enumerate(RELATION_LIST)}
 N_RELATIONS = len(RELATION_TYPE)
 
-def create_relation(data, dbs, use_col_set=True):
+def create_relation(cfg, data, dbs, use_col_set=True):
     """
     * has not been considered in depths
     """
+
+    USE_DEP = cfg.use_dep
 
     db = dbs[data["db_id"]]
 
@@ -181,7 +183,6 @@ def create_relation(data, dbs, use_col_set=True):
     question_relations = (
         data["question_relation"] if "question_relation" in data else None
     )
-    USE_DEP = False
     qq_relation = parse_q_q_relation(USE_DEP, data["question_arg"], question_relations)
 
     # Sen & Col

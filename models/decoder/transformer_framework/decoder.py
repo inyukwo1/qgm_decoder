@@ -101,10 +101,11 @@ class TransformerDecoderFramework(nn.Module):
         tab_lens,
         col_tab_dic,
         golds=None,
+        is_train=False,
         return_details=False,
     ):
         # Create states
-        if golds:
+        if is_train:
             state_class = TransformerStateGold
             states = [
                 TransformerStateGold(
@@ -127,6 +128,7 @@ class TransformerDecoderFramework(nn.Module):
                     encoded_col[b_idx][: col_lens[b_idx]],
                     encoded_tab[b_idx][: tab_lens[b_idx]],
                     col_tab_dic[b_idx],
+                    golds[b_idx],
                 )
                 for b_idx in range(b_size)
             ]
@@ -231,7 +233,6 @@ class TransformerDecoderFramework(nn.Module):
                         for idx in range(self.grammar.get_action_len())
                         if idx not in possible_action_ids
                     ]
-
                     prod = self.infer_action_similarity.forward_later(
                         decoder_out[idx],
                         self.grammar.action_emb.weight,
@@ -276,7 +277,7 @@ class TransformerDecoderFramework(nn.Module):
             )
         ).states
 
-        if golds:
+        if is_train:
             return TransformerStateGold.combine_loss(states)
         else:
             if return_details:

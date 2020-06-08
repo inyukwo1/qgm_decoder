@@ -161,13 +161,16 @@ class StatisticPlugin(base_plugin.TBPlugin):
         # Filters
         filters = {}
         for idx, data in enumerate(self._logs[run]['data']):
-            value = data['filter']
-            if value not in filters:
-                filters[value] = [idx]
-                filters['{}_cnt'.format(value)] = 1
-                # filters[value] = 1
-            else:
-                filters[value] += [idx]
-                filters['{}_cnt'.format(value)] += 1
-                # filters[value] += 1
+            values = data['filter']
+            if not isinstance(values, list):
+                values = [values]
+            for value in values:
+                if value not in filters:
+                    filters[value] = [idx]
+                    filters['{}_cnt'.format(value)] = 1
+                    # filters[value] = 1
+                else:
+                    filters[value] += [idx]
+                    filters['{}_cnt'.format(value)] += 1
+                    # filters[value] += 1
         return http_util.Respond(request, filters, "application/json")

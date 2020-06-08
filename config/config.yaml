@@ -24,7 +24,7 @@ optimizer: radam
 query_type: simple
 max_step_cnt: 4000
 #max_epoch: 100
-eval_freq: 2
+eval_freq: 1
 optimize_freq: 8
 
 # bert
@@ -39,6 +39,7 @@ use_down_schema: false
 rule: "noqgm" # or semql
 remove_punctuation_marks: false
 train_glove: false
+use_dep: false
 
 #
 cuda: 0 # -1 to disable

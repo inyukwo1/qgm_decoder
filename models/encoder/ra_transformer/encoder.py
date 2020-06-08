@@ -6,7 +6,7 @@ from src.ra_transformer.ra_transformer_encoder import (
     RATransformerEncoderLayer,
 )
 from src.relation import N_RELATIONS, RELATION_LIST
-
+print("N:{}".format(N_RELATIONS))
 
 class RA_Transformer_Encoder(nn.Module):
     def __init__(self, cfg):
@@ -86,13 +86,14 @@ class RA_Transformer_Encoder(nn.Module):
         return_details=False,
     ):
         # LSTM
-        if self.use_nl_lstm:
-            sen = self.encode_with_lstm(sen, sen_len, self.sen_lstm)
-        # Tab, Col 서로 연관 있는 애들끼리 lstm으로 인코딩해야하지 않을까? (col set으로 안하면..)
-        if self.use_col_lstm:
-            col = self.encode_with_lstm(col, col_len, self.col_lstm)
-        if self.use_tab_lstm:
-            tab = self.encode_with_lstm(tab, tab_len, self.tab_lstm)
+        if not self.is_bert:
+            if self.use_nl_lstm:
+                sen = self.encode_with_lstm(sen, sen_len, self.sen_lstm)
+            # Tab, Col 서로 연관 있는 애들끼리 lstm으로 인코딩해야하지 않을까? (col set으로 안하면..)
+            if self.use_col_lstm:
+                col = self.encode_with_lstm(col, col_len, self.col_lstm)
+            if self.use_tab_lstm:
+                tab = self.encode_with_lstm(tab, tab_len, self.tab_lstm)
 
         # Get len
         sen_max_len = sen.shape[1]

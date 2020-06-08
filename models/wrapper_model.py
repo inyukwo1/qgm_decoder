@@ -32,11 +32,14 @@ class EncoderDecoderModel(nn.Module):
         super(EncoderDecoderModel, self).__init__()
         self.cfg = cfg
         self.is_cuda = cfg.cuda != -1
-        self.is_bert = cfg.is_bert
+        self.is_bert = cfg.is_bert or cfg.encoder_name == "bert"
         self.encoder_name = cfg.encoder_name
         self.decoder_name = cfg.decoder_name
         self.embed_size = 1024 if self.encoder_name == "bert" else 300
         self.train_glove = cfg.train_glove
+
+        # Key embeddings
+        self.key_embs = nn.Embedding(6, 300).double().cuda()
 
         # Decoder
         if self.decoder_name == "transformer":
@@ -59,6 +62,7 @@ class EncoderDecoderModel(nn.Module):
         # Encoder
         if self.encoder_name == "bert":
             self.encoder = BERT(cfg)
+            self.bert = self.encoder
         elif self.encoder_name == "lstm":
             self.encoder = LSTMEncoder(cfg)
             # self.encoder = IRNetLSTMEncoder(cfg)
@@ -67,14 +71,11 @@ class EncoderDecoderModel(nn.Module):
         elif self.encoder_name == "ra_transformer":
             self.encoder = RA_Transformer_Encoder(cfg)
             if self.is_bert:
+                self.without_bert_params = list(self.parameters(recurse=True))
                 self.bert = BERT(cfg)
         else:
             raise RuntimeError("Unsupported encoder name")
-
-        # Key embeddings
-        self.key_embs = nn.Embedding(6, 300).double().cuda()
-
-        if self.encoder_name != "bert":
+        if not self.is_bert:
             self.without_bert_params = list(self.parameters(recurse=True))
 
     def load_model(self, pretrained_model_path):
@@ -113,7 +114,6 @@ class EncoderDecoderModel(nn.Module):
                             q_val.append(self.word_emb[self.mapping[w if w in self.mapping else "unk"]])
                         else:
                             q_val.append(self.word_emb.get(w, self.word_emb["unk"]))
-
                 print("Warning!")
                 raise RuntimeWarning("Check this logic")
             else:
@@ -172,7 +172,6 @@ class EncoderDecoderModel(nn.Module):
                 src = self.gen_x_batch(batch.src_sents)
                 col = self.gen_x_batch(batch.table_sents)
                 tab = self.gen_x_batch(batch.table_names)
-
             relation_matrix = relation.create_batch(batch.relation)
 
             output = self.encoder(
@@ -264,7 +263,8 @@ class EncoderDecoderModel(nn.Module):
                 batch.col_num,
                 batch.table_len,
                 batch.col_tab_dic,
-                batch.gt if is_train else None,
+                batch.gt,
+                is_train=is_train,
                 return_details=return_details,
             )
             return output

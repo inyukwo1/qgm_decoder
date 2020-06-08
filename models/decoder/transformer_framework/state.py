@@ -146,6 +146,7 @@ class TransformerStatePred(TransformerState):
         encoded_col,
         encoded_tab,
         col_tab_dic,
+        gold,
     ):
         TransformerState.__init__(
             self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
@@ -153,6 +154,7 @@ class TransformerStatePred(TransformerState):
         self.probs: List = []
         self.preds: List[Action] = []
         self.nonterminal_symbol_stack: List[Symbol] = [grammar.start_symbol]
+        self.gold=gold
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
@@ -171,10 +173,12 @@ class TransformerStatePred(TransformerState):
         return False
 
     def get_history_actions(self) -> List[Action]:
-        return self.preds[: self.step_cnt]
+        return self.gold[: self.step_cnt]
+        # return self.preds[: self.step_cnt]
 
     def get_history_symbols(self) -> List[Symbol]:
-        symbol_list = [action[0] for action in self.preds]
+        symbol_list = [action[0] for action in self.gold]
+        # symbol_list = [action[0] for action in self.preds]
         return symbol_list[: self.step_cnt]
 
     def get_current_symbol(self) -> Symbol:
@@ -183,7 +187,8 @@ class TransformerStatePred(TransformerState):
         )
 
     def invalid_table_indices(self, idx) -> List[int]:
-        prev_col_idx = self.preds[idx - 1][1]
+        # prev_col_idx = self.preds[idx - 1][1]
+        prev_col_idx = self.gold[idx-1][1]
         valid_indices = self.col_tab_dic[prev_col_idx]
         invalid_indices = [
             idx for idx in self.col_tab_dic[0] if idx not in valid_indices
@@ -196,6 +201,7 @@ class TransformerStatePred(TransformerState):
 
         # Select highest prob action
         pred_idx = torch.argmax(prod).item()
+        gold_action = self.gold[len(self.preds)]
 
         current_symbol = self.nonterminal_symbol_stack.pop(0)
         if current_symbol == "C":
@@ -208,7 +214,8 @@ class TransformerStatePred(TransformerState):
             new_nonterminal_symbols = []
         else:
             action: Action = self.grammar.aid_to_action[pred_idx]
-            new_nonterminal_symbols = self.grammar.parse_nonterminal_symbol(action)
+            # new_nonterminal_symbols = self.grammar.parse_nonterminal_symbol(action)
+            new_nonterminal_symbols = self.grammar.parse_nonterminal_symbol(gold_action)
         self.nonterminal_symbol_stack = (
             new_nonterminal_symbols + self.nonterminal_symbol_stack
         )

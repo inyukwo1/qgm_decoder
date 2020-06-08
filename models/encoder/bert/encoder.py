@@ -115,7 +115,6 @@ class BERT(nn.Module):
         sentences = batch.src_sents
         col_sets = batch.table_sents
         table_sets = batch.table_names
-
         # Process
         use_preprocessed = True
         if use_preprocessed:
@@ -178,7 +177,8 @@ class BERT(nn.Module):
                 # question_without_pad = question.replace("[PAD]", "").strip()
                 # one_q_encodings, col_encodings, tab_encodings = self.bert_cache[question_without_pad]
                 if question not in self.bert_cache:
-                    exit()
+                    print("question not in bert cache..")
+                    exit(-1)
                 one_q_encodings, col_encodings, tab_encodings = self.bert_cache[question]
 
                 one_q_encodings = torch.tensor(one_q_encodings).cuda()
@@ -267,7 +267,6 @@ class BERT(nn.Module):
         col_type = self.input_type(batch.col_hot_type)
         col_type_var = self.col_type(col_type)
         table_embedding = table_embedding + col_type_var
-
         if self.reduce_dim:
             src_encodings = self.linear_layer(src_encodings)
             table_embedding = self.linear_layer(table_embedding)

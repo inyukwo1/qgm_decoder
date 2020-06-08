@@ -679,9 +679,9 @@ def load_dataset(model, is_toy, is_bert, dataset_path, query_type, use_down_sche
 
     # Create relations
     train_data = [
-        relation.create_relation(item, table_data, True) for item in train_data
+        relation.create_relation(cfg, item, table_data, True) for item in train_data
     ]
-    val_data = [relation.create_relation(item, table_data, True) for item in val_data]
+    val_data = [relation.create_relation(cfg, item, table_data, True) for item in val_data]
 
     # Show dataset length
     log.info("Total training set: {}".format(len(train_data)))
@@ -1174,47 +1174,47 @@ def wrong_in_where_op(pred, gold):
     return False
 
 def categorize(pred, gold):
+    categories = []
     where_flag = False
-    if pred == gold:
-        return 'None'
-    for idx in range(min(len(pred), len(gold))):
-        pred_action_symbol = pred[idx][0]
-        where_flag = where_flag or pred_action_symbol == "Filter"
-        if pred[idx] != gold[idx]:
-            # Determine why
-            if pred_action_symbol == "T":
-                if "Filter" in [item[0] for item in pred[:idx]]:
-                    reason = 'table_where'
-                else:
-                    reason = 'table_select'
-            elif pred_action_symbol == "C":
-                # In WHERE clause
-                if "Filter" in [item[0] for item in pred[:idx]]:
-                    reason = 'column_where'
-                # In SELECT clause
-                else:
-                    if pred[idx][1] == 0:
-                        reason = 'column_select_pred_star'
-                    elif gold[idx][1] == 0:
-                        reason = 'column_select_gold_star'
+    if pred != gold:
+        for idx in range(min(len(pred), len(gold))):
+            pred_action_symbol = pred[idx][0]
+            where_flag = where_flag or pred_action_symbol == "Filter"
+            if pred[idx] != gold[idx]:
+                # Determine why
+                if pred_action_symbol == "T":
+                    if "Filter" in [item[0] for item in pred[:idx]]:
+                        categories += ['table_where']
                     else:
-                        reason = 'column_select'
-            else:
-                # Structural reason
-                if pred_action_symbol == "Sel":
-                    reason = 'select_num_of_column'
-                elif pred_action_symbol == "A" and not where_flag:
-                    reason = 'select_agg'
-                elif pred_action_symbol == "Root":
-                    reason = 'where_existence'
-                elif pred_action_symbol == "Filter":
-                    if pred[idx][1] in [0, 1] or gold[idx][1] in [0,1]:
-                        reason = 'where_num'
+                        categories += ['table_select']
+                elif pred_action_symbol == "C":
+                    # In WHERE clause
+                    if "Filter" in [item[0] for item in pred[:idx]]:
+                        categories += ['column_where']
+                    # In SELECT clause
                     else:
-                        reason = 'where_operator'
+                        if pred[idx][1] == 0:
+                            categories += ['column_select_pred_star']
+                        elif gold[idx][1] == 0:
+                            categories += ['column_select_gold_star']
+                        else:
+                            categories += ['column_select']
                 else:
-                    raise RuntimeError("Should not be here")
-            return reason
+                    # Structural reason
+                    if pred_action_symbol == "Sel":
+                        categories += ['select_num_of_column']
+                    elif pred_action_symbol == "A" and not where_flag:
+                        categories += ['select_agg']
+                    elif pred_action_symbol == "Root":
+                        categories += ['where_existence']
+                    elif pred_action_symbol == "Filter":
+                        if pred[idx][1] in [0, 1] or gold[idx][1] in [0,1]:
+                            categories += ['where_num']
+                        else:
+                            categories += ['where_operator']
+                    else:
+                        raise RuntimeError("Should not be here")
+    return list(set(categories))
 
 def save_data_for_analysis(tag, datas, preds, golds, details_list, dataset, save_path):
     log = {
@@ -1281,7 +1281,6 @@ def save_data_for_analysis(tag, datas, preds, golds, details_list, dataset, save
             image_path = os.path.join(image_folder_path, "{}_inference_{}.png".format(idx, pred_idx))
             # draw_inference_score(arg1, value, key, image_path)
             data_log[inference_key] += [image_path]
-
 
         # Detailed Analysis with pred and gold
         data_log['filter'] = categorize(preds[idx], golds[idx])
