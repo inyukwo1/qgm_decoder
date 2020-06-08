@@ -47,6 +47,8 @@ class TransformerDecoderFramework(nn.Module):
         self.infer_action_similarity = LazyCalculateSimilarity(dim, dim)
         self.infer_column_similarity = LazyCalculateSimilarity(dim, dim)
         self.infer_table_similarity = LazyCalculateSimilarity(dim, dim)
+        self.padding_action_tensor = nn.Parameter(torch.rand(self.dim))
+
         if cfg.rule == "noqgm":
             self.grammar = NOQGM(dim)
         else:
@@ -69,9 +71,12 @@ class TransformerDecoderFramework(nn.Module):
             return self.grammar.action_emb(action_idx)
 
     def symbol_list_to_embedding(self, symbol_list: List[Symbol]) -> torch.Tensor:
-        symbol_ids_list: List[SymbolId] = [
-            self.grammar.symbol_to_sid[symbol] for symbol in symbol_list
-        ]
+        symbol_ids_list: List[SymbolId] = []
+        for symbol in symbol_list:
+            if symbol == "C":
+                symbol_ids_list += [self.grammar.symbol_to_sid["<="]] * 4
+            symbol_ids_list += [self.grammar.symbol_to_sid[symbol]]
+
         symbol_ids_tensor = torch.tensor(symbol_ids_list).long().cuda()
         symbol_embeddings = self.grammar.symbol_emb(symbol_ids_tensor)
         return symbol_embeddings
@@ -129,9 +134,14 @@ class TransformerDecoderFramework(nn.Module):
             state: TransformerState, _
         ) -> Dict[str, TensorPromise]:
             history_actions: List[Action] = state.get_history_actions()
-            history_action_embeddings: List[torch.Tensor] = [
-                self.action_to_embedding(state, action) for action in history_actions
-            ]
+            history_action_embeddings: List[torch.Tensor] = []
+            for action in history_actions:
+                if action[0] == "C":
+                    history_action_embeddings += [self.padding_action_tensor] * 4
+                history_action_embeddings += [self.action_to_embedding(state, action)]
+            if state.get_current_symbol() == "C":
+                history_action_embeddings += [self.padding_action_tensor] * 4
+
             current_action_embedding = self.onedim_zero_tensor()
             history_action_embeddings += [current_action_embedding]
             action_embeddings = torch.stack(history_action_embeddings, dim=0)
@@ -196,7 +206,7 @@ class TransformerDecoderFramework(nn.Module):
         def calc_prod(
             state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
         ) -> List[TensorPromise]:
-            def calc_prod_with_idx_and_symbol(idx, symbol):
+            def calc_prod_with_idx_and_symbol(org_idx, idx, symbol):
                 if symbol == "C":
                     prod = self.infer_column_similarity.forward_later(
                         decoder_out[idx], state.get_encoded_col(), None
@@ -205,7 +215,7 @@ class TransformerDecoderFramework(nn.Module):
                     prod = self.infer_table_similarity.forward_later(
                         decoder_out[idx],
                         state.get_encoded_tab(),
-                        state.invalid_table_indices(idx),
+                        state.invalid_table_indices(org_idx),
                     )
                 else:
                     # Get possible actions from nonterminal stack
@@ -224,11 +234,17 @@ class TransformerDecoderFramework(nn.Module):
                 return prod
 
             decoder_out: torch.Tensor = prev_tensor_dict["decoder_out"].result
+            c_cnt = 0
+            for symbol in state.get_history_symbols():
+                if symbol == "C":
+                    c_cnt += 1
 
             current_symbol: Symbol = state.get_current_symbol()
+            if current_symbol == "C":
+                c_cnt += 1
             assert current_symbol != None
             promise_prod: TensorPromise = calc_prod_with_idx_and_symbol(
-                state.step_cnt, current_symbol
+                state.step_cnt, state.step_cnt + c_cnt * 4, current_symbol
             )
             prev_tensor_dict.update({"infer_prod": promise_prod})
             return prev_tensor_dict
