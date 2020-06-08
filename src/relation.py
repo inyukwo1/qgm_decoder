@@ -1,5 +1,6 @@
 import torch
 
+
 # q - question, c - column, t - table
 RELATION_LIST = [
     "[PAD]",  # 0
@@ -47,7 +48,7 @@ RELATION_LIST = [
     "qc_db",
     "cq_db",  # 42
     # dependency parsing
-    "cc", # 43
+    "cc",  # 43
     "number",
     "ccomp",
     "possessive",
@@ -92,7 +93,7 @@ RELATION_LIST = [
     "preconj",
     "root",
     # Reverse
-    "cc_rev", #87
+    "cc_rev",  # 87
     "number_rev",
     "ccomp_rev",
     "possessive_rev",
@@ -135,12 +136,13 @@ RELATION_LIST = [
     "expl_rev",
     "predet_rev",
     "preconj_rev",
-    "root_rev", #130
+    "root_rev",  # 130
 ]
 
 # Dictionary
 RELATION_TYPE = {key: idx for idx, key in enumerate(RELATION_LIST)}
 N_RELATIONS = len(RELATION_TYPE)
+
 
 def create_relation(cfg, data, dbs, use_col_set=True):
     """
@@ -381,9 +383,7 @@ def parse_q_q_relation(USE_DEP, sentence, relation_matrix):
     elif USE_DEP:
         assert relation_matrix, "Empty relation matrix"
         for relations in relation_matrix:
-            qq_relations += [
-                [RELATION_TYPE[relation] for relation in relations]
-            ]
+            qq_relations += [[RELATION_TYPE[relation] for relation in relations]]
     else:
         question_length = len(sentence)
         for idx_1 in range(question_length):

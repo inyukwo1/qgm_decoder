@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # import copy
 # import preprocess.rule.semQL as define_rule
 import torch

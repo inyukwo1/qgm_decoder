@@ -6,7 +6,7 @@ from src.ra_transformer.ra_transformer_encoder import (
     RATransformerEncoderLayer,
 )
 from src.relation import N_RELATIONS, RELATION_LIST
-print("N:{}".format(N_RELATIONS))
+
 
 class RA_Transformer_Encoder(nn.Module):
     def __init__(self, cfg):
@@ -44,7 +44,9 @@ class RA_Transformer_Encoder(nn.Module):
         if self.use_nl_rat:
             # Separated
             nl_encoder_layer = RATransformerEncoderLayer(
-                d_model=dim, nhead=nhead, nrelation=N_RELATIONS,
+                d_model=dim,
+                nhead=nhead,
+                nrelation=N_RELATIONS,
                 change_relation_contribution=cfg.change_relation_contribution,
                 explicit_relation_feature=cfg.explicit_relation_feature,
             )
@@ -53,7 +55,9 @@ class RA_Transformer_Encoder(nn.Module):
             )
         if self.use_schema_rat:
             schema_encoder_layer = RATransformerEncoderLayer(
-                d_model=dim, nhead=nhead, nrelation=N_RELATIONS,
+                d_model=dim,
+                nhead=nhead,
+                nrelation=N_RELATIONS,
                 change_relation_contribution=cfg.change_relation_contribution,
                 explicit_relation_feature=cfg.explicit_relation_feature,
             )
@@ -63,7 +67,9 @@ class RA_Transformer_Encoder(nn.Module):
 
         # Combined
         encoder_layer = RATransformerEncoderLayer(
-            d_model=dim, nhead=nhead, nrelation=N_RELATIONS,
+            d_model=dim,
+            nhead=nhead,
+            nrelation=N_RELATIONS,
             change_relation_contribution=cfg.change_relation_contribution,
             explicit_relation_feature=cfg.explicit_relation_feature,
         )
@@ -110,14 +116,21 @@ class RA_Transformer_Encoder(nn.Module):
             nl_relation = relation[:, :sen_max_len, :sen_max_len]
             nl_src = sen
             nl_mask = sen_mask.bool()
-            sen = self.nl_ra_transformer_encoder(nl_src, nl_src, nl_relation, src_key_padding_mask=nl_mask)
+            sen = self.nl_ra_transformer_encoder(
+                nl_src, nl_src, nl_relation, src_key_padding_mask=nl_mask
+            )
 
         if self.use_schema_rat:
             # encode schema
             schema_relation = relation[:, sen_max_len:, sen_max_len:]
             schema_src = torch.cat([col, tab], dim=0)
             schema_mask = torch.cat([col_mask, tab_mask], dim=1).bool()
-            schema_out = self.schema_ra_transformer_encoder(schema_src, schema_src, schema_relation, src_key_padding_mask=schema_mask)
+            schema_out = self.schema_ra_transformer_encoder(
+                schema_src,
+                schema_src,
+                schema_relation,
+                src_key_padding_mask=schema_mask,
+            )
             col = schema_out[:col_max_len, :, :]
             tab = schema_out[col_max_len:, :, :]
 
@@ -128,10 +141,16 @@ class RA_Transformer_Encoder(nn.Module):
             raise NotImplementedError("not yet")
         else:
             src = torch.cat([sen, col, tab], dim=0)
-            src_key_padding_mask = torch.cat([sen_mask, col_mask, tab_mask], dim=1).bool()
+            src_key_padding_mask = torch.cat(
+                [sen_mask, col_mask, tab_mask], dim=1
+            ).bool()
 
             output = self.ra_transformer_encoder(
-                src, src, relation, src_key_padding_mask=src_key_padding_mask, return_details=return_details,
+                src,
+                src,
+                relation,
+                src_key_padding_mask=src_key_padding_mask,
+                return_details=return_details,
             )
             if return_details:
                 encoded_src, qk_weights_list, qk_relation_weights_list = output

@@ -5,7 +5,6 @@ import logging
 import datetime
 import random
 import math
-
 import torch
 import os
 import copy
@@ -47,8 +46,15 @@ def train(cfg):
         model.cuda()
 
     # Load dataset
-    train_data, val_data, table_data = utils.load_dataset(model,
-        cfg.toy, cfg.is_bert, cfg.dataset.path, cfg.query_type, cfg.use_down_schema, cfg.remove_punctuation_marks, cfg
+    train_data, val_data, table_data = utils.load_dataset(
+        model,
+        cfg.toy,
+        cfg.is_bert,
+        cfg.dataset.path,
+        cfg.query_type,
+        cfg.use_down_schema,
+        cfg.remove_punctuation_marks,
+        cfg,
     )
 
     # Set optimizer
@@ -57,9 +63,7 @@ def train(cfg):
     )
     optimizer = optimizer_cls(model.without_bert_params, lr=cfg.lr)
     if cfg.encoder_name == "bert" and cfg.train_bert:
-        bert_optimizer = optimizer_cls(
-            model.encoder.parameters(), lr=cfg.bert_lr
-        )
+        bert_optimizer = optimizer_cls(model.encoder.parameters(), lr=cfg.bert_lr)
     else:
         bert_optimizer = None
     log.info("Enable Learning Rate Scheduler: {}".format(cfg.lr_scheduler))
@@ -88,7 +92,6 @@ def train(cfg):
             if k not in model.state_dict().keys():
                 del pretrained_modeled[k]
         model.load_state_dict(pretrained_modeled)
-
 
     model.word_emb = None if cfg.is_bert else utils.load_word_emb(cfg.glove_embed_path)
 

@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 
 SKIP_WORDS = ["he", "the"]
 
+
 def idx2seq(seq, indices, cur_idx):
     if indices[cur_idx]:
         cur = indices[cur_idx]
@@ -201,7 +202,9 @@ def schema_linking(
             question_arg[count_q] = ["[db]"] + question_arg[count_q]
             for col_name_idx in range(1, len(t_q)):
                 c_cand = [
-                    v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v).lower()
+                    v.lower()
+                    if v in SKIP_WORDS
+                    else wordnet_lemmatizer.lemmatize(v).lower()
                     for v in t_q[col_name_idx].split(" ")
                 ]
                 col_set_type[col_set_iter.index(c_cand)][4] = 5
@@ -233,7 +236,10 @@ def process(sql, db_data):
 
     origin_sql = sql["question_toks"]
     table_names = [
-        [v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
+        [
+            v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v).lower()
+            for v in x.split(" ")
+        ]
         for x in db_data["table_names"]
     ]
 
@@ -243,18 +249,30 @@ def process(sql, db_data):
     tab_ids = [col[0] for col in db_data["column_names"]]
 
     col_set_iter = [
-        [v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
+        [
+            v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v).lower()
+            for v in x.split(" ")
+        ]
         for x in sql["col_set"]
     ]
     tab_set_iter = [
-        [v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
+        [
+            v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v).lower()
+            for v in x.split(" ")
+        ]
         for x in sql["table_names"]
     ]
     col_iter = [
-        [v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v).lower() for v in x.split(" ")]
+        [
+            v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v).lower()
+            for v in x.split(" ")
+        ]
         for x in tab_cols
     ]
-    q_iter_small = [x.lower() if x in SKIP_WORDS else wordnet_lemmatizer.lemmatize(x).lower() for x in origin_sql]
+    q_iter_small = [
+        x.lower() if x in SKIP_WORDS else wordnet_lemmatizer.lemmatize(x).lower()
+        for x in origin_sql
+    ]
     question_arg = copy.deepcopy(sql["question_arg"])
     question_arg_type = sql["question_arg_type"]
     one_hot_type = np.zeros((len(question_arg_type), 7))
@@ -346,13 +364,20 @@ def to_batch_seq(data_list, table_data):
 
         # column
         col_set_iter = [
-            [v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v) for v in x.split(" ")] for x in data["col_set"]
+            [
+                v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v)
+                for v in x.split(" ")
+            ]
+            for x in data["col_set"]
         ]
         col_set_iter[0] = ["count", "number", "many"]
 
         # table
         table_names = [
-            [v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v) for v in x.split(" ")]
+            [
+                v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v)
+                for v in x.split(" ")
+            ]
             for x in data["table_names"]
         ]
 
@@ -402,10 +427,7 @@ def to_batch_seq(data_list, table_data):
 
 
 def train(
-    model,
-    batch,
-    decoder_name,
-
+    model, batch, decoder_name,
 ):
     model.train()
     total_loss = {}
@@ -584,7 +606,13 @@ def epoch_acc(
 
 
 def load_data_new(
-    sql_path, table_data, use_small=False, is_bert=False, query_type="simple", remove_punc=False, cfg=None,
+    sql_path,
+    table_data,
+    use_small=False,
+    is_bert=False,
+    query_type="simple",
+    remove_punc=False,
+    cfg=None,
 ):
     sql_data = []
     log.info("Loading data from {}".format(sql_path))
@@ -593,9 +621,9 @@ def load_data_new(
         data = lower_keys(json.load(f))
         for datum in data:
             # Filter out some datas
-            if remove_punc and datum['question_arg'][-1] in [['?'], ['.']]:
-                del datum['question_arg'][-1]
-                del datum['question_arg_type'][-1]
+            if remove_punc and datum["question_arg"][-1] in [["?"], ["."]]:
+                del datum["question_arg"][-1]
+                del datum["question_arg_type"][-1]
 
             if "FROM (" not in datum["query"]:
                 sql_data += [datum]
@@ -639,7 +667,9 @@ def load_data_new(
     return sql_data[:20] if use_small else sql_data
 
 
-def load_dataset(model, is_toy, is_bert, dataset_path, query_type, use_down_schema, remove_punc, cfg):
+def load_dataset(
+    model, is_toy, is_bert, dataset_path, query_type, use_down_schema, remove_punc, cfg
+):
     # Get paths
     table_path = os.path.join(dataset_path, "tables.json")
     train_path = os.path.join(dataset_path, "train.json")
@@ -670,8 +700,12 @@ def load_dataset(model, is_toy, is_bert, dataset_path, query_type, use_down_sche
         table_data[key]["neighbors"] = neighbors
 
     # Load data
-    train_data = load_data_new(train_path, table_data, is_toy, is_bert, query_type, remove_punc, cfg)
-    val_data = load_data_new(val_path, table_data, is_toy, is_bert, query_type, remove_punc, cfg)
+    train_data = load_data_new(
+        train_path, table_data, is_toy, is_bert, query_type, remove_punc, cfg
+    )
+    val_data = load_data_new(
+        val_path, table_data, is_toy, is_bert, query_type, remove_punc, cfg
+    )
 
     # # Append sql
     # for data in train_data:
@@ -681,7 +715,9 @@ def load_dataset(model, is_toy, is_bert, dataset_path, query_type, use_down_sche
     train_data = [
         relation.create_relation(cfg, item, table_data, True) for item in train_data
     ]
-    val_data = [relation.create_relation(cfg, item, table_data, True) for item in val_data]
+    val_data = [
+        relation.create_relation(cfg, item, table_data, True) for item in val_data
+    ]
 
     # Show dataset length
     log.info("Total training set: {}".format(len(train_data)))
@@ -952,16 +988,14 @@ def write_eval_result_as(file_name, datas, is_corrects, accs, preds, golds):
             f.write("q_type: | {} |\n".format(" | ".join(q_type_list)))
 
             tab_tmp = str(
-                        " ".join(
-                            [
-                                "<{}: {}>".format(idx, sql_json["table_names"][idx])
-                                for idx in range(len(sql_json["table_names"]))
-                            ]
-                        )
-                    )
-            f.write(
-                "\ntable:  {}\n".format(tab_tmp)
+                " ".join(
+                    [
+                        "<{}: {}>".format(idx, sql_json["table_names"][idx])
+                        for idx in range(len(sql_json["table_names"]))
+                    ]
+                )
             )
+            f.write("\ntable:  {}\n".format(tab_tmp))
             # To-Do: Need to print column's parent table as well
             f.write("column: ")
             # Format column info
@@ -1176,6 +1210,7 @@ def wrong_in_where_op(pred, gold):
             return True
     return False
 
+
 def categorize(pred, gold):
     categories = []
     where_flag = False
@@ -1187,47 +1222,53 @@ def categorize(pred, gold):
                 # Determine why
                 if pred_action_symbol == "T":
                     if "Filter" in [item[0] for item in pred[:idx]]:
-                        categories += ['table_where']
+                        categories += ["table_where"]
                     else:
-                        categories += ['table_select']
+                        categories += ["table_select"]
                 elif pred_action_symbol == "C":
                     # In WHERE clause
                     if "Filter" in [item[0] for item in pred[:idx]]:
-                        categories += ['column_where']
+                        categories += ["column_where"]
                     # In SELECT clause
                     else:
                         if pred[idx][1] == 0:
-                            categories += ['column_select_pred_star']
+                            categories += ["column_select_pred_star"]
                         elif gold[idx][1] == 0:
-                            categories += ['column_select_gold_star']
+                            categories += ["column_select_gold_star"]
                         else:
-                            categories += ['column_select']
+                            categories += ["column_select"]
                 else:
                     # Structural reason
                     if pred_action_symbol == "Sel":
-                        categories += ['select_num_of_column']
+                        categories += ["select_num_of_column"]
                     elif pred_action_symbol == "A" and not where_flag:
-                        categories += ['select_agg']
+                        categories += ["select_agg"]
                     elif pred_action_symbol == "Root":
-                        categories += ['where_existence']
+                        categories += ["where_existence"]
                     elif pred_action_symbol == "Filter":
-                        if pred[idx][1] in [0, 1] or gold[idx][1] in [0,1]:
-                            categories += ['where_num']
+                        if pred[idx][1] in [0, 1] or gold[idx][1] in [0, 1]:
+                            categories += ["where_num"]
                         else:
-                            categories += ['where_operator']
+                            categories += ["where_operator"]
                     else:
                         raise RuntimeError("Should not be here")
     return list(set(categories))
 
+
 def save_data_for_analysis(tag, datas, preds, golds, details_list, dataset, save_path):
     log = {
-        'tag': tag,
-        'dataset': [{
-            'name': dataset,
-            'path': '/home/hkkang/debugging/irnet_qgm_transformer/data/spider/',
-        }],
-        'data': [],
-        'grammar': ["{} -> {}".format(value[0],NOQGM.noqgm.actions[value[0]][value[1]]) for key, value in NOQGM.noqgm.aid_to_action.items()],
+        "tag": tag,
+        "dataset": [
+            {
+                "name": dataset,
+                "path": "/home/hkkang/debugging/irnet_qgm_transformer/data/spider/",
+            }
+        ],
+        "data": [],
+        "grammar": [
+            "{} -> {}".format(value[0], NOQGM.noqgm.actions[value[0]][value[1]])
+            for key, value in NOQGM.noqgm.aid_to_action.items()
+        ],
     }
     # Create folder for image
     image_folder_path = os.path.join(save_path, "images")
@@ -1238,42 +1279,57 @@ def save_data_for_analysis(tag, datas, preds, golds, details_list, dataset, save
     for idx in tqdm(range(len(datas))):
         data = datas[idx]
         details = details_list[idx]
-        
+
         data_log = {}
-        data_log['idx'] = idx
-        data_log['query'] = [' '.join(tmp) for tmp in data.src_sent]
-        data_log['sql'] = data.sql
-        data_log['columns'] = [' '.join(tmp) for tmp in data.tab_cols]
-        data_log['tables'] = [' '.join(tmp) for tmp in data.table_names]
-        data_log['db'] = data.db_id,
-        data_log['gold'] = golds[idx]
-        data_log['pred'] = preds[idx]
+        data_log["idx"] = idx
+        data_log["query"] = [" ".join(tmp) for tmp in data.src_sent]
+        data_log["sql"] = data.sql
+        data_log["columns"] = [" ".join(tmp) for tmp in data.tab_cols]
+        data_log["tables"] = [" ".join(tmp) for tmp in data.table_names]
+        data_log["db"] = (data.db_id,)
+        data_log["gold"] = golds[idx]
+        data_log["pred"] = preds[idx]
 
         # Create tensor image and save its path
-        for layer_idx, (weight_tensors, relation_weight_tensors) in enumerate(zip(details['qk_weights'], details['qk_relation_weights'])):
-            weight_tensor_key = 'weight_tensors_{}'.format(layer_idx)
-            relation_tensor_key = 'relation_weight_tensors_{}'.format(layer_idx)
+        for layer_idx, (weight_tensors, relation_weight_tensors) in enumerate(
+            zip(details["qk_weights"], details["qk_relation_weights"])
+        ):
+            weight_tensor_key = "weight_tensors_{}".format(layer_idx)
+            relation_tensor_key = "relation_weight_tensors_{}".format(layer_idx)
             data_log[weight_tensor_key] = []
             data_log[relation_tensor_key] = []
-            for head_idx, (head_weight_tensor, relation_head_weight_tensor) in enumerate(zip(weight_tensors, relation_weight_tensors)):
+            for (
+                head_idx,
+                (head_weight_tensor, relation_head_weight_tensor),
+            ) in enumerate(zip(weight_tensors, relation_weight_tensors)):
                 # Create nl
                 nl = data_log["query"] + data_log["columns"] + data_log["tables"]
                 # weight tensor
                 value = head_weight_tensor.cpu().numpy()
-                image_path = os.path.join(image_folder_path, "{}_att_layer_{}_head_{}.png".format(idx, layer_idx, head_idx))
+                image_path = os.path.join(
+                    image_folder_path,
+                    "{}_att_layer_{}_head_{}.png".format(idx, layer_idx, head_idx),
+                )
                 # draw_heat_map(nl, value, 'att_layer_{}_head_{}'.format(layer_idx, head_idx), image_path)
                 data_log[weight_tensor_key] += [image_path]
 
                 # relation weight tensor
                 value = relation_head_weight_tensor.cpu().numpy()
-                image_path = os.path.join(image_folder_path, "{}_relation_att_layer_{}_head_{}.png".format(idx, layer_idx, head_idx))
+                image_path = os.path.join(
+                    image_folder_path,
+                    "{}_relation_att_layer_{}_head_{}.png".format(
+                        idx, layer_idx, head_idx
+                    ),
+                )
                 # draw_heat_map(nl, value, 'relation_att_layer_{}_head_{}'.format(layer_idx, head_idx), image_path)
                 data_log[relation_tensor_key] += [image_path]
 
         # Create prob image and save its path
-        inference_key = 'inference'
+        inference_key = "inference"
         data_log[inference_key] = []
-        for pred_idx, (value, pred_action) in enumerate(zip(details["probs"], preds[idx])):
+        for pred_idx, (value, pred_action) in enumerate(
+            zip(details["probs"], preds[idx])
+        ):
             key = "inference step {}".format(pred_idx)
             if pred_action[0] == "C":
                 arg1 = data_log["columns"]
@@ -1281,22 +1337,24 @@ def save_data_for_analysis(tag, datas, preds, golds, details_list, dataset, save
                 arg1 = data_log["tables"]
             else:
                 arg1 = log["grammar"]
-            image_path = os.path.join(image_folder_path, "{}_inference_{}.png".format(idx, pred_idx))
+            image_path = os.path.join(
+                image_folder_path, "{}_inference_{}.png".format(idx, pred_idx)
+            )
             # draw_inference_score(arg1, value, key, image_path)
             data_log[inference_key] += [image_path]
 
         # Detailed Analysis with pred and gold
-        data_log['filter'] = categorize(preds[idx], golds[idx])
-        log['data'] += [data_log]
+        data_log["filter"] = categorize(preds[idx], golds[idx])
+        log["data"] += [data_log]
 
     # Save
-    log_file_path = os.path.join(save_path, 'result.pkl')
-    with open(log_file_path, 'wb') as f:
+    log_file_path = os.path.join(save_path, "result.pkl")
+    with open(log_file_path, "wb") as f:
         pickle.dump(log, f)
 
 
 def append_bert_input(examples, tokenizer):
-    if tokenizer.pad_token != '[PAD]':
+    if tokenizer.pad_token != "[PAD]":
         raise NotImplementedError("Need to fix _pad_bert_input method in Batch class")
 
     log.info("Tokenizing with bert")

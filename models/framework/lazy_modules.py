@@ -87,6 +87,7 @@ class LazyLinear(nn.Module, LazyModule):
             for length, computed_tensor in zip(tensor_length, computed_tensors)
         ]
 
+
 class LazyReLULinear(nn.Module, LazyModule):
     def __init__(self, in_dim, out_dim):
         super(LazyReLULinear, self).__init__()

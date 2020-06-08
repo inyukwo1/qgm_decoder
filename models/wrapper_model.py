@@ -113,7 +113,11 @@ class EncoderDecoderModel(nn.Module):
                         emb_list.append(self.key_embs.weight[5])
                     else:
                         if self.train_glove:
-                            q_val.append(self.word_emb[self.mapping[w if w in self.mapping else "unk"]])
+                            q_val.append(
+                                self.word_emb[
+                                    self.mapping[w if w in self.mapping else "unk"]
+                                ]
+                            )
                         else:
                             q_val.append(self.word_emb.get(w, self.word_emb["unk"]))
                 print("Warning!")
@@ -138,7 +142,9 @@ class EncoderDecoderModel(nn.Module):
                             emb_list.append(self.key_embs.weight[5])
                         else:
                             if self.train_glove:
-                                torch_emb = self.word_emb[self.mapping[w if w in self.mapping else "unk"]]
+                                torch_emb = self.word_emb[
+                                    self.mapping[w if w in self.mapping else "unk"]
+                                ]
                                 emb_list.append(torch_emb)
                             else:
                                 numpy_emb = self.word_emb.get(w, self.word_emb["unk"])
@@ -164,12 +170,7 @@ class EncoderDecoderModel(nn.Module):
         enc_last_cell = None
         if self.encoder_name == "ra_transformer":
             if self.is_bert:
-                (
-                    src,
-                    col,
-                    tab,
-                    last_cell,
-                ) = self.bert(batch)
+                (src, col, tab, last_cell,) = self.bert(batch)
             else:
                 src = self.gen_x_batch(batch.src_sents)
                 col = self.gen_x_batch(batch.table_sents)
@@ -307,7 +308,9 @@ class EncoderDecoderModel(nn.Module):
         return output
 
     def forward(self, examples, is_train=False, return_details=False):
-        batch = Batch(examples, is_cuda=self.is_cuda, use_bert_cache=self.cfg.use_bert_cache)
+        batch = Batch(
+            examples, is_cuda=self.is_cuda, use_bert_cache=self.cfg.use_bert_cache
+        )
         # Encode
         encoder_output = self.encode(batch, return_details=return_details,)
         if return_details:
@@ -338,11 +341,13 @@ class EncoderDecoderModel(nn.Module):
         )
         if return_details:
             output, probs_list = decoder_output
-            details = [{
-                "qk_weights": qk_weights_list,
-                "qk_relation_weights": qk_relation_weights_list,
-                "probs": probs_list[0]
-            }]
+            details = [
+                {
+                    "qk_weights": qk_weights_list,
+                    "qk_relation_weights": qk_relation_weights_list,
+                    "probs": probs_list[0],
+                }
+            ]
             return output, details
         else:
             return decoder_output

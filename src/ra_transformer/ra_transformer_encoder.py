@@ -15,7 +15,16 @@ class RATransformerEncoder(nn.Module):
         self.num_layers = num_layers
         self.norm = norm
 
-    def forward(self, src, tgt, relation, mask=None, src_key_padding_mask=None, return_details=False, is_guided=False):
+    def forward(
+        self,
+        src,
+        tgt,
+        relation,
+        mask=None,
+        src_key_padding_mask=None,
+        return_details=False,
+        is_guided=False,
+    ):
         qk_weights_list = []
         qk_relation_weights_list = []
 
@@ -29,9 +38,9 @@ class RATransformerEncoder(nn.Module):
                 return_details=return_details,
             )
             if return_details:
-               tgt, qk_weights, qk_relation_weights = tgt
-               qk_weights_list += [qk_weights]
-               qk_relation_weights_list += [qk_relation_weights]
+                tgt, qk_weights, qk_relation_weights = tgt
+                qk_weights_list += [qk_weights]
+                qk_relation_weights_list += [qk_relation_weights]
 
         if self.norm is not None:
             tgt = self.norm(tgt)
@@ -43,13 +52,25 @@ class RATransformerEncoder(nn.Module):
 
 
 class RATransformerEncoderLayer(nn.Module):
-    def __init__(self, d_model, nhead, nrelation=0, dim_feedforward=2048, dropout=0.1,
-                 change_relation_contribution=False, explicit_relation_feature=False):
+    def __init__(
+        self,
+        d_model,
+        nhead,
+        nrelation=0,
+        dim_feedforward=2048,
+        dropout=0.1,
+        change_relation_contribution=False,
+        explicit_relation_feature=False,
+    ):
         super(RATransformerEncoderLayer, self).__init__()
         # Multi-head Attention
-        self.self_attn = RAMultiheadAttention(d_model, nhead, dropout=dropout,
-                                              change_relation_contribution=change_relation_contribution,
-                                              explicit_relation_feature=explicit_relation_feature)
+        self.self_attn = RAMultiheadAttention(
+            d_model,
+            nhead,
+            dropout=dropout,
+            change_relation_contribution=change_relation_contribution,
+            explicit_relation_feature=explicit_relation_feature,
+        )
         self.dropout = nn.Dropout(dropout)
         self.norm1 = nn.LayerNorm(d_model)
 
@@ -67,7 +88,16 @@ class RATransformerEncoderLayer(nn.Module):
         self.relation_k_emb = nn.Embedding(nrelation, self.self_attn.head_dim)
         self.relation_v_emb = nn.Embedding(nrelation, self.self_attn.head_dim)
 
-    def forward(self, src, tgt, relation=None, src_mask=None, tgt_mask=None, src_key_padding_mask=None, return_details=False):
+    def forward(
+        self,
+        src,
+        tgt,
+        relation=None,
+        src_mask=None,
+        tgt_mask=None,
+        src_key_padding_mask=None,
+        return_details=False,
+    ):
 
         # Relation Embedding
         relation_k = self.relation_k_emb(relation) if relation is not None else None
