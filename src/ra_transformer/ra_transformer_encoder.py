@@ -68,6 +68,7 @@ class RATransformerEncoderLayer(nn.Module):
         self.relation_v_emb = nn.Embedding(nrelation, self.self_attn.head_dim)
 
     def forward(self, src, tgt, relation=None, src_mask=None, tgt_mask=None, src_key_padding_mask=None, return_details=False):
+
         # Relation Embedding
         relation_k = self.relation_k_emb(relation) if relation is not None else None
         relation_v = self.relation_v_emb(relation) if relation is not None else None

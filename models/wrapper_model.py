@@ -79,7 +79,9 @@ class EncoderDecoderModel(nn.Module):
             self.without_bert_params = list(self.parameters(recurse=True))
 
     def load_model(self, pretrained_model_path):
-        pretrained_model = torch.load(pretrained_model_path, map_location=lambda storage, loc: storage)
+        pretrained_model = torch.load(
+            pretrained_model_path, map_location=lambda storage, loc: storage
+        )
         pretrained_modeled = copy.deepcopy(pretrained_model)
         for k in pretrained_model.keys():
             if k not in self.state_dict().keys():
@@ -125,7 +127,7 @@ class EncoderDecoderModel(nn.Module):
                         if w == "[db]":
                             emb_list.append(self.key_embs.weight[0])
                         elif w == "[table]":
-                             emb_list.append(self.key_embs.weight[1])
+                            emb_list.append(self.key_embs.weight[1])
                         elif w == "[column]":
                             emb_list.append(self.key_embs.weight[2])
                         elif w == "[value]":
@@ -188,7 +190,13 @@ class EncoderDecoderModel(nn.Module):
                 return_details=return_details,
             )
             if return_details:
-                src_encodings, table_embeddings, schema_embeddings, qk_weights_list, qk_relation_weights_list = output
+                (
+                    src_encodings,
+                    table_embeddings,
+                    schema_embeddings,
+                    qk_weights_list,
+                    qk_relation_weights_list,
+                ) = output
             else:
                 src_encodings, table_embeddings, schema_embeddings = output
         elif self.encoder_name == "transformer":
@@ -224,7 +232,14 @@ class EncoderDecoderModel(nn.Module):
         else:
             raise RuntimeError("Unsupported encoder name")
         if return_details:
-            return src_encodings, table_embeddings, schema_embeddings, enc_last_cell, qk_weights_list, qk_relation_weights_list
+            return (
+                src_encodings,
+                table_embeddings,
+                schema_embeddings,
+                enc_last_cell,
+                qk_weights_list,
+                qk_relation_weights_list,
+            )
         else:
             return src_encodings, table_embeddings, schema_embeddings, enc_last_cell
 
@@ -294,13 +309,23 @@ class EncoderDecoderModel(nn.Module):
     def forward(self, examples, is_train=False, return_details=False):
         batch = Batch(examples, is_cuda=self.is_cuda, use_bert_cache=self.cfg.use_bert_cache)
         # Encode
-        encoder_output = self.encode(
-            batch, return_details=return_details,
-        )
+        encoder_output = self.encode(batch, return_details=return_details,)
         if return_details:
-            src_encodings, table_embeddings, schema_embeddings, enc_last_cell, qk_weights_list, qk_relation_weights_list = encoder_output
+            (
+                src_encodings,
+                table_embeddings,
+                schema_embeddings,
+                enc_last_cell,
+                qk_weights_list,
+                qk_relation_weights_list,
+            ) = encoder_output
         else:
-            src_encodings, table_embeddings, schema_embeddings, enc_last_cell = encoder_output
+            (
+                src_encodings,
+                table_embeddings,
+                schema_embeddings,
+                enc_last_cell,
+            ) = encoder_output
         # Decode
         decoder_output = self.decode(
             batch,

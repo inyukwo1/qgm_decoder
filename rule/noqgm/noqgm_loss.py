@@ -42,14 +42,14 @@ class NOQGM_Loss(Loss):
         else:
             raise RuntimeError("Should not be here")
         return key
-    
+
 
 class NOQGM_Loss_New(Loss):
     def __init__(self):
         super(NOQGM_Loss_New, self).__init__()
 
         # Symbols
-        self.root = "Root"
+        self.root = "Root1"
         self.sel = "Sel"
         self.filter = "Filter"
         self.a = "A"
@@ -62,25 +62,18 @@ class NOQGM_Loss_New(Loss):
         elif action_node == self.sel:
             key = "head_num"
         elif action_node == self.a:
-            prev_symbols = [
-                prev_action[0]
-                for prev_action in prev_actions
-                if prev_action[0] in ["Sel", "Filter"]
-            ]
-            assert len(prev_symbols) > 0, "Wrong prev_actions: {}".format(prev_actions)
-            key = "head_agg" if prev_symbols[-1] == "Sel" else "predicate_agg"
+            key = "head_agg"
         elif action_node == self.filter:
             key = "predicate_num"
         elif action_node == self.c:
             prev_symbols = [
                 prev_action[0]
                 for prev_action in prev_actions
-                if prev_action[0] in ["Sel", "Filter"]
+                if prev_action[0] in ["Root", "Filter"]
             ]
-            assert len(prev_symbols) > 0, "Wrong prev_actions: {}".format(prev_actions)
-            key = "head_col" if prev_symbols[-1] == "Sel" else "predicate_col"
+            key = "head_col" if prev_symbols[-1] == "Root" else "predicate_col"
         elif action_node == self.t:
             key = "quantifier_tab"
         else:
-            raise RuntimeError("Should not be here")
+            key = "head_num"
         return key

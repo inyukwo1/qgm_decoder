@@ -118,7 +118,6 @@ class RA_Transformer_Encoder(nn.Module):
             schema_src = torch.cat([col, tab], dim=0)
             schema_mask = torch.cat([col_mask, tab_mask], dim=1).bool()
             schema_out = self.schema_ra_transformer_encoder(schema_src, schema_src, schema_relation, src_key_padding_mask=schema_mask)
-
             col = schema_out[:col_max_len, :, :]
             tab = schema_out[col_max_len:, :, :]
 
@@ -154,7 +153,13 @@ class RA_Transformer_Encoder(nn.Module):
             encoded_tab = encoded_src[:, col_idx:tab_idx, :]
 
         if return_details:
-            return encoded_sen, encoded_col, encoded_tab, qk_weights_list, qk_relation_weights_list
+            return (
+                encoded_sen,
+                encoded_col,
+                encoded_tab,
+                qk_weights_list,
+                qk_relation_weights_list,
+            )
         else:
             return encoded_sen, encoded_col, encoded_tab
 

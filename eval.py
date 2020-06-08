@@ -41,8 +41,14 @@ def evaluate(cfg):
     # Evaluation
     log.info("Evaluation:")
 
-    dev_total_acc, dev_is_correct, dev_pred, dev_gold, dev_list, details_lists = utils.epoch_acc(
-        model, cfg.batch_size, val_data, return_details=True)
+    (
+        dev_total_acc,
+        dev_is_correct,
+        dev_pred,
+        dev_gold,
+        dev_list,
+        details_lists,
+    ) = utils.epoch_acc(model, cfg.batch_size, val_data, return_details=True)
 
     # print("Train Acc: {}".format(train_total_acc["total"]))
     print("Dev Acc: {}".format(dev_total_acc["total"]))
@@ -69,6 +75,7 @@ def evaluate(cfg):
     utils.analyze_regarding_schema_size(
         dev_list, dev_is_correct, dev_pred, dev_gold, table_data
     )
+
 
 if __name__ == "__main__":
     evaluate()
