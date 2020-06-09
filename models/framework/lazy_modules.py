@@ -271,7 +271,9 @@ class LazyCalculateSimilarity(nn.Module, LazyModule):
     def __init__(self, in_dim, out_dim):
         super(LazyCalculateSimilarity, self).__init__()
         LazyModule.__init__(self)
-        self.affine_layer = nn.Linear(in_dim, out_dim)
+        self.affine_layer = nn.Sequential(
+            nn.Linear(in_dim, out_dim), nn.ReLU(), nn.Linear(out_dim, out_dim)
+        )
         self.in_dim = in_dim
         self.out_dim = out_dim
 
