@@ -18,7 +18,9 @@ python setup.py install
 #### Data preparation
 
 * Download [Glove Embedding](https://nlp.stanford.edu/data/wordvecs/glove.42B.300d.zip) and put `glove.42B.300d` under `./data/` directory  
-* run `create_semql_qgm_for_all_dataset.sh` under `./preprocess/` directiory
+* run `download_spider_dataset.py` under `./preprocess` directory to download spider dataset
+* run `parse_spider_dataset.py` under `./preprocess` directory to fix errors in spider dataset
+* run `create_semql_qgm_for_all_dataset.sh` under `./preprocess/` directory
 
 #### Data path hierarchy
 ```
