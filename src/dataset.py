@@ -151,6 +151,8 @@ class Batch(object):
         self.cuda = is_cuda
 
     def _pad_bert_input(self, examples):
+        if not examples[0].bert_input:
+            return None
         lens = [item.bert_input_indices[-1][-1][-1] for item in examples]
         max_len = max(lens)
 

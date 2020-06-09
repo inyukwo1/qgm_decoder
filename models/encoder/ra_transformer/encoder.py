@@ -87,9 +87,8 @@ class RA_Transformer_Encoder(nn.Module):
         return_details=False,
     ):
         # LSTM
-        if self.use_lstm:
-            sen = self.encode_with_lstm(sen, sen_len, self.sen_lstm)
-            tab = self.encode_with_lstm(tab, tab_len, self.tab_lstm)
+        sen = self.encode_with_lstm(sen, sen_len, self.sen_lstm)
+        tab = self.encode_with_lstm(tab, tab_len, self.tab_lstm)
 
         # Get len
         sen_max_len = sen.shape[1]
@@ -129,6 +128,7 @@ class RA_Transformer_Encoder(nn.Module):
         src_key_padding_mask = torch.cat([sen_mask, col_mask, tab_mask], dim=1).bool()
 
         output = self.ra_transformer_encoder(
+            src,
             src,
             relation,
             src_key_padding_mask=src_key_padding_mask,

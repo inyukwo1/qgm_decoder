@@ -212,6 +212,7 @@ def train(cfg):
             log.info("Val col Acc: {}\n".format(val_acc["col"]))
             log.info("Val table Acc: {}\n".format(val_acc["table"]))
             # log.info("Val col / table Loss: {}\n".format(val_loss["detail"]))
+            global best_val_acc
 
             # Save if total_acc is higher
             if best_val_acc <= val_acc["total"]:
