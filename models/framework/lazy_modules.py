@@ -211,7 +211,7 @@ class LazyTransformerDecoder(nn.Module, LazyModule):
         self.in_dim = in_dim
         self._init_positional_embedding()
 
-    def _init_positional_embedding(self, dropout=0.1, max_len=100):
+    def _init_positional_embedding(self, dropout=0.2, max_len=100):
         d_model = self.in_dim
 
         self.pos_dropout = nn.Dropout(p=dropout)
@@ -417,7 +417,7 @@ class LazyDotProductAttention(nn.Module, LazyModule):
         self.out_dim = out_dim
         self.out_layer = torch.nn.Linear(in_dim, out_dim)
         self.tanh = nn.Tanh()
-        self.dropout = nn.Dropout()
+        self.dropout = nn.Dropout(p=0.2)
 
     def assert_input(self, *inputs):
         pass

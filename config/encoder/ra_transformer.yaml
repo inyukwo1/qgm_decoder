@@ -1,6 +1,6 @@
 encoder_name: ra_transformer
 layer_num: 3
-nhead: 6
+nhead: 8
 change_relation_contribution: false
 explicit_relation_feature: true
 

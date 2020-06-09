@@ -644,7 +644,11 @@ def load_data_new(
         else:
             raise NotImplementedError("not yet")
 
-        if gt_str and NOQGM.create_data(data["sql"], db) and gt_str != True:
+        if (
+            gt_str
+            and NOQGM.create_data(data["sql"], db, cfg.dataset.name)
+            and gt_str != True
+        ):
             gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
             data["gt"] = gt
     sql_data = [item for item in sql_data if "gt" in item]

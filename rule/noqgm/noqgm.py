@@ -18,7 +18,7 @@ class NOQGM(Grammar):
         return NOQGM_Loss(self.symbol_to_sid)
 
     @classmethod
-    def create_data(cls, sql, db):
+    def create_data(cls, sql, db, dataset="spider"):
         # json to strings of actions
         # No nested in the from clause
         for item in sql["from"]["table_units"]:
@@ -32,29 +32,71 @@ class NOQGM(Grammar):
         elif sql["groupby"] or sql["orderby"]:
             return True
         else:
-            # Single
-            # Root
-            action = "Root(0) "
-            # Sel
-            assert sql["select"], "Something is weird {}".format(sql["select"])
-            for select in sql["select"][1]:
-                action += "A({}) ".format(select[0])
-                ori_col_id = select[1][1][1]
-                new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
-                action += "C({}) ".format(new_col_id)
+            if dataset == "spider":
+                # Single
+                # Root
+                if sql["where"]:
+                    action = "Root(0) "
+                else:
+                    action = "Root(1) "
+                # Sel
+                assert sql["select"], "Something is weird {}".format(sql["select"])
+                action += "Sel({}) ".format(len(sql["select"][1]) - 1)
+                for select in sql["select"][1]:
+                    action += "A({}) ".format(select[0])
+                    ori_col_id = select[1][1][1]
+                    new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
+                    if ori_col_id == 0:
+                        tab_id = sql["from"]["table_units"][0][1]
+                    else:
+                        tab_id = db["column_names"][ori_col_id][0]
+                    action += "C({}) ".format(new_col_id)
+                    action += "T({}) ".format(tab_id)
 
-            for idx in range(0, len(sql["where"]), 2):
-                where_cond = sql["where"][idx]
-                if isinstance(where_cond[3], dict):
-                    return None
-                if len(sql["where"]) > idx + 1:
-                    assert sql["where"][idx + 1] in ["or", "and"]
-                    action += "Filter(0) "
-                op_id = where_cond[1] - 1
-                action += "Filter({}) ".format(op_id)
-                ori_col_id = where_cond[2][1][1]
-                new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
-                action += "C({}) ".format(new_col_id)
+                for idx in range(0, len(sql["where"]), 2):
+                    where_cond = sql["where"][idx]
+                    if isinstance(where_cond[3], dict):
+                        return None
+                    if len(sql["where"]) > idx + 1:
+                        assert sql["where"][idx + 1] in ["or", "and"]
+                        action += "Filter({}) ".format(
+                            0 if sql["where"][idx + 1] == "or" else 1
+                        )
+                    op_id = where_cond[1] + 6 if where_cond[0] else where_cond[1] + 2
+                    action += "Filter({}) ".format(op_id)
+                    action += "A({}) ".format(where_cond[2][1][0])
+                    ori_col_id = where_cond[2][1][1]
+                    new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
+                    if ori_col_id == 0:
+                        tab_id = sql["from"]["table_units"][0][1]
+                    else:
+                        tab_id = db["column_names"][ori_col_id][0]
+                    action += "C({}) ".format(new_col_id)
+                    action += "T({}) ".format(tab_id)
+            elif dataset == "wikisql":
+                # Single
+                # Root
+                action = "Root(0) "
+                # Sel
+                assert sql["select"], "Something is weird {}".format(sql["select"])
+                for select in sql["select"][1]:
+                    action += "A({}) ".format(select[0])
+                    ori_col_id = select[1][1][1]
+                    new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
+                    action += "C({}) ".format(new_col_id)
+
+                for idx in range(0, len(sql["where"]), 2):
+                    where_cond = sql["where"][idx]
+                    if isinstance(where_cond[3], dict):
+                        return None
+                    if len(sql["where"]) > idx + 1:
+                        assert sql["where"][idx + 1] in ["or", "and"]
+                        action += "Filter(0) "
+                    op_id = where_cond[1] - 1
+                    action += "Filter({}) ".format(op_id)
+                    ori_col_id = where_cond[2][1][1]
+                    new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
+                    action += "C({}) ".format(new_col_id)
 
         return action[:-1]
 
@@ -62,23 +104,23 @@ class NOQGM(Grammar):
         def get_num(action):
             left = action.index("(")
             right = action.index(")")
-            return int(action[left:right+1])
+            return int(action[left : right + 1])
 
         def get_symbol(action):
             return action.split("(")[0]
 
         def parse_ACT(noqgm, last_idx):
             assert get_symbol(noqgm[last_idx]) == "A"
-            assert get_symbol(noqgm[last_idx+1]) == "C"
-            assert get_symbol(noqgm[last_idx+2]) == "T"
+            assert get_symbol(noqgm[last_idx + 1]) == "C"
+            assert get_symbol(noqgm[last_idx + 2]) == "T"
 
             # Aggregation
             agg_ops = ["none", "max", "min", "count", "sum", "avg"]
             agg_num = get_num(noqgm[last_idx])
 
             # Column and Table
-            col_name = str(get_num(noqgm[last_idx+1]))
-            tab_name = str(get_num(noqgm[last_idx+2]))
+            col_name = str(get_num(noqgm[last_idx + 1]))
+            tab_name = str(get_num(noqgm[last_idx + 2]))
 
             if agg_num != 0:
                 tmp = "{}()".format(agg_ops[agg_num], tab_name, col_name)
@@ -86,19 +128,39 @@ class NOQGM(Grammar):
                 tmp = "{}.{}".format(tab_name, col_name)
             return tmp
 
-
         def parse_where_clause(noqgm, cur_idx):
-            where_ops = ["or", "and", "Not", "Between", "=", ">", "<", ">=", "<=", "!=", "In", "Like", "Is", "Exists", "Not In", "Not Like"]
-            where = '{}'
-            while(cur_idx < len(noqgm)):
+            where_ops = [
+                "or",
+                "and",
+                "Not",
+                "Between",
+                "=",
+                ">",
+                "<",
+                ">=",
+                "<=",
+                "!=",
+                "In",
+                "Like",
+                "Is",
+                "Exists",
+                "Not In",
+                "Not Like",
+            ]
+            where = "{}"
+            while cur_idx < len(noqgm):
                 action = noqgm[cur_idx]
                 if get_symbol(action) == "Filter":
                     # Do something here
                     num = get_num(action)
                     if num in [0, 1]:
-                        where = where.format("{} {} {}".format("{}", where_ops[num], "{}"))
+                        where = where.format(
+                            "{} {} {}".format("{}", where_ops[num], "{}")
+                        )
                     else:
-                        where = where.format("{} {} 'value'".format("{}", where_ops[num]))
+                        where = where.format(
+                            "{} {} 'value'".format("{}", where_ops[num])
+                        )
                     cur_idx += 1
                 elif get_symbol(action) == "A":
                     tmp = parse_ACT(noqgm, cur_idx)
@@ -108,10 +170,9 @@ class NOQGM(Grammar):
                     break
             return where, cur_idx
 
-
         def parse_select_clause(noqgm, cur_idx):
-            select = ''
-            while (cur_idx < len(noqgm)):
+            select = ""
+            while cur_idx < len(noqgm):
                 action = noqgm[cur_idx]
                 if get_symbol(action) == "Sel":
                     cur_idx += 1
