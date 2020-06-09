@@ -73,21 +73,43 @@ class BERT(nn.Module):
                 for idx in tqdm(range(len(examples))):
                     example = examples[idx]
                     question = example.bert_input
-                    encoded_question = self.tokenizer.encode(question, add_special_tokens=False)
-                    encoded_question = torch.tensor(encoded_question).unsqueeze(0).cuda()
-                    embedding = self.bert_encoder(encoded_question)[0].squeeze(0).cpu().detach().numpy()
+                    encoded_question = self.tokenizer.encode(
+                        question, add_special_tokens=False
+                    )
+                    encoded_question = (
+                        torch.tensor(encoded_question).unsqueeze(0).cuda()
+                    )
+                    embedding = (
+                        self.bert_encoder(encoded_question)[0]
+                        .squeeze(0)
+                        .cpu()
+                        .detach()
+                        .numpy()
+                    )
 
                     # indices
-                    word_start_end, col_start_end, tab_start_end = example.bert_input_indices
+                    (
+                        word_start_end,
+                        col_start_end,
+                        tab_start_end,
+                    ) = example.bert_input_indices
 
                     # split question
-                    question_encodings = [sum(embedding[st:ed]) / (ed-st) for st, ed in word_start_end]
+                    question_encodings = [
+                        sum(embedding[st:ed]) / (ed - st) for st, ed in word_start_end
+                    ]
 
                     # split col
-                    cols = [np.expand_dims(embedding[st:ed], axis=0)for st, ed in col_start_end]
+                    cols = [
+                        np.expand_dims(embedding[st:ed], axis=0)
+                        for st, ed in col_start_end
+                    ]
 
                     # Split tab
-                    tabs = [np.expand_dims(embedding[st:ed], axis=0) for st, ed in tab_start_end]
+                    tabs = [
+                        np.expand_dims(embedding[st:ed], axis=0)
+                        for st, ed in tab_start_end
+                    ]
 
                     self.bert_cache[question] = [question_encodings, cols, tabs]
             log.info("Saving bert cache")
@@ -181,7 +203,9 @@ class BERT(nn.Module):
                 if question not in self.bert_cache:
                     print("question not in bert cache..")
                     exit(-1)
-                one_q_encodings, col_encodings, tab_encodings = self.bert_cache[question]
+                one_q_encodings, col_encodings, tab_encodings = self.bert_cache[
+                    question
+                ]
 
                 one_q_encodings = torch.tensor(one_q_encodings).cuda()
                 col_encodings = [torch.tensor(item).cuda() for item in col_encodings]
@@ -274,4 +298,9 @@ class BERT(nn.Module):
             table_embedding = self.linear_layer(table_embedding)
             schema_embedding = self.linear_layer(schema_embedding)
 
-        return src_encodings, table_embedding, schema_embedding, [item[0, :] for item in embedding]
+        return (
+            src_encodings,
+            table_embedding,
+            schema_embedding,
+            [item[0, :] for item in embedding],
+        )

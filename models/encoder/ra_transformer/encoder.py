@@ -33,11 +33,6 @@ class RA_Transformer_Encoder(nn.Module):
             self.sen_lstm = nn.LSTM(
                 dim, hidden_size // 2, bidirectional=True, batch_first=True
             )
-        if self.use_col_lstm:
-            self.col_lstm = nn.LSTM(
-                dim, hidden_size // 2, bidirectional=True, batch_first=True
-            )
-        if self.use_tab_lstm:
             self.tab_lstm = nn.LSTM(
                 dim, hidden_size // 2, bidirectional=True, batch_first=True
             )
@@ -92,14 +87,9 @@ class RA_Transformer_Encoder(nn.Module):
         return_details=False,
     ):
         # LSTM
-        if not self.is_bert:
-            if self.use_nl_lstm:
-                sen = self.encode_with_lstm(sen, sen_len, self.sen_lstm)
-            # Tab, Col 서로 연관 있는 애들끼리 lstm으로 인코딩해야하지 않을까? (col set으로 안하면..)
-            if self.use_col_lstm:
-                col = self.encode_with_lstm(col, col_len, self.col_lstm)
-            if self.use_tab_lstm:
-                tab = self.encode_with_lstm(tab, tab_len, self.tab_lstm)
+        if self.use_lstm:
+            sen = self.encode_with_lstm(sen, sen_len, self.sen_lstm)
+            tab = self.encode_with_lstm(tab, tab_len, self.tab_lstm)
 
         # Get len
         sen_max_len = sen.shape[1]
@@ -135,10 +125,17 @@ class RA_Transformer_Encoder(nn.Module):
             tab = schema_out[col_max_len:, :, :]
 
         # Combine
-        if self.use_guided_attention:
-            schema = torch.cat([col, tab], dim=0)
-            schema_key_padding_mask = torch.cat([col_mask, tab_mask], dim=1).bool()
-            raise NotImplementedError("not yet")
+        src = torch.cat([sen, col, tab], dim=0)
+        src_key_padding_mask = torch.cat([sen_mask, col_mask, tab_mask], dim=1).bool()
+
+        output = self.ra_transformer_encoder(
+            src,
+            relation,
+            src_key_padding_mask=src_key_padding_mask,
+            return_details=return_details,
+        )
+        if return_details:
+            encoded_src, qk_weights_list, qk_relation_weights_list = output
         else:
             src = torch.cat([sen, col, tab], dim=0)
             src_key_padding_mask = torch.cat(

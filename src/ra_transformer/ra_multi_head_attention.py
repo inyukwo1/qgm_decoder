@@ -59,7 +59,9 @@ class RAMultiheadAttention(nn.Module):
         self.explicit_relation_feature = explicit_relation_feature
         self.change_relation_contribution = change_relation_contribution
         if change_relation_contribution:
-            self.relation_parameter = nn.parameter.Parameter(torch.Tensor(num_heads, self.head_dim, 1))
+            self.relation_parameter = nn.parameter.Parameter(
+                torch.Tensor(num_heads, self.head_dim, 1)
+            )
 
         self.add_zero_attn = add_zero_attn
 
@@ -169,10 +171,12 @@ class RAMultiheadAttention(nn.Module):
 
         if self.change_relation_contribution:
             r_k = relation_k.unsqueeze(1).expand(-1, num_heads, -1, -1, -1)
-            r_k = r_k.reshape(bsz * num_heads, tgt_len*tgt_len, head_dim)
+            r_k = r_k.reshape(bsz * num_heads, tgt_len * tgt_len, head_dim)
             relation_parameter = self.relation_parameter.expand(bsz, -1, -1, -1)
-            relation_parameter = relation_parameter.reshape(bsz*num_heads, -1, 1)
-            attn_output_weights_relation_k = torch.bmm(r_k, relation_parameter).view(bsz*num_heads,tgt_len, tgt_len)
+            relation_parameter = relation_parameter.reshape(bsz * num_heads, -1, 1)
+            attn_output_weights_relation_k = torch.bmm(r_k, relation_parameter).view(
+                bsz * num_heads, tgt_len, tgt_len
+            )
 
         elif qkv_same and relation_k is not None:
             # q r_k

@@ -308,9 +308,7 @@ class EncoderDecoderModel(nn.Module):
         return output
 
     def forward(self, examples, is_train=False, return_details=False):
-        batch = Batch(
-            examples, is_cuda=self.is_cuda, use_bert_cache=self.cfg.use_bert_cache
-        )
+        batch = Batch(examples, is_cuda=self.is_cuda)
         # Encode
         encoder_output = self.encode(batch, return_details=return_details,)
         if return_details:
@@ -341,13 +339,17 @@ class EncoderDecoderModel(nn.Module):
         )
         if return_details:
             output, probs_list = decoder_output
-            details = [
-                {
-                    "qk_weights": qk_weights_list,
-                    "qk_relation_weights": qk_relation_weights_list,
-                    "probs": probs_list[0],
-                }
-            ]
+            details = []
+            if len(qk_weights_list) == len(probs_list):
+                for qk_weights, qk_relation_weights, probs in zip(
+                    qk_weights_list, qk_relation_weights_list, probs_list
+                ):
+                    detail = {
+                        "qk_weights": qk_weights,
+                        "qk_relation_weigths": qk_relation_weights,
+                        "probs": probs,
+                    }
+                    details += [detail]
             return output, details
         else:
             return decoder_output

@@ -35,7 +35,14 @@ def evaluate(cfg):
 
     # Load dataset
     train_data, val_data, table_data = utils.load_dataset(
-        model, cfg.toy, cfg.is_bert, cfg.dataset.path, cfg.query_type, cfg.use_down_schema, cfg.remove_punctuation_marks, cfg
+        model,
+        cfg.toy,
+        cfg.is_bert,
+        cfg.dataset.path,
+        cfg.query_type,
+        cfg.use_down_schema,
+        cfg.remove_punctuation_marks,
+        cfg,
     )
 
     # Evaluation
@@ -61,15 +68,12 @@ def evaluate(cfg):
     # Create data for analysis
     tag = log_path.split("/")[-1]
 
-    utils.save_data_for_analysis(tag, dev_list, dev_pred, dev_gold, details_lists, dataset, log_path)
+    utils.save_data_for_analysis(
+        tag, dev_list, dev_pred, dev_gold, details_lists, dataset, log_path
+    )
 
     utils.write_eval_result_as(
-        dev_out_path,
-        dev_list,
-        dev_is_correct,
-        dev_total_acc,
-        dev_pred,
-        dev_gold
+        dev_out_path, dev_list, dev_is_correct, dev_total_acc, dev_pred, dev_gold
     )
 
     utils.analyze_regarding_schema_size(

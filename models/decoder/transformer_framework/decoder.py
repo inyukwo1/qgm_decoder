@@ -52,6 +52,8 @@ class TransformerDecoderFramework(nn.Module):
         self.infer_action_similarity = LazyCalculateSimilarity(dim, dim)
         self.infer_column_similarity = LazyCalculateSimilarity(dim, dim)
         self.infer_table_similarity = LazyCalculateSimilarity(dim, dim)
+        self.padding_action_tensor = nn.Parameter(torch.rand(self.dim))
+
         if cfg.rule == "noqgm":
             self.grammar = NOQGM(dim)
         elif cfg.rule == "semql":
@@ -221,7 +223,7 @@ class TransformerDecoderFramework(nn.Module):
         def calc_prod(
             state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
         ) -> List[TensorPromise]:
-            def calc_prod_with_idx_and_symbol(idx, symbol):
+            def calc_prod_with_idx_and_symbol(org_idx, idx, symbol):
                 if symbol == "C":
                     prod = self.infer_column_similarity.forward_later(
                         decoder_out[idx], state.get_encoded_col(), None
@@ -230,7 +232,7 @@ class TransformerDecoderFramework(nn.Module):
                     prod = self.infer_table_similarity.forward_later(
                         decoder_out[idx],
                         state.get_encoded_tab(),
-                        state.invalid_table_indices(idx),
+                        state.invalid_table_indices(org_idx),
                     )
                 else:
                     # Get possible actions from nonterminal stack
@@ -258,7 +260,7 @@ class TransformerDecoderFramework(nn.Module):
                 c_cnt += 1
             assert current_symbol != None
             promise_prod: TensorPromise = calc_prod_with_idx_and_symbol(
-                state.step_cnt + c_cnt * 4, current_symbol
+                state.step_cnt, state.step_cnt + c_cnt * 4, current_symbol
             )
             prev_tensor_dict.update({"infer_prod": promise_prod})
             return prev_tensor_dict

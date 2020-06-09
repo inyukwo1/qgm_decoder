@@ -3,14 +3,6 @@ import copy
 import hydra
 import logging
 import datetime
-import random
-import math
-import torch
-import os
-import copy
-import hydra
-import logging
-import datetime
 
 import torch
 import torch.optim as optim
@@ -194,7 +186,8 @@ def train(cfg):
             #     optimize_freq=cfg.optimize_freq,
             # )
             # train_acc = utils.epoch_acc(model, cfg.batch_size, train_data)
-            # val_acc = utils.epoch_acc(model, cfg.batch_size, val_data)
+
+            val_acc = utils.epoch_acc(model, cfg.batch_size, val_data)
 
             # Logging to tensorboard
             # utils.logging_to_tensorboard(
@@ -203,22 +196,32 @@ def train(cfg):
             # utils.logging_to_tensorboard(
             #     summary_writer, "{}_val_loss/".format(dataset_name), val_loss, epoch,
             # )
-            # utils.logging_to_tensorboard(
-            #     summary_writer, "{}_val_acc/".format(dataset_name), val_acc, epoch,
-            # )
+
+            utils.logging_to_tensorboard(
+                summary_writer, "{}_val_acc/".format(dataset_name), val_acc, epoch,
+            )
             # Print Accuracy
             # log.info("Total Train Acc: {}".format(train_acc["total"]))
-            # log.info("Total Val Acc: {}\n".format(val_acc["total"]))
-            #
-            # # Save if total_acc is higher
-            # if best_val_acc <= val_acc["total"]:
-            #     best_val_acc = val_acc["total"]
-            #     log.info("Saving new best model with acc: {}".format(best_val_acc))
-            #     torch.save(
-            #         model.state_dict(), os.path.join(log_model_path, "best_model.pt"),
-            #     )
-            #     with open(os.path.join(log_path, "best_model.log"), "a") as f:
-            #         f.write("Epoch: {} Val Acc:{}".format(epoch, best_val_acc))
+            log.info("Total Val Acc: {}\n".format(val_acc["total"]))
+            # log.info(
+            #     "Total Val Loss: {}\n".format(val_loss["detail"] + val_loss["sketch"])
+            # )
+
+            # log.info("Train col / table Acc: {}".format(train_acc["detail"]))
+            log.info("Val col / table Acc: {}\n".format(val_acc["detail"]))
+            log.info("Val col Acc: {}\n".format(val_acc["col"]))
+            log.info("Val table Acc: {}\n".format(val_acc["table"]))
+            # log.info("Val col / table Loss: {}\n".format(val_loss["detail"]))
+
+            # Save if total_acc is higher
+            if best_val_acc <= val_acc["total"]:
+                best_val_acc = val_acc["total"]
+                log.info("Saving new best model with acc: {}".format(best_val_acc))
+                torch.save(
+                    model.state_dict(), os.path.join(log_model_path, "best_model.pt"),
+                )
+                with open(os.path.join(log_path, "best_model.log"), "a") as f:
+                    f.write("Epoch: {}  Val Acc:{}".format(epoch, best_val_acc))
 
         # Change learning rate
         scheduler.step()

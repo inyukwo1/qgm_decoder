@@ -51,6 +51,9 @@ class TransformerState(State):
     def impossible_table_indices(self, idx) -> List[int]:
         pass
 
+    def is_sel_mode(self):
+        pass
+
 
 class TransformerStateGold(TransformerState):
     def __init__(
@@ -117,36 +120,42 @@ class TransformerStateGold(TransformerState):
         prev_actions: List[Action] = self.gold[: self.step_cnt]
         if self.soft_labeling:
             # Info
-            pred_indices = (prod != float('-inf')).nonzero()
-            num_classes = len((prod != float('-inf')).nonzero())
+            pred_indices = (prod != float("-inf")).nonzero()
+            num_classes = len((prod != float("-inf")).nonzero())
             # New labels
-            new_answer_label = (1-self.label_smoothing) + self.label_smoothing/num_classes
+            new_answer_label = (
+                1 - self.label_smoothing
+            ) + self.label_smoothing / num_classes
             if num_classes == 1:
-                new_answer_label = (1-new_answer_label)
+                new_answer_label = 1 - new_answer_label
             else:
-                new_non_answer_label = (1 - new_answer_label) / (num_classes-1)
+                new_non_answer_label = (1 - new_answer_label) / (num_classes - 1)
             # Sum
             summed_score = 0
             for pred_idx in pred_indices:
                 pred_idx = int(pred_idx[0])
                 if pred_idx == gold_action_idx:
-                    summed_score += prod[pred_idx]*new_answer_label
+                    summed_score += prod[pred_idx] * new_answer_label
                 else:
-                    summed_score += prod[pred_idx]*new_non_answer_label
+                    summed_score += prod[pred_idx] * new_non_answer_label
             self.loss.add(-summed_score, gold_symbol, prev_actions)
         else:
             self.loss.add(-prod[gold_action_idx], gold_symbol, prev_actions)
 
+    def is_sel_mode(self):
+        if self.get_current_symbol() == "Root":
+            return False
+        for i in range(self.step_cnt, -1, -1):
+            if self.gold[i][0] == "Sel":
+                return True
+            elif self.gold[i][0] == "Filter":
+                return False
+        assert False
+
 
 class TransformerStatePred(TransformerState):
     def __init__(
-        self,
-        grammar,
-        encoded_src,
-        encoded_col,
-        encoded_tab,
-        col_tab_dic,
-        gold,
+        self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic, gold,
     ):
         TransformerState.__init__(
             self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
@@ -154,11 +163,11 @@ class TransformerStatePred(TransformerState):
         self.probs: List = []
         self.preds: List[Action] = []
         self.nonterminal_symbol_stack: List[Symbol] = [grammar.start_symbol]
-        self.gold=gold
+        self.gold = gold
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
-        return state.nonterminal_symbol_stack != [] and state.step_cnt < 20
+        return state.nonterminal_symbol_stack != [] and state.step_cnt < 60
 
     @classmethod
     def get_preds(
@@ -185,7 +194,7 @@ class TransformerStatePred(TransformerState):
 
     def invalid_table_indices(self, idx) -> List[int]:
         # prev_col_idx = self.preds[idx - 1][1]
-        prev_col_idx = self.gold[idx-1][1]
+        prev_col_idx = self.gold[idx - 1][1]
         valid_indices = self.col_tab_dic[prev_col_idx]
         invalid_indices = [
             idx for idx in self.col_tab_dic[0] if idx not in valid_indices
@@ -213,3 +222,16 @@ class TransformerStatePred(TransformerState):
             new_nonterminal_symbols + self.nonterminal_symbol_stack
         )
         self.preds.append(action)
+
+    def is_sel_mode(self):
+        if self.get_current_symbol() in ["Root", "Filter"]:
+            return False
+        if self.get_current_symbol() == "Sel":
+            return True
+        history_symbols = self.get_history_symbols()
+        for i in range(self.step_cnt - 1, -1, -1):
+            if history_symbols[i] == "Sel":
+                return True
+            elif history_symbols[i] == "Filter":
+                return False
+        assert False
