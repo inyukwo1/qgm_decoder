@@ -213,6 +213,10 @@ class TransformerStatePred(TransformerState):
         if current_symbol == "C":
             assert_dim([len(self.col_tab_dic)], prod)
             action: Action = (current_symbol, pred_idx)
+            new_nonterminal_symbols = self.grammar.parse_nonterminal_symbol(gold_action)
+        elif current_symbol == "T":
+            assert_dim([len(self.col_tab_dic[0])], prod)
+            action: Action = (current_symbol, pred_idx)
             new_nonterminal_symbols = []
         else:
             action: Action = self.grammar.aid_to_action[pred_idx]
