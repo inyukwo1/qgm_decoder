@@ -48,6 +48,7 @@ class TransformerDecoderFramework(nn.Module):
         self.infer_symbol_affine_layer = LazyLinear(dim, dim)
         self.infer_tgt_linear_layer = LazyLinear(dim * 2, dim)
         self.infer_out_linear_layer = LazyLinear(dim, dim)
+        self.infer_out_linear_layer_op = LazyLinear(dim * 2, dim)
         # self.infer_out_linear_layer2 = LazyReLULinear(dim, dim)
         self.infer_action_similarity = LazyCalculateSimilarity(dim, dim)
         self.infer_column_similarity = LazyCalculateSimilarity(dim, dim)
@@ -204,33 +205,49 @@ class TransformerDecoderFramework(nn.Module):
             state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
         ) -> Dict[str, TensorPromise]:
             decoder_out: torch.Tensor = prev_tensor_dict["decoder_out"].result
-            decoder_out_promise: TensorPromise = self.infer_out_linear_layer.forward_later(
-                decoder_out
-            )
-            prev_tensor_dict.update({"decoder_out": decoder_out_promise})
-            return prev_tensor_dict
 
-        def pass_infer_out_linear2(
-            state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
-        ) -> Dict[str, TensorPromise]:
-            decoder_out: torch.Tensor = prev_tensor_dict["decoder_out"].result
-            decoder_out_promise: TensorPromise = self.infer_out_linear_layer2.forward_later(
-                decoder_out
-            )
+            current_symbol: Symbol = state.get_current_symbol()
+            if current_symbol == "Op":
+                c_cnt = 0
+                for symbol in state.get_history_symbols():
+                    if symbol == "Op":
+                        c_cnt += 1
+                c_detected = -1
+                physical_idx = 0
+                for symbol in state.get_history_symbols():
+                    if symbol == "C":
+                        physical_idx += 4
+                        c_detected += 1
+                    if c_detected == c_cnt:
+                        break
+                    physical_idx += 1
+                decoder_out_promise: TensorPromise = self.infer_out_linear_layer_op.forward_later(
+                    torch.cat(
+                        (
+                            decoder_out[physical_idx],
+                            decoder_out[state.physical_step_cnt()],
+                        ),
+                        dim=-1,
+                    )
+                )
+            else:
+                decoder_out_promise: TensorPromise = self.infer_out_linear_layer.forward_later(
+                    decoder_out[state.physical_step_cnt()]
+                )
             prev_tensor_dict.update({"decoder_out": decoder_out_promise})
             return prev_tensor_dict
 
         def calc_prod(
             state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
         ) -> List[TensorPromise]:
-            def calc_prod_with_idx_and_symbol(org_idx, idx, symbol):
+            def calc_prod_with_idx_and_symbol(org_idx, symbol):
                 if symbol == "C":
                     prod = self.infer_column_similarity.forward_later(
-                        decoder_out[idx], state.get_encoded_col(), None
+                        decoder_out, state.get_encoded_col(), None
                     )
                 elif symbol == "T":
                     prod = self.infer_table_similarity.forward_later(
-                        decoder_out[idx],
+                        decoder_out,
                         state.get_encoded_tab(),
                         state.invalid_table_indices(org_idx),
                     )
@@ -243,24 +260,15 @@ class TransformerDecoderFramework(nn.Module):
                         if idx not in possible_action_ids
                     ]
                     prod = self.infer_action_similarity.forward_later(
-                        decoder_out[idx],
-                        self.grammar.action_emb.weight,
-                        impossible_indices,
+                        decoder_out, self.grammar.action_emb.weight, impossible_indices,
                     )
                 return prod
 
             decoder_out: torch.Tensor = prev_tensor_dict["decoder_out"].result
-            c_cnt = 0
-            for symbol in state.get_history_symbols():
-                if symbol == "C":
-                    c_cnt += 1
-
             current_symbol: Symbol = state.get_current_symbol()
-            if current_symbol == "C":
-                c_cnt += 1
             assert current_symbol != None
             promise_prod: TensorPromise = calc_prod_with_idx_and_symbol(
-                state.step_cnt, state.step_cnt + c_cnt * 4, current_symbol
+                state.step_cnt, current_symbol
             )
             prev_tensor_dict.update({"infer_prod": promise_prod})
             return prev_tensor_dict
@@ -286,7 +294,6 @@ class TransformerDecoderFramework(nn.Module):
                 .Then(combine_embeddings)
                 .Then(pass_infer_transformer)
                 .Then(pass_infer_out_linear)
-                # .Then(pass_infer_out_linear2)
                 .Then(calc_prod)
                 .Then(apply_prod)
             )

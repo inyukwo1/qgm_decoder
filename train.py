@@ -123,6 +123,7 @@ def train(cfg):
     dataset_name = cfg.dataset.name
 
     def validation():
+        pass
 
         global val_step, best_val_acc
         val_acc = utils.epoch_acc(model, cfg.batch_size, val_data)
@@ -131,7 +132,7 @@ def train(cfg):
             summary_writer, "{}_val_acc/".format(dataset_name), val_acc, val_step,
         )
 
-        log.info("Total Val Acc: {}\n".format(val_acc["total"]))
+        log.info("Total Val Acc: {}\n".format(val_acc))
 
         # Save if total_acc is higher
         if best_val_acc <= val_acc["total"]:

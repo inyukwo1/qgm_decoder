@@ -54,6 +54,17 @@ class TransformerState(State):
     def is_sel_mode(self):
         pass
 
+    def physical_step_cnt(self):
+        c_cnt = 0
+        for symbol in self.get_history_symbols():
+            if symbol == "C":
+                c_cnt += 1
+
+        current_symbol: Symbol = self.get_current_symbol()
+        if current_symbol == "C":
+            c_cnt += 1
+        return self.step_cnt + c_cnt * 4
+
 
 class TransformerStateGold(TransformerState):
     def __init__(
@@ -223,8 +234,8 @@ class TransformerStatePred(TransformerState):
             # new_nonterminal_symbols = self.grammar.parse_nonterminal_symbol(action)
             if gold_action[0] == "Filter" and gold_action[1] == 0:
                 filter_num = 0
-                for action in self.gold[: len(self.preds)]:
-                    if action[0] == "Filter":
+                for act in self.gold[: len(self.preds)]:
+                    if act[0] == "Filter":
                         filter_num += 1
                 new_nonterminal_symbols = ["Op" for _ in range(filter_num)]
             else:
