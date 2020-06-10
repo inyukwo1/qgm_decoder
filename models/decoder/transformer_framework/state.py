@@ -155,11 +155,19 @@ class TransformerStateGold(TransformerState):
 
 class TransformerStatePred(TransformerState):
     def __init__(
-        self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic, gold,
+        self,
+        grammar,
+        encoded_src,
+        encoded_col,
+        encoded_tab,
+        col_tab_dic,
+        gold,
+        is_analyze=False,
     ):
         TransformerState.__init__(
             self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
         )
+        self.is_analyze = is_analyze
         self.probs: List = []
         self.preds: List[Action] = []
         self.nonterminal_symbol_stack: List[Symbol] = [grammar.start_symbol]
@@ -179,12 +187,16 @@ class TransformerStatePred(TransformerState):
         return False
 
     def get_history_actions(self) -> List[Action]:
-        return self.gold[: self.step_cnt]
-        # return self.preds[: self.step_cnt]
+        if self.is_analyze:
+            return self.gold[: self.step_cnt]
+        else:
+            return self.preds[: self.step_cnt]
 
     def get_history_symbols(self) -> List[Symbol]:
-        symbol_list = [action[0] for action in self.gold]
-        # symbol_list = [action[0] for action in self.preds]
+        if self.is_analyze:
+            symbol_list = [action[0] for action in self.gold]
+        else:
+            symbol_list = [action[0] for action in self.preds]
         return symbol_list[: self.step_cnt]
 
     def get_current_symbol(self) -> Symbol:
@@ -193,8 +205,10 @@ class TransformerStatePred(TransformerState):
         )
 
     def invalid_table_indices(self, idx) -> List[int]:
-        # prev_col_idx = self.preds[idx - 1][1]
-        prev_col_idx = self.gold[idx - 1][1]
+        if self.is_analyze:
+            prev_col_idx = self.gold[idx - 1][1]
+        else:
+            prev_col_idx = self.preds[idx - 1][1]
         valid_indices = self.col_tab_dic[prev_col_idx]
         invalid_indices = [
             idx for idx in self.col_tab_dic[0] if idx not in valid_indices
@@ -213,15 +227,24 @@ class TransformerStatePred(TransformerState):
         if current_symbol == "C":
             assert_dim([len(self.col_tab_dic)], prod)
             action: Action = (current_symbol, pred_idx)
-            new_nonterminal_symbols = self.grammar.parse_nonterminal_symbol(gold_action)
+            if self.is_analyze:
+                new_nonterminal_symbols = self.grammar.parse_nonterminal_symbol(
+                    gold_action
+                )
+            else:
+                new_nonterminal_symbols = self.grammar.parse_nonterminal_symbol(action)
         elif current_symbol == "T":
             assert_dim([len(self.col_tab_dic[0])], prod)
             action: Action = (current_symbol, pred_idx)
             new_nonterminal_symbols = []
         else:
             action: Action = self.grammar.aid_to_action[pred_idx]
-            # new_nonterminal_symbols = self.grammar.parse_nonterminal_symbol(action)
-            new_nonterminal_symbols = self.grammar.parse_nonterminal_symbol(gold_action)
+            if self.is_analyze:
+                new_nonterminal_symbols = self.grammar.parse_nonterminal_symbol(
+                    gold_action
+                )
+            else:
+                new_nonterminal_symbols = self.grammar.parse_nonterminal_symbol(action)
         self.nonterminal_symbol_stack = (
             new_nonterminal_symbols + self.nonterminal_symbol_stack
         )

@@ -29,7 +29,7 @@ do
         fi
 
         echo -e "\nData_type: ${data_type}"
-        data="../data/${dataset_name}/${data_type}_original.json"
+        data="../data/${dataset_name}/${data_type}.json"
         table_data="../data/${dataset_name}/tables.json"
         output="../data/${dataset_name}/${data_type}.json"
 
