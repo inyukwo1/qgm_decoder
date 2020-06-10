@@ -52,23 +52,25 @@ class NOQGM_Loss_New(Loss):
         self.root = "Root1"
         self.sel = "Sel"
         self.filter = "Filter"
-        self.a = "A"
         self.c = "C"
         self.t = "T"
 
     def _get_key(self, action_node: Symbol, prev_actions):
-        if action_node == self.root:
-            key = "predicate_num"
-        elif action_node == self.sel:
+        if action_node == self.sel:
             key = "head_num"
-        elif action_node == self.a:
-            key = "head_agg"
         elif action_node == self.filter:
             key = "predicate_num"
         elif action_node == self.c:
-            key = "head_col"
+            prev_symbols = [
+                prev_action[0]
+                for prev_action in prev_actions
+                if prev_action[0] in ["Sel", "Filter"]
+            ]
+            key = "head_col" if prev_symbols[-1] == "Sel" else "predicate_col"
         elif action_node == self.t:
             key = "quantifier_tab"
-        else:
+        elif action_node == "Op":
             key = "predicate_op"
+        else:
+            key = "none"
         return key

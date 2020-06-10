@@ -13,6 +13,7 @@ min
 count
 sum
 avg
+Op
 Not
 Between
 Like
@@ -37,6 +38,7 @@ Sel ::= none | C | C C | C C C | C C C C | C C C C C
 Filter ::= none | C Filter
 C ::= T
 T ::= none
+Op ::= Not | Between | = | > | < | >= | <= | != | In | Like | Is | Exists | NotIn | NotLike
 <grammar_end>
 
 # "Sel" is for the SELECT Clause

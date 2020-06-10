@@ -87,7 +87,7 @@ def partial_header(toks, idx, header_toks):
 
     headers = []
 
-    for endIdx in reversed(range(idx+1, len(toks))):
+    for endIdx in reversed(range(idx + 1, len(toks))):
         sub_toks = toks[idx : min(endIdx, len(toks))]
         if len(sub_toks) > 1:
             flag_count = 0

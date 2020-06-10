@@ -48,12 +48,14 @@ class NOQGM(Grammar):
                 action += "C({}) ".format(new_col_id)
                 action += "T({}) ".format(tab_id)
                 col_num += 1
-
+            ops = []
             for idx in range(0, len(sql["where"]), 2):
                 action += "Filter(1) "
                 where_cond = sql["where"][idx]
                 if isinstance(where_cond[3], dict):
                     return None
+                op_id = where_cond[1] + 4 if where_cond[0] else where_cond[1]
+                ops.append(op_id)
                 ori_col_id = where_cond[2][1][1]
                 new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
                 if ori_col_id == 0:
@@ -64,6 +66,8 @@ class NOQGM(Grammar):
                 action += "T({}) ".format(tab_id)
                 col_num += 1
             action += "Filter(0) "
+            for op_id in ops:
+                action += "Op({}) ".format(op_id)
 
         return action[:-1]
 
@@ -223,25 +227,20 @@ class NOQGM(Grammar):
             g_head_num = utils.get_symbol_indices(g_actions, "Sel")
             head_num_is_correct = p_head_num == g_head_num
 
-            # Head agg: Check A after sel
-            head_agg_is_correct = (
-                head_col_is_correct
-            ) = head_tab_is_correct = head_num_is_correct
-            if head_num_is_correct:
-                # Head agg: check A after sel
-                p_head_agg = utils.filter_action(p_actions, "A", ["Sel"])
-                g_head_agg = utils.filter_action(g_actions, "A", ["Sel"])
-                head_agg_is_correct = p_head_agg == g_head_agg
+            # Head agg: check A after sel
+            p_head_agg = utils.filter_action(p_actions, "A", ["Sel"])
+            g_head_agg = utils.filter_action(g_actions, "A", ["Sel"])
+            head_agg_is_correct = p_head_agg == g_head_agg
 
-                # Head col: check C after sel
-                p_head_col = utils.filter_action(p_actions, "C", ["Sel"])
-                g_head_col = utils.filter_action(g_actions, "C", ["Sel"])
-                head_col_is_correct = p_head_col == g_head_col
+            # Head col: check C after sel
+            p_head_col = utils.filter_action(p_actions, "C", ["Sel"])
+            g_head_col = utils.filter_action(g_actions, "C", ["Sel"])
+            head_col_is_correct = p_head_col == g_head_col
 
-                # head tab: check T after sel
-                p_head_tab = utils.filter_action(p_actions, "T", ["Sel"])
-                g_head_tab = utils.filter_action(g_actions, "T", ["Sel"])
-                head_tab_is_correct = p_head_tab == g_head_tab
+            # head tab: check T after sel
+            p_head_tab = utils.filter_action(p_actions, "T", ["Sel"])
+            g_head_tab = utils.filter_action(g_actions, "T", ["Sel"])
+            head_tab_is_correct = p_head_tab == g_head_tab
 
             acc["head_num"] += head_num_is_correct
             acc["head_agg"] += head_agg_is_correct
@@ -253,33 +252,25 @@ class NOQGM(Grammar):
             g_predicate_num = utils.count_symbol(g_actions, "Filter")
             predicate_num_is_correct = p_predicate_num == g_predicate_num
 
-            predicate_op_is_correct = (
-                predicate_agg_is_correct
-            ) = predicate_num_is_correct
-            predicate_col_is_correct = (
-                predicate_tab_is_correct
-            ) = predicate_num_is_correct
+            # predicate ops
+            p_predicate_op = utils.get_symbol_indices(p_actions, "Op")
+            g_predicate_op = utils.get_symbol_indices(g_actions, "Op")
+            predicate_op_is_correct = p_predicate_op == g_predicate_op
 
-            if predicate_num_is_correct:
-                # predicate ops
-                p_predicate_op = utils.get_symbol_indices(p_actions, "Filter")
-                g_predicate_op = utils.get_symbol_indices(g_actions, "Filter")
-                predicate_op_is_correct = p_predicate_op == g_predicate_op
+            # predicate agg: check A after filter
+            p_predicate_agg = utils.filter_action(p_actions, "A", ["Filter"])
+            g_predicate_agg = utils.filter_action(g_actions, "A", ["Filter"])
+            predicate_agg_is_correct = p_predicate_agg == g_predicate_agg
 
-                # predicate agg: check A after filter
-                p_predicate_agg = utils.filter_action(p_actions, "A", ["Filter"])
-                g_predicate_agg = utils.filter_action(g_actions, "A", ["Filter"])
-                predicate_agg_is_correct = p_predicate_agg == g_predicate_agg
+            # predicate col: check C after filter
+            p_predicate_col = utils.filter_action(p_actions, "C", ["Filter"])
+            g_predicate_col = utils.filter_action(g_actions, "C", ["Filter"])
+            predicate_col_is_correct = p_predicate_col == g_predicate_col
 
-                # predicate col: check C after filter
-                p_predicate_col = utils.filter_action(p_actions, "C", ["Filter"])
-                g_predicate_col = utils.filter_action(g_actions, "C", ["Filter"])
-                predicate_col_is_correct = p_predicate_col == g_predicate_col
-
-                # predicate tab: check t after filter
-                p_predicate_tab = utils.filter_action(p_actions, "T", ["Filter"])
-                g_predicate_tab = utils.filter_action(g_actions, "T", ["Filter"])
-                predicate_tab_is_correct = p_predicate_tab == g_predicate_tab
+            # predicate tab: check t after filter
+            p_predicate_tab = utils.filter_action(p_actions, "T", ["Filter"])
+            g_predicate_tab = utils.filter_action(g_actions, "T", ["Filter"])
+            predicate_tab_is_correct = p_predicate_tab == g_predicate_tab
 
             acc["local_predicate_num"] += predicate_num_is_correct
             acc["local_predicate_agg"] += predicate_agg_is_correct

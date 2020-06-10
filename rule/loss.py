@@ -18,6 +18,7 @@ class Loss:
             "sketch",
             "detail",
             "total",
+            "none",
         ]
         self.loss_dic = {key: torch.tensor(0.0).cuda() for key in keys}
 

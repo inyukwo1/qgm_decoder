@@ -68,16 +68,14 @@ class StatisticPlugin(base_plugin.TBPlugin):
         for a specific run+tag. Responds with a map of the form:
         {runName: [tagName, tagName, ...]}
         """
-        run_tag_mapping = self._multiplexer.PluginRunToTagToContent(
-            _SCALAR_PLUGIN_NAME
-        )
+        run_tag_mapping = self._multiplexer.PluginRunToTagToContent(_SCALAR_PLUGIN_NAME)
 
         filtered_run_info = {}
         for run, tag in run_tag_mapping.items():
             path = self._multiplexer._paths[run]
-            if 'result.pkl' in os.listdir(path):
+            if "result.pkl" in os.listdir(path):
                 filtered_run_info[run] = list(tag)
-                with open(os.path.join(path, 'result.pkl'), 'rb') as f:
+                with open(os.path.join(path, "result.pkl"), "rb") as f:
                     self._logs[run] = pickle.load(f)
 
         return http_util.Respond(request, filtered_run_info, "application/json")
@@ -91,29 +89,21 @@ class StatisticPlugin(base_plugin.TBPlugin):
         Checks the normpath to guard against path traversal attacks.
         """
         static_path_part = request.path[len(_PLUGIN_DIRECTORY_PATH_PART) :]
-        resource_name = os.path.normpath(
-            os.path.join(*static_path_part.split("/"))
-        )
+        resource_name = os.path.normpath(os.path.join(*static_path_part.split("/")))
         if not resource_name.startswith("static" + os.path.sep):
-            return http_util.Respond(
-                request, "Not found", "text/plain", code=404
-            )
+            return http_util.Respond(request, "Not found", "text/plain", code=404)
 
         resource_path = os.path.join(os.path.dirname(__file__), resource_name)
         with open(resource_path, "rb") as read_file:
             mimetype = mimetypes.guess_type(resource_path)[0]
-            return http_util.Respond(
-                request, read_file.read(), content_type=mimetype
-            )
+            return http_util.Respond(request, read_file.read(), content_type=mimetype)
 
     def is_active(self):
         """Returns whether there is relevant data for the plugin to process.
         When there are no runs with scalar data, TensorBoard will hide the plugin
         from the main navigation bar.
         """
-        return bool(
-            self._multiplexer.PluginRunToTagToContent(_SCALAR_PLUGIN_NAME)
-        )
+        return bool(self._multiplexer.PluginRunToTagToContent(_SCALAR_PLUGIN_NAME))
 
     def frontend_metadata(self):
         return base_plugin.FrontendMetadata(es_module_path="/static/index.js")
@@ -142,9 +132,7 @@ class StatisticPlugin(base_plugin.TBPlugin):
                 for tensor_event in tensor_events
             ]
         except KeyError:
-            raise errors.NotFoundError(
-                "No scalar data for run=%r, tag=%r" % (run, tag)
-            )
+            raise errors.NotFoundError("No scalar data for run=%r, tag=%r" % (run, tag))
         return values
 
     @wrappers.Request.application
@@ -160,17 +148,17 @@ class StatisticPlugin(base_plugin.TBPlugin):
         run = request.args.get("run")
         # Filters
         filters = {}
-        for idx, data in enumerate(self._logs[run]['data']):
-            values = data['filter']
+        for idx, data in enumerate(self._logs[run]["data"]):
+            values = data["filter"]
             if not isinstance(values, list):
                 values = [values]
             for value in values:
                 if value not in filters:
                     filters[value] = [idx]
-                    filters['{}_cnt'.format(value)] = 1
+                    filters["{}_cnt".format(value)] = 1
                     # filters[value] = 1
                 else:
                     filters[value] += [idx]
-                    filters['{}_cnt'.format(value)] += 1
+                    filters["{}_cnt".format(value)] += 1
                     # filters[value] += 1
         return http_util.Respond(request, filters, "application/json")
