@@ -123,6 +123,7 @@ def train(cfg):
     dataset_name = cfg.dataset.name
 
     def validation():
+        pass
 
         global val_step, best_val_acc
         val_acc = utils.epoch_acc(model, cfg.batch_size, val_data)
@@ -202,15 +203,15 @@ def train(cfg):
             )
             # Print Accuracy
             # log.info("Total Train Acc: {}".format(train_acc["total"]))
-            log.info("Total Val Acc: {}\n".format(val_acc["total"]))
+            log.info("Total Val Acc: {}\n".format(val_acc))
             # log.info(
             #     "Total Val Loss: {}\n".format(val_loss["detail"] + val_loss["sketch"])
             # )
 
             # log.info("Train col / table Acc: {}".format(train_acc["detail"]))
-            log.info("Val col / table Acc: {}\n".format(val_acc["detail"]))
-            log.info("Val col Acc: {}\n".format(val_acc["col"]))
-            log.info("Val table Acc: {}\n".format(val_acc["table"]))
+            # log.info("Val col / table Acc: {}\n".format(val_acc["detail"]))
+            # log.info("Val col Acc: {}\n".format(val_acc["col"]))
+            # log.info("Val table Acc: {}\n".format(val_acc["table"]))
             # log.info("Val col / table Loss: {}\n".format(val_loss["detail"]))
             global best_val_acc
 

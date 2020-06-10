@@ -223,8 +223,8 @@ class TransformerStatePred(TransformerState):
             # new_nonterminal_symbols = self.grammar.parse_nonterminal_symbol(action)
             if gold_action[0] == "Filter" and gold_action[1] == 0:
                 filter_num = 0
-                for action in self.gold[: len(self.preds)]:
-                    if action[0] == "Filter":
+                for act in self.gold[: len(self.preds)]:
+                    if act[0] == "Filter":
                         filter_num += 1
                 new_nonterminal_symbols = ["Op" for _ in range(filter_num)]
             else:
