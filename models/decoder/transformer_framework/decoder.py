@@ -44,6 +44,7 @@ class TransformerDecoderFramework(nn.Module):
 
         # For inference
         self.infer_transformer = LazyTransformerDecoder(dim, nhead, layer_num)
+        self.infer_transformer_op = LazyTransformerDecoder(dim, nhead, layer_num)
         self.infer_action_affine_layer = LazyLinear(dim, dim)
         self.infer_symbol_affine_layer = LazyLinear(dim, dim)
         self.infer_tgt_linear_layer = LazyLinear(dim * 2, dim)
@@ -54,6 +55,7 @@ class TransformerDecoderFramework(nn.Module):
         self.infer_column_similarity = LazyCalculateSimilarity(dim, dim)
         self.infer_table_similarity = LazyCalculateSimilarity(dim, dim)
         self.padding_action_tensor = nn.Parameter(torch.rand(self.dim))
+        self.infer_action_similarity_op = LazyCalculateSimilarity(dim, dim)
 
         if cfg.rule == "noqgm":
             self.grammar = NOQGM(dim)
@@ -198,13 +200,22 @@ class TransformerDecoderFramework(nn.Module):
             decoder_out_promise: TensorPromise = self.infer_transformer.forward_later(
                 combined_embedding, src_embedding
             )
-            prev_tensor_dict.update({"decoder_out": decoder_out_promise})
+            decoder_out_op_promise: TensorPromise = self.infer_transformer_op.forward_later(
+                combined_embedding, src_embedding
+            )
+            prev_tensor_dict.update(
+                {
+                    "decoder_out": decoder_out_promise,
+                    "decoder_out_op": decoder_out_op_promise,
+                }
+            )
             return prev_tensor_dict
 
         def pass_infer_out_linear(
             state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
         ) -> Dict[str, TensorPromise]:
             decoder_out: torch.Tensor = prev_tensor_dict["decoder_out"].result
+            decoder_out_op: torch.Tensor = prev_tensor_dict["decoder_out_op"].result
 
             current_symbol: Symbol = state.get_current_symbol()
             if current_symbol == "Op":
@@ -225,7 +236,7 @@ class TransformerDecoderFramework(nn.Module):
                     torch.cat(
                         (
                             decoder_out[physical_idx],
-                            decoder_out[state.physical_step_cnt()],
+                            decoder_out_op[state.physical_step_cnt()],
                         ),
                         dim=-1,
                     )
@@ -250,6 +261,17 @@ class TransformerDecoderFramework(nn.Module):
                         decoder_out,
                         state.get_encoded_tab(),
                         state.invalid_table_indices(org_idx),
+                    )
+                elif symbol == "Op":
+                    # Get possible actions from nonterminal stack
+                    possible_action_ids = self.grammar.get_possible_aids(symbol)
+                    impossible_indices = [
+                        idx
+                        for idx in range(self.grammar.get_action_len())
+                        if idx not in possible_action_ids
+                    ]
+                    prod = self.infer_action_similarity_op.forward_later(
+                        decoder_out, self.grammar.action_emb.weight, impossible_indices,
                     )
                 else:
                     # Get possible actions from nonterminal stack
