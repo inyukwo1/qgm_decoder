@@ -21,7 +21,7 @@ python setup.py install
 * run `download_spider_dataset.py` under `./preprocess` directory to download spider dataset
 * run `parse_spider_dataset.py` under `./preprocess` directory to fix errors in spider dataset
 * run `create_semql_qgm_for_all_dataset.sh` under `./preprocess/` directory
-
+* run `parse_dependency.py` under `./preprocess/dependency` directory
 #### Data path hierarchy
 ```
 data
