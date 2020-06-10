@@ -100,19 +100,23 @@ def process_datas(datas, args, dataset_name):
                     col = entry["names"][col_idx]
                     value_set = set()
                     try:
-                      for val in cursor.fetchall():
-                          if isinstance(val[0], str):
-                              val_str = val[0].lower()
-                              value_set.add(val_str)
-                              if val_str not in SKIP_WORDS:
-                                  val_str = wordnet_lemmatizer.lemmatize(val_str)
-                              value_set.add(val_str)
-                          elif isinstance(val[0], int) or isinstance(val[0], float):
-                              continue
-                          else:
-                              print("check this out: db:{} tab:{} col:{} val:{}".format(db_id, table, col, val))
+                        for val in cursor.fetchall():
+                            if isinstance(val[0], str):
+                                val_str = val[0].lower()
+                                value_set.add(val_str)
+                                if val_str not in SKIP_WORDS:
+                                    val_str = wordnet_lemmatizer.lemmatize(val_str)
+                                value_set.add(val_str)
+                            elif isinstance(val[0], int) or isinstance(val[0], float):
+                                continue
+                            else:
+                                print(
+                                    "check this out: db:{} tab:{} col:{} val:{}".format(
+                                        db_id, table, col, val
+                                    )
+                                )
                     except:
-                      print("bad utf-8?")
+                        print("bad utf-8?")
                     if col in col_value_set:
                         col_value_set[col] |= value_set
                     else:
@@ -126,7 +130,10 @@ def process_datas(datas, args, dataset_name):
                 r"[^,.():;\"`?! ]+|[,.():;\"?!]", entry["question"].replace("'", " ' ")
             )
         ]
-        question_toks = [x if x in SKIP_WORDS else wordnet_lemmatizer.lemmatize(x) for x in origin_question_toks]
+        question_toks = [
+            x if x in SKIP_WORDS else wordnet_lemmatizer.lemmatize(x)
+            for x in origin_question_toks
+        ]
 
         entry["question_toks"] = origin_question_toks
 
@@ -134,7 +141,10 @@ def process_datas(datas, args, dataset_name):
         table_names_pattern = []
 
         for y in entry["table_names"]:
-            x = [x if x in SKIP_WORDS else wordnet_lemmatizer.lemmatize(x.lower()) for x in y.split(" ")]
+            x = [
+                x if x in SKIP_WORDS else wordnet_lemmatizer.lemmatize(x.lower())
+                for x in y.split(" ")
+            ]
             table_names.append(" ".join(x))
             x = [re_lemma(x.lower()) for x in y.split(" ")]
             table_names_pattern.append(" ".join(x))
@@ -146,7 +156,10 @@ def process_datas(datas, args, dataset_name):
         header_toks_list_pattern = []
 
         for y in entry["col_set"]:
-            x = [x if x in SKIP_WORDS else wordnet_lemmatizer.lemmatize(x.lower()) for x in y.split(" ")]
+            x = [
+                x if x in SKIP_WORDS else wordnet_lemmatizer.lemmatize(x.lower())
+                for x in y.split(" ")
+            ]
             header_toks.append(" ".join(x))
             header_toks_list.append(x)
 
@@ -257,7 +270,8 @@ def process_datas(datas, args, dataset_name):
             end_idx, values = group_values(origin_question_toks, idx, num_toks)
             if values and (len(values) > 1 or question_toks[idx - 1] not in ["?", "."]):
                 tmp_toks = [
-                    x if x in SKIP_WORDS else wordnet_lemmatizer.lemmatize(x) for x in question_toks[idx:end_idx]
+                    x if x in SKIP_WORDS else wordnet_lemmatizer.lemmatize(x)
+                    for x in question_toks[idx:end_idx]
                 ]
                 assert len(tmp_toks) > 0, print(
                     question_toks[idx:end_idx], values, question_toks, idx, end_idx
@@ -338,6 +352,7 @@ if __name__ == "__main__":
     # process datasets
     dataset_name = args.data_path.split("data/")[1].split("/")[0]
     process_result = process_datas(datas, args, dataset_name)
+    print("length: {}".format(len(datas)))
 
     with open(args.output, "w") as f:
         json.dump(datas, f)

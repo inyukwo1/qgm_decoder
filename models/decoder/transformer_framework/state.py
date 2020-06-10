@@ -221,7 +221,8 @@ class TransformerStatePred(TransformerState):
 
         # Select highest prob action
         pred_idx = torch.argmax(prod).item()
-        gold_action = self.gold[len(self.preds)]
+        if self.is_analyze:
+            gold_action = self.gold[len(self.preds)]
 
         current_symbol = self.nonterminal_symbol_stack.pop(0)
         if current_symbol == "C":

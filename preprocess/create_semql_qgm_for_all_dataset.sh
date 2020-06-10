@@ -37,9 +37,9 @@ do
         # Create SemQL
         echo "Start process the origin Spider dataset"
         python data_process.py --data_path ${data} --table_path ${table_data} --output ${output}
-        echo "Start generate SemQL from SQL"
-        python sql2SemQL.py --data_path ${output} --table_path ${table_data} --output ${output}
-        cd ../
+#        echo "Start generate SemQL from SQL"
+#        python sql2SemQL.py --data_path ${output} --table_path ${table_data} --output ${output}
+#        cd ../
 
 #        data="../../data/${dataset_name}/${data_type}_original.json"
 #        table_data="../../data/${dataset_name}/tables.json"

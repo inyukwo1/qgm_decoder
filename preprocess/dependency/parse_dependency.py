@@ -59,7 +59,9 @@ for mode in modes:
     deps = open(dep_file_name).readlines()
     labels = open(dep_label_file_name).readlines()
 
-    assert len(deps) == len(datas), "Num different: {} {}".format(len(deps), len(datas))
+    assert len(deps) == len(datas), "mode:{} Num different: {} {}".format(
+        mode, len(deps), len(datas)
+    )
 
     for idx, (dep, label, sql) in enumerate(zip(deps, labels, datas)):
         question = sql["question_arg"]
