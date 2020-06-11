@@ -1,5 +1,6 @@
 import os
 import json
+import shutil
 
 original_dir_path = "../data/spider/original"
 new_dir_path = "../data/spider"
@@ -9,6 +10,7 @@ def parse_question(datas):
     TARGET_CHARACTERS = ["'", '"', ",", "?", ".", "@", "-", "!", "$", "%", "#"]
     for data in datas:
         question = data["question"]
+        question = question.replace("cannot", "can not")
         question = question.replace("\u201c", '"')
         question = question.replace("\u201d", '"')
         question = question.replace("\u2018", "'")
@@ -217,7 +219,14 @@ def parse_spider_dataset():
         for line in train_gold_sql:
             f.write(line)
 
+    # Copy database directory
     print("Parsing complete!")
+    folder_name = "database"
+    folder_path = os.path.join(original_dir_path, folder_name)
+    new_folder_path = os.path.join(new_dir_path, folder_name)
+    if os.path.exists(new_folder_path):
+        shutil.rmtree(new_folder_path)
+    shutil.copytree(folder_path, new_folder_path)
 
 
 if __name__ == "__main__":
