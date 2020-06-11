@@ -40,6 +40,8 @@ class NOQGM(Grammar):
             action += "Sel({}) ".format(len(sql["select"][1]))
             for select in sql["select"][1]:
                 ori_col_id = select[1][1][1]
+                if not isinstance(ori_col_id, int):
+                    return None
                 new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
                 if ori_col_id == 0:
                     tab_id = sql["from"]["table_units"][0][1]
