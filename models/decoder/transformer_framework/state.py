@@ -173,7 +173,7 @@ class TransformerStatePred(TransformerState):
         encoded_tab,
         col_tab_dic,
         gold,
-        is_analyze=False,
+        is_analyze=True,
     ):
         TransformerState.__init__(
             self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
