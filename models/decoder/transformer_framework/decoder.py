@@ -49,7 +49,7 @@ class TransformerDecoderFramework(nn.Module):
         self.infer_symbol_affine_layer = LazyLinear(dim, dim)
         self.infer_tgt_linear_layer = LazyLinear(dim * 2, dim)
         self.infer_out_linear_layer = LazyLinear(dim, dim)
-        self.infer_out_linear_layer_op = LazyLinear(dim, dim)
+        self.infer_out_linear_layer_op = LazyLinear(dim * 2, dim)
         # self.infer_out_linear_layer2 = LazyReLULinear(dim, dim)
         self.infer_action_similarity = LazyCalculateSimilarity(dim, dim)
         self.infer_column_similarity = LazyCalculateSimilarity(dim, dim)
@@ -233,7 +233,13 @@ class TransformerDecoderFramework(nn.Module):
                         break
                     physical_idx += 1
                 decoder_out_promise: TensorPromise = self.infer_out_linear_layer_op.forward_later(
-                    decoder_out_op[state.physical_step_cnt()]
+                    torch.cat(
+                        (
+                            decoder_out[physical_idx],
+                            decoder_out_op[state.physical_step_cnt()],
+                        ),
+                        dim=-1,
+                    )
                 )
             else:
                 decoder_out_promise: TensorPromise = self.infer_out_linear_layer.forward_later(
