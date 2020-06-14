@@ -678,6 +678,7 @@ def load_dataset(
     table_path = os.path.join(dataset_path, "tables.json")
     train_path = os.path.join(dataset_path, "train.json")
     val_path = os.path.join(dataset_path, "dev.json")
+    test_path = os.path.join(dataset_path, "test.json")
     table_data = []
 
     # Tables as dictionary
@@ -710,6 +711,12 @@ def load_dataset(
     val_data = load_data_new(
         val_path, table_data, is_toy, is_bert, query_type, remove_punc, cfg
     )
+    if os.path.isfile(test_path):
+        test_data = load_data_new(
+            test_path, table_data, is_toy, is_bert, query_type, remove_punc, cfg
+        )
+    else:
+        test_data = []
 
     # # Append sql
     # for data in train_data:
@@ -722,19 +729,24 @@ def load_dataset(
     val_data = [
         relation.create_relation(cfg, item, table_data, True) for item in val_data
     ]
-
+    test_data = [
+        relation.create_relation(cfg, item, table_data, True) for item in test_data
+    ]
     # Show dataset length
     log.info("Total training set: {}".format(len(train_data)))
-    log.info("Total validation set: {}\n".format(len(val_data)))
+    log.info("Total validation set: {}".format(len(val_data)))
+    log.info("Total test set: {}\n".format(len(test_data)))
 
     # filter schema using 1-hop scheme
     if use_down_schema:
         train_data = down_schema(train_data)
         val_data = down_schema(val_data)
+        test_data = down_schema(test_data)
 
     # Parse datasets into exampels:
     train_data = to_batch_seq(train_data, table_data)
     val_data = to_batch_seq(val_data, table_data)
+    test_data = to_batch_seq(test_data, table_data)
 
     # Append bert input data
     if is_bert:
@@ -747,9 +759,9 @@ def load_dataset(
 
         append_bert_input(train_data, bert_encoder.tokenizer)
         append_bert_input(val_data, bert_encoder.tokenizer)
-        bert_encoder.create_cache([train_data, val_data])
+        bert_encoder.create_cache([train_data, val_data, test_data])
 
-    return train_data, val_data, table_data
+    return train_data, val_data, test_data, table_data
 
 
 def down_schema(datas):
@@ -1245,8 +1257,11 @@ def categorize(pred, gold):
                     # Structural reason
                     if pred_action_symbol == "Sel":
                         categories += ["select_num_of_column"]
-                    elif pred_action_symbol == "A" and not where_flag:
-                        categories += ["select_agg"]
+                    elif pred_action_symbol == "A":
+                        if where_flag:
+                            categories += ["where_agg"]
+                        else:
+                            categories += ["select_agg"]
                     elif pred_action_symbol == "Root":
                         categories += ["where_existence"]
                     elif pred_action_symbol == "Filter":
@@ -1282,7 +1297,7 @@ def save_data_for_analysis(tag, datas, preds, golds, details_list, dataset, save
 
     for idx in tqdm(range(len(datas))):
         data = datas[idx]
-        details = details_list[idx]
+        # details = details_list[idx]
 
         data_log = {}
         data_log["idx"] = idx
@@ -1295,57 +1310,57 @@ def save_data_for_analysis(tag, datas, preds, golds, details_list, dataset, save
         data_log["pred"] = preds[idx]
 
         # Create tensor image and save its path
-        for layer_idx, (weight_tensors, relation_weight_tensors) in enumerate(
-            zip(details["qk_weights"], details["qk_relation_weights"])
-        ):
-            weight_tensor_key = "weight_tensors_{}".format(layer_idx)
-            relation_tensor_key = "relation_weight_tensors_{}".format(layer_idx)
-            data_log[weight_tensor_key] = []
-            data_log[relation_tensor_key] = []
-            for (
-                head_idx,
-                (head_weight_tensor, relation_head_weight_tensor),
-            ) in enumerate(zip(weight_tensors, relation_weight_tensors)):
-                # Create nl
-                nl = data_log["query"] + data_log["columns"] + data_log["tables"]
-                # weight tensor
-                value = head_weight_tensor.cpu().numpy()
-                image_path = os.path.join(
-                    image_folder_path,
-                    "{}_att_layer_{}_head_{}.png".format(idx, layer_idx, head_idx),
-                )
-                # draw_heat_map(nl, value, 'att_layer_{}_head_{}'.format(layer_idx, head_idx), image_path)
-                data_log[weight_tensor_key] += [image_path]
-
-                # relation weight tensor
-                value = relation_head_weight_tensor.cpu().numpy()
-                image_path = os.path.join(
-                    image_folder_path,
-                    "{}_relation_att_layer_{}_head_{}.png".format(
-                        idx, layer_idx, head_idx
-                    ),
-                )
-                # draw_heat_map(nl, value, 'relation_att_layer_{}_head_{}'.format(layer_idx, head_idx), image_path)
-                data_log[relation_tensor_key] += [image_path]
+        # for layer_idx, (weight_tensors, relation_weight_tensors) in enumerate(
+        #     zip(details["qk_weights"], details["qk_relation_weights"])
+        # ):
+        #     weight_tensor_key = "weight_tensors_{}".format(layer_idx)
+        #     relation_tensor_key = "relation_weight_tensors_{}".format(layer_idx)
+        #     data_log[weight_tensor_key] = []
+        #     data_log[relation_tensor_key] = []
+        #     for (
+        #         head_idx,
+        #         (head_weight_tensor, relation_head_weight_tensor),
+        #     ) in enumerate(zip(weight_tensors, relation_weight_tensors)):
+        #         # Create nl
+        #         nl = data_log["query"] + data_log["columns"] + data_log["tables"]
+        #         # weight tensor
+        #         value = head_weight_tensor.cpu().numpy()
+        #         image_path = os.path.join(
+        #             image_folder_path,
+        #             "{}_att_layer_{}_head_{}.png".format(idx, layer_idx, head_idx),
+        #         )
+        #         # draw_heat_map(nl, value, 'att_layer_{}_head_{}'.format(layer_idx, head_idx), image_path)
+        #         data_log[weight_tensor_key] += [image_path]
+        #
+        #         # relation weight tensor
+        #         value = relation_head_weight_tensor.cpu().numpy()
+        #         image_path = os.path.join(
+        #             image_folder_path,
+        #             "{}_relation_att_layer_{}_head_{}.png".format(
+        #                 idx, layer_idx, head_idx
+        #             ),
+        #         )
+        #         # draw_heat_map(nl, value, 'relation_att_layer_{}_head_{}'.format(layer_idx, head_idx), image_path)
+        #         data_log[relation_tensor_key] += [image_path]
 
         # Create prob image and save its path
-        inference_key = "inference"
-        data_log[inference_key] = []
-        for pred_idx, (value, pred_action) in enumerate(
-            zip(details["probs"], preds[idx])
-        ):
-            key = "inference step {}".format(pred_idx)
-            if pred_action[0] == "C":
-                arg1 = data_log["columns"]
-            elif pred_action[0] == "T":
-                arg1 = data_log["tables"]
-            else:
-                arg1 = log["grammar"]
-            image_path = os.path.join(
-                image_folder_path, "{}_inference_{}.png".format(idx, pred_idx)
-            )
-            # draw_inference_score(arg1, value, key, image_path)
-            data_log[inference_key] += [image_path]
+        # inference_key = "inference"
+        # data_log[inference_key] = []
+        # for pred_idx, (value, pred_action) in enumerate(
+        #     zip(details["probs"], preds[idx])
+        # ):
+        #     key = "inference step {}".format(pred_idx)
+        #     if pred_action[0] == "C":
+        #         arg1 = data_log["columns"]
+        #     elif pred_action[0] == "T":
+        #         arg1 = data_log["tables"]
+        #     else:
+        #         arg1 = log["grammar"]
+        #     image_path = os.path.join(
+        #         image_folder_path, "{}_inference_{}.png".format(idx, pred_idx)
+        #     )
+        #     # draw_inference_score(arg1, value, key, image_path)
+        #     data_log[inference_key] += [image_path]
 
         # Detailed Analysis with pred and gold
         data_log["filter"] = categorize(preds[idx], golds[idx])

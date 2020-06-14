@@ -32,7 +32,7 @@ class NOQGM(Grammar):
         elif sql["groupby"] or sql["orderby"]:
             return True
         else:
-            if dataset == "spider":
+            if dataset == "spider" or dataset == "wikitablequestions":
                 # Single
                 # Root
                 if sql["where"]:
@@ -45,6 +45,8 @@ class NOQGM(Grammar):
                 for select in sql["select"][1]:
                     action += "A({}) ".format(select[0])
                     ori_col_id = select[1][1][1]
+                    if not isinstance(ori_col_id, int):
+                        return None
                     new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
                     if ori_col_id == 0:
                         tab_id = sql["from"]["table_units"][0][1]

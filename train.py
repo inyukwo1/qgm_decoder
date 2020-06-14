@@ -5,11 +5,16 @@ import logging
 import datetime
 import random
 import math
+import torch
+import os
+import copy
+import hydra
+import logging
+import datetime
 
 import torch
 import torch.optim as optim
 from radam import RAdam
-from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
 from src import utils
@@ -17,10 +22,11 @@ from rule.semql.semql import SemQL
 from models.wrapper_model import EncoderDecoderModel
 
 # from models.LSTMEncoderQGMTransformerDecoder import LSTMEncoderQGMTransformerDecoder
-from optimizer import *
-
 
 log = logging.getLogger(__name__)
+
+val_step = 0
+best_val_acc = 0
 
 
 @hydra.main(config_path="config/config.yaml")
@@ -40,7 +46,7 @@ def train(cfg):
         model.cuda()
 
     # Load dataset
-    train_data, val_data, table_data = utils.load_dataset(
+    train_data, val_data, test_data, table_data = utils.load_dataset(
         model,
         cfg.toy,
         cfg.is_bert,
@@ -56,8 +62,8 @@ def train(cfg):
         RAdam if cfg.optimizer == "radam" else eval("torch.optim.%s" % cfg.optimizer)
     )
     optimizer = optimizer_cls(model.without_bert_params, lr=cfg.lr)
-    if cfg.is_bert and cfg.train_bert:
-        bert_optimizer = optimizer_cls(model.bert.parameters(), lr=cfg.bert_lr)
+    if cfg.encoder_name == "bert" and cfg.train_bert:
+        bert_optimizer = optimizer_cls(model.encoder.parameters(), lr=cfg.bert_lr)
     else:
         bert_optimizer = None
     log.info("Enable Learning Rate Scheduler: {}".format(cfg.lr_scheduler))
@@ -65,11 +71,6 @@ def train(cfg):
         scheduler = optim.lr_scheduler.MultiStepLR(
             optimizer, milestones=cfg.milestones, gamma=cfg.lr_scheduler_gamma,
         )
-        # scheduler = WarmUpMultiStepLR(optimizer,
-        #                               warmup_steps=cfg.max_step_cnt/20,
-        #                               milestones=cfg.milestones,
-        #                               gamma=cfg.lr_scheduler_gamma,
-        #                               )
         scheduler_bert = (
             optim.lr_scheduler.MultiStepLR(
                 bert_optimizer, milestones=cfg.milestones, gamma=cfg.lr_scheduler_gamma,
@@ -127,7 +128,10 @@ def train(cfg):
     if not os.path.exists(log_model_path):
         os.mkdir(log_model_path)
 
+    dataset_name = cfg.dataset.name
+
     def validation():
+
         global val_step, best_val_acc
         val_acc = utils.epoch_acc(model, cfg.batch_size, val_data)
 
@@ -148,125 +152,79 @@ def train(cfg):
                 f.write("val_step: {} Val Acc:{}".format(val_step, best_val_acc))
         val_step += 1
 
-    # Sort
-    train_data.sort(key=lambda item: len(item.src_sent) + item.table_len + item.col_num)
-
-    best_val_acc = 0
-    cnts_per_epoch = math.ceil(len(train_data) / cfg.batch_size)
-    for cnt in tqdm(range(0, cfg.max_step_cnt * cnts_per_epoch)):
-        epoch = int(cnt / cnts_per_epoch) + 1
-        step_cnt = scheduler.optimizer._step_count
-        is_to_step = (cnt % cfg.optimize_freq) == 0 and cnt
-
+    for epoch in range(1, cfg.max_epoch):
         log.info(
-            "\nEpoch: {}  lr: {:.3e} cnt:{} step: {}  Time: {}".format(
+            "\nEpoch: {}  lr: {:.2e}  step: {}  Time: {}".format(
                 epoch,
                 scheduler.optimizer.param_groups[0]["lr"],
-                cnt,
-                step_cnt,
+                scheduler.optimizer._step_count,
                 str(datetime.datetime.now()).split(".")[0],
             )
         )
-        # Shuffle
-        if cnt % cnts_per_epoch == 0:
-            # shuffle
-            def chunks(lst, n):
-                for i in range(0, len(lst), n):
-                    yield lst[i : i + n]
 
-            new_train_data = []
-            for train_data_chunk in chunks(train_data, cfg.batch_size * 3):
-                random.shuffle(train_data_chunk)
-                new_train_data += [train_data_chunk]
-            random.shuffle(new_train_data)
-            shuffled_train_data = []
-            for train_data_chunk in new_train_data:
-                shuffled_train_data += train_data_chunk
         # Training
-        # create sub train data
-        batch_front = cnt % cnts_per_epoch * cfg.batch_size
-        if (cnt + 1) % cnts_per_epoch or not len(train_data) % cfg.batch_size:
-            batch_rear = batch_front + cfg.batch_size
-        else:
-            batch_rear = batch_front + (len(train_data) % cfg.batch_size)
-        mini_batch = shuffled_train_data[batch_front:batch_rear]
-        train_loss, train_loss_dic = utils.train(model, mini_batch, cfg.decoder_name,)
-        train_loss.backward()
-        if is_to_step:
-            if cfg.clip_grad > 0.0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.clip_grad)
-            optimizer.step()
-            optimizer.zero_grad()
-            scheduler.step()
-            if bert_optimizer:
-                bert_optimizer.step()
-                bert_optimizer.zero_grad()
-                scheduler_bert.step()
+        train_loss = utils.epoch_train(
+            model,
+            optimizer,
+            bert_optimizer,
+            cfg.batch_size,
+            train_data,
+            cfg.clip_grad,
+            cfg.decoder_name,
+            validation,
+            optimize_freq=cfg.optimize_freq,
+        )
 
-        dataset_name = cfg.dataset.name
+        utils.logging_to_tensorboard(
+            summary_writer, "{}_train_loss/".format(dataset_name), train_loss, epoch
+        )
+
         # Evaluation
-        if (
-            (cnt % (cnts_per_epoch * cfg.eval_freq)) == 0
-            and cnt
-            or step_cnt == cfg.max_step_cnt
-        ):
+        if not epoch % cfg.eval_freq or epoch == cfg.max_epoch:
             log.info("Evaluation:")
-            utils.logging_to_tensorboard(
-                summary_writer,
-                "{}_train_loss/".format(dataset_name),
-                train_loss_dic,
-                step_cnt,
-            )
-            val_loss = utils.epoch_train(
-                model,
-                optimizer,
-                bert_optimizer,
-                cfg.batch_size,
-                val_data,
-                cfg.clip_grad,
-                cfg.decoder_name,
-                validation,
-                is_train=False,
-                optimize_freq=cfg.optimize_freq,
-            )
-            train_acc = utils.epoch_acc(model, cfg.batch_size, train_data)
-            val_acc = utils.epoch_acc(model, cfg.batch_size, val_data)
-            utils.logging_to_tensorboard(
-                summary_writer,
-                "lr",
-                scheduler.optimizer.param_groups[0]["lr"],
-                step_cnt,
-            )
-            # Logging to tensorboard
-            utils.logging_to_tensorboard(
-                summary_writer,
-                "{}_train_acc/".format(dataset_name),
-                train_acc,
-                step_cnt,
-            )
-            utils.logging_to_tensorboard(
-                summary_writer, "{}_val_loss/".format(dataset_name), val_loss, step_cnt,
-            )
-            utils.logging_to_tensorboard(
-                summary_writer, "{}_val_acc/".format(dataset_name), val_acc, step_cnt,
-            )
-            # Print Accuracy
-            log.info("Total Train Acc: {}".format(train_acc["total"]))
-            log.info("Total Val Acc: {}\n".format(val_acc["total"]))
+        #     val_loss = utils.epoch_train(
+        #         model,
+        #         optimizer,
+        #         bert_optimizer,
+        #         cfg.batch_size,
+        #         val_data,
+        #         cfg.clip_grad,
+        #         cfg.decoder_name,
+        #         validation,
+        #         is_train=False,
+        #         optimize_freq=cfg.optimize_freq,
+        #     )
+        #     train_acc = utils.epoch_acc(model, cfg.batch_size, train_data)
+        #     val_acc = utils.epoch_acc(model, cfg.batch_size, val_data)
+        #
+        #     #Logging to tensorboard
+        #     utils.logging_to_tensorboard(
+        #         summary_writer, "{}_train_acc/".format(dataset_name), train_acc, epoch,
+        #     )
+        #     utils.logging_to_tensorboard(
+        #         summary_writer, "{}_val_loss/".format(dataset_name), val_loss, epoch,
+        #     )
+        #     utils.logging_to_tensorboard(
+        #         summary_writer, "{}_val_acc/".format(dataset_name), val_acc, epoch,
+        #     )
+        #     #Print Accuracy
+        #     log.info("Total Train Acc: {}".format(train_acc["total"]))
+        #     log.info("Total Val Acc: {}\n".format(val_acc["total"]))
+        #
+        #     # Save if total_acc is higher
+        #     if best_val_acc <= val_acc["total"]:
+        #         best_val_acc = val_acc["total"]
+        #         log.info("Saving new best model with acc: {}".format(best_val_acc))
+        #         torch.save(
+        #             model.state_dict(), os.path.join(log_model_path, "best_model.pt"),
+        #         )
+        #         with open(os.path.join(log_path, "best_model.log"), "a") as f:
+        #             f.write("Epoch: {} Val Acc:{}".format(epoch, best_val_acc))
 
-            # Save if total_acc is higher
-            if best_val_acc <= val_acc["total"]:
-                best_val_acc = val_acc["total"]
-                log.info("Saving new best model with acc: {}".format(best_val_acc))
-                torch.save(
-                    model.state_dict(), os.path.join(log_model_path, "best_model.pt"),
-                )
-                with open(os.path.join(log_path, "best_model.log"), "a") as f:
-                    f.write(
-                        "Step: {} Train Acc: {} Val Acc:{}".format(
-                            step_cnt, train_acc, best_val_acc
-                        )
-                    )
+        # Change learning rate
+        scheduler.step()
+        if scheduler_bert:
+            scheduler_bert.step()
 
 
 if __name__ == "__main__":
