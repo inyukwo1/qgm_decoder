@@ -151,14 +151,16 @@ class Batch(object):
         self.cuda = is_cuda
 
     def _pad_bert_input(self, examples):
-        lens = [item.bert_input_indices[-1][-1][-1] for item in examples]
-        max_len = max(lens)
+        try:
+            lens = [item.bert_input_indices[-1][-1][-1] for item in examples]
+            max_len = max(lens)
 
-        bert_inputs = []
-        for idx, length in enumerate(lens):
-            bert_inputs += [examples[idx].bert_input + (" [PAD]" * (max_len - length))]
-
-        return bert_inputs
+            bert_inputs = []
+            for idx, length in enumerate(lens):
+                bert_inputs += [examples[idx].bert_input + (" [PAD]" * (max_len - length))]
+            return bert_inputs
+        except:
+            return None
 
     def __len__(self):
         return len(self.examples)
