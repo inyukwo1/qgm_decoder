@@ -135,7 +135,7 @@ class Batch(object):
         #     [" ".join(x) for x in e.tab_cols] for e in self.examples
         # ]
         # self.schema_sents_word = [
-        #     [" ".join(x) for x in e.table_names] for e in self.examples
+        #     [" ".join(x) for x in e.table_names] for e in self.examples:q
         # ]
         # self.src_type = [e.one_hot_type for e in self.examples]
         self.col_hot_type = [e.col_hot_type for e in self.examples]
