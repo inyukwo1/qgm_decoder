@@ -12,6 +12,9 @@ from nltk.stem import WordNetLemmatizer
 import logging
 
 from src.dataset import Example
+from qgm.qgm import QGM
+from qgm.qgm_import_from_sql_ds import qgm_import_from_sql_ds
+from sql_ds.sql_ds import SQLDataStructure
 from preprocess.rule import lf
 from preprocess.rule.semQL import *
 import src.relation as relation
@@ -638,15 +641,23 @@ def load_data_new(
         # Append ground truth
         if cfg.rule == "noqgm":
             gt_str = NOQGM.create_data(data["sql"], db)
+            if gt_str and gt_str is not True:
+                gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
+                data["gt"] = gt
         elif cfg.rule == "semql":
             # gt_str = SemQL.create_data(data["qgm"])
             gt_str = data["rule_label"]
+            if gt_str and NOQGM.create_data(data["sql"], db) and gt_str is not True:
+                gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
+                data["gt"] = gt
+        elif cfg.rule == "qgm":
+            sql_ds = SQLDataStructure.import_from_spider_sql(data["sql"], db)
+            qgm = qgm_import_from_sql_ds(sql_ds)
+            if qgm is not None:
+                data["gt"] = qgm
         else:
             raise NotImplementedError("not yet")
 
-        if gt_str and NOQGM.create_data(data["sql"], db) and gt_str != True:
-            gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
-            data["gt"] = gt
     sql_data = [item for item in sql_data if "gt" in item]
 
     # Filter some db
@@ -664,7 +675,7 @@ def load_data_new(
     # Filter data with qgm that has nested query
     # sql_data = filter_datas(sql_data, query_type)
 
-    return sql_data[:20] if use_small else sql_data
+    return sql_data[:100] if use_small else sql_data
 
 
 def load_dataset(

@@ -10,3 +10,4 @@ scikit-learn
 captum
 hydra-core
 tensorboard
+typing_extensions

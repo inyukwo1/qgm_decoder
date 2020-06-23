@@ -32,9 +32,17 @@ class NOQGM(Grammar):
         elif sql["groupby"] or sql["orderby"]:
             return True
         else:
+
+            def ori_col_to_new_col_tab_id(ori_col_id):
+                new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
+                if ori_col_id == 0:  # TODO fix
+                    tab_id = sql["from"]["table_units"][0][1]
+                else:
+                    tab_id = db["column_names"][ori_col_id][0]
+                return new_col_id, tab_id
+
             # Single
             # Root
-            col_num = 0
 
             action = "Root(0) "
             action += "Sel({}) ".format(len(sql["select"][1]))
@@ -42,34 +50,77 @@ class NOQGM(Grammar):
                 ori_col_id = select[1][1][1]
                 if not isinstance(ori_col_id, int):
                     return None
-                new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
-                if ori_col_id == 0:
-                    tab_id = sql["from"]["table_units"][0][1]
-                else:
-                    tab_id = db["column_names"][ori_col_id][0]
+                new_col_id, tab_id = ori_col_to_new_col_tab_id(ori_col_id)
                 action += "C({}) ".format(new_col_id)
                 action += "T({}) ".format(tab_id)
-                col_num += 1
             ops = []
             for idx in range(0, len(sql["where"]), 2):
                 action += "Filter(1) "
                 where_cond = sql["where"][idx]
-                if isinstance(where_cond[3], dict):
-                    return None
-                op_id = where_cond[1] + 4 if where_cond[0] else where_cond[1]
+                if where_cond[1] == 1:
+                    if isinstance(where_cond[3], dict):
+                        if isinstance(where_cond[4], dict):
+                            op_id = 22
+                        else:
+                            op_id = 20
+                    elif isinstance(where_cond[4], dict):
+                        op_id = 21
+                    else:
+                        op_id = 1
+
+                elif isinstance(where_cond[3], dict):
+                    if where_cond[1] in {2, 3, 4, 5, 6, 7}:
+                        op_id = where_cond[1] + 12
+                    else:
+                        op_id = where_cond[1] + 4
+                else:
+                    op_id = where_cond[1]
                 ops.append(op_id)
                 ori_col_id = where_cond[2][1][1]
-                new_col_id = db["col_set"].index(db["column_names"][ori_col_id][1])
-                if ori_col_id == 0:
-                    tab_id = sql["from"]["table_units"][0][1]
-                else:
-                    tab_id = db["column_names"][ori_col_id][0]
+                new_col_id, tab_id = ori_col_to_new_col_tab_id(ori_col_id)
                 action += "C({}) ".format(new_col_id)
                 action += "T({}) ".format(tab_id)
-                col_num += 1
+                if isinstance(where_cond[3], dict):
+                    ori_col_id = where_cond[3]["select"][1][0][1][1][1]
+                    new_col_id, tab_id = ori_col_to_new_col_tab_id(ori_col_id)
+                    action += "Filter(1) "
+                    action += "C({}) ".format(new_col_id)
+                    action += "T({}) ".format(tab_id)
+                    for idx in range(0, len(where_cond[3]["where"]), 2):
+                        ori_col_id = where_cond[3]["where"][idx][2][1][1]
+                        new_col_id, tab_id = ori_col_to_new_col_tab_id(ori_col_id)
+                        action += "Filter(1) "
+                        action += "C({}) ".format(new_col_id)
+                        action += "T({}) ".format(tab_id)
+
             action += "Filter(0) "
-            for op_id in ops:
-                action += "Op({}) ".format(op_id)
+            for op_idx, idx in enumerate(range(0, len(sql["where"]), 2)):
+                action += "Op({}) ".format(ops[op_idx])
+                where_cond = sql["where"][idx]
+                if isinstance(where_cond[4], dict):
+                    print("just skip now..nested between")
+                    return None
+                if isinstance(where_cond[3], dict):
+                    assert ops[op_idx] in {8, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22}
+                    action += "Nest(0) A({}) ".format(where_cond[3]["select"][1][0][0])
+                    for nested_idx in range(0, len(where_cond[3]["where"]), 2):
+                        action += "Filter2(1) "
+                        nested_where_cond = where_cond[3]["where"][nested_idx]
+                        op_id = nested_where_cond[1]
+                        if isinstance(nested_where_cond[3], dict):
+                            if op_id in {2, 3, 4, 5, 6, 7}:
+                                op_id = op_id + 12
+                            else:
+                                op_id = op_id + 4
+                        action += "Op({}) ".format(op_id)
+                        if isinstance(where_cond[4], dict):
+                            print("just skip now..nested between")
+                            return None
+                        if isinstance(nested_where_cond[3], dict):
+                            # nested nested query
+                            print("nested nested nested query")
+                            return None
+                    action += "Filter2(0) "
 
         return action[:-1]
 

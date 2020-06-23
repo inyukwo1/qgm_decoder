@@ -30,6 +30,8 @@ Is
 >
 <=
 >=
+Nest
+Filter2
 <symbol_end>
 
 <grammar_start>
@@ -38,7 +40,10 @@ Sel ::= none | C | C C | C C C | C C C C | C C C C C
 Filter ::= none | C Filter
 C ::= T
 T ::= none
-Op ::= Not | Between | = | > | < | >= | <= | != | In | Like | Is | Exists | NotIn | NotLike
+Op ::= Not | Between | = | > | < | >= | <= | != | In Nest | Like | Is | Exists | NotIn Nest | NotLike | = Nest | > Nest | < Nest | >= Nest | <= Nest | != Nest | Between Nest none | Between none Nest | Between Nest Nest
+Nest ::= A Filter2
+A ::= none | max | min | count | sum | avg
+Filter2 ::= none | Op Filter2
 <grammar_end>
 
 # "Sel" is for the SELECT Clause
