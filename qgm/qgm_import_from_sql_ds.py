@@ -17,7 +17,7 @@ def qgm_import_from_sql_ds(sql_ds: SQLDataStructure):
         or sql_ds.has_table_without_col()
     ):  # TODO currently not supporting conditions
         return None
-    new_qgm = QGM(sql_ds.db)
+    new_qgm = QGM(sql_ds.db, True)
     select_clause_columns: List[SQLColumnWithAgg] = sql_ds.get_select_clauses()
     predicates: List[Tuple[str, SQLHavingWhereClauseOne]] = sql_ds.get_where_clauses()
     for sql_column_with_agg in select_clause_columns:

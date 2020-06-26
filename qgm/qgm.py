@@ -19,11 +19,11 @@ OPS = (
 
 AGGS = ("none", "max", "min", "count", "sum", "avg")
 
-PROBLEM_ACTIONS = [
+SYMBOL_ACTIONS = [
     ("select_col_num", ["1", "2", "3", "4", "5"]),
     ("projection_agg", ["none", "max", "min", "count", "sum", "avg"]),
     ("predicate_col_done", ["done", "do"]),
-    ("predicate_and_or", ["and", "or"]),
+    ("predicate_conj", ["and", "or"]),
     (
         "predicate_op",
         [
@@ -161,8 +161,8 @@ class QGMBaseBox(QGMBase):
 
 
 class QGM:
-    def __init__(self, db):  # we use spider-like db
-        self.is_gold = None
+    def __init__(self, db, is_gold):  # we use spider-like db
+        self.is_gold = is_gold
         self.db = db
         self.pointer = None
         self.prev_action_id = None
@@ -170,6 +170,9 @@ class QGM:
 
     @classmethod
     def import_from_sql_ds(cls):
+        pass
+
+    def qgm_construct(self):
         pass
 
     def export_to_text(self):

@@ -252,7 +252,7 @@ class EncoderDecoderModel(nn.Module):
         schema_embeddings,
         enc_last_cell,
         is_train=False,
-        return_details=False,
+        with_gold=True,
     ):
         if self.decoder_name == "lstm":
             output = self.decoder(
@@ -279,9 +279,10 @@ class EncoderDecoderModel(nn.Module):
                 batch.col_num,
                 batch.table_len,
                 batch.col_tab_dic,
-                batch.gt,
+                batch.db,
+                batch.src_sents_word,
+                batch.gt if with_gold else None,
                 is_train=is_train,
-                return_details=return_details,
             )
             return output
         elif self.decoder_name == "semql":
@@ -305,28 +306,17 @@ class EncoderDecoderModel(nn.Module):
             return output
         else:
             raise RuntimeError("Unsupported Decoder Name")
-        return output
 
-    def forward(self, examples, is_train=False, return_details=False):
+    def forward(self, examples, is_train=False, with_gold=True):
         batch = Batch(examples, is_cuda=self.is_cuda)
         # Encode
-        encoder_output = self.encode(batch, return_details=return_details,)
-        if return_details:
-            (
-                src_encodings,
-                table_embeddings,
-                schema_embeddings,
-                enc_last_cell,
-                qk_weights_list,
-                qk_relation_weights_list,
-            ) = encoder_output
-        else:
-            (
-                src_encodings,
-                table_embeddings,
-                schema_embeddings,
-                enc_last_cell,
-            ) = encoder_output
+        encoder_output = self.encode(batch, return_details=False,)
+        (
+            src_encodings,
+            table_embeddings,
+            schema_embeddings,
+            enc_last_cell,
+        ) = encoder_output
         # Decode
         decoder_output = self.decode(
             batch,
@@ -335,26 +325,11 @@ class EncoderDecoderModel(nn.Module):
             schema_embeddings,
             enc_last_cell,
             is_train=is_train,
-            return_details=return_details,
+            with_gold=with_gold,
         )
-        if return_details:
-            output, probs_list = decoder_output
-            details = []
-            if len(qk_weights_list) == len(probs_list):
-                for qk_weights, qk_relation_weights, probs in zip(
-                    qk_weights_list, qk_relation_weights_list, probs_list
-                ):
-                    detail = {
-                        "qk_weights": qk_weights,
-                        "qk_relation_weigths": qk_relation_weights,
-                        "probs": probs,
-                    }
-                    details += [detail]
-            return output, details
-        else:
-            return decoder_output
+        return decoder_output
 
-    def parse(self, examples, return_details=False):
+    def parse(self, examples, with_gold=True):
         with torch.no_grad():
-            pred = self.forward(examples, is_train=False, return_details=return_details)
+            pred = self.forward(examples, is_train=False, with_gold=with_gold)
             return pred

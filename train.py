@@ -126,13 +126,13 @@ def train(cfg):
         pass
 
         global val_step, best_val_acc
-        val_acc = utils.epoch_acc(model, cfg.batch_size, val_data)
+        val_acc = utils.epoch_acc(model, cfg.batch_size, val_data).get_acc_dict()
 
         utils.logging_to_tensorboard(
             summary_writer, "{}_val_acc/".format(dataset_name), val_acc, val_step,
         )
 
-        log.info("Total Val Acc: {}\n".format(val_acc))
+        log.info("Total Val Acc: {} Best Acc: {}\n".format(val_acc, best_val_acc))
 
         # Save if total_acc is higher
         if best_val_acc <= val_acc["total"]:
@@ -171,59 +171,6 @@ def train(cfg):
         utils.logging_to_tensorboard(
             summary_writer, "{}_train_loss/".format(dataset_name), train_loss, epoch
         )
-
-        # Evaluation
-        if not epoch % cfg.eval_freq or epoch == cfg.max_epoch:
-            log.info("Evaluation:")
-            # val_loss = utils.epoch_train(
-            #     model,
-            #     optimizer,
-            #     bert_optimizer,
-            #     cfg.batch_size,
-            #     val_data,
-            #     cfg.clip_grad,
-            #     cfg.decoder_name,
-            #     is_train=False,
-            #     optimize_freq=cfg.optimize_freq,
-            # )
-            # train_acc = utils.epoch_acc(model, cfg.batch_size, train_data)
-
-            val_acc = utils.epoch_acc(model, cfg.batch_size, val_data)
-
-            # Logging to tensorboard
-            # utils.logging_to_tensorboard(
-            #     summary_writer, "{}_train_acc/".format(dataset_name), train_acc, epoch,
-            # )
-            # utils.logging_to_tensorboard(
-            #     summary_writer, "{}_val_loss/".format(dataset_name), val_loss, epoch,
-            # )
-
-            utils.logging_to_tensorboard(
-                summary_writer, "{}_val_acc/".format(dataset_name), val_acc, epoch,
-            )
-            # Print Accuracy
-            # log.info("Total Train Acc: {}".format(train_acc["total"]))
-            log.info("Total Val Acc: {}\n".format(val_acc["total"]))
-            # log.info(
-            #     "Total Val Loss: {}\n".format(val_loss["detail"] + val_loss["sketch"])
-            # )
-
-            # log.info("Train col / table Acc: {}".format(train_acc["detail"]))
-            log.info("Val col / table Acc: {}\n".format(val_acc["detail"]))
-            log.info("Val col Acc: {}\n".format(val_acc["col"]))
-            log.info("Val table Acc: {}\n".format(val_acc["table"]))
-            # log.info("Val col / table Loss: {}\n".format(val_loss["detail"]))
-            global best_val_acc
-
-            # Save if total_acc is higher
-            if best_val_acc <= val_acc["total"]:
-                best_val_acc = val_acc["total"]
-                log.info("Saving new best model with acc: {}".format(best_val_acc))
-                torch.save(
-                    model.state_dict(), os.path.join(log_model_path, "best_model.pt"),
-                )
-                with open(os.path.join(log_path, "best_model.log"), "a") as f:
-                    f.write("Epoch: {}  Val Acc:{}".format(epoch, best_val_acc))
 
         # Change learning rate
         scheduler.step()

@@ -120,6 +120,7 @@ class Batch(object):
         self.qgm = [e.qgm for e in examples]
         self.relation = [e.relation for e in examples]
         self.gt = [e.gt for e in examples]
+        self.db = [e.db for e in examples]
         self.bert_input_indices = [e.bert_input_indices for e in examples]
         if use_bert_cache:
             self.bert_input = [e.bert_input for e in examples]
@@ -130,7 +131,7 @@ class Batch(object):
         #     self.max_sketch_num = max(len(e.sketch) for e in self.examples)
         # self.tokenized_src_sents = [e.tokenized_src_sent for e in self.examples]
         # self.tokenized_src_sents_len = [len(e.tokenized_src_sent) for e in examples]
-        # self.src_sents_word = [e.src_sent for e in self.examples]
+        self.src_sents_word = [e.src_sent for e in self.examples]
         # self.table_sents_word = [
         #     [" ".join(x) for x in e.tab_cols] for e in self.examples
         # ]

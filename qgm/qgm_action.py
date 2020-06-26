@@ -1,4 +1,8 @@
-from qgm.qgm import PROBLEM_ACTIONS
+from qgm.qgm import SYMBOL_ACTIONS
+from typing import NewType
+
+Symbol = NewType("Symbol", str)
+Action = NewType("Action", str)
 
 
 class QGM_ACTION:
@@ -14,28 +18,37 @@ class QGM_ACTION:
         self.symbol_action_id_mapping = dict()
         self.action_id_to_prob_action = dict()
         action_id = 0
-        for symbol, actions in PROBLEM_ACTIONS:
+        for symbol, actions in SYMBOL_ACTIONS:
             self.symbol_action_id_mapping[symbol] = dict()
             for action in actions:
                 self.symbol_action_id_mapping[symbol][action] = action_id
                 self.action_id_to_prob_action[action_id] = (symbol, action)
                 action_id += 1
 
-    def total_action_len(self):
-        return sum([len(actions) for prob, actions in PROBLEM_ACTIONS])
+    @classmethod
+    def total_action_len(cls):
+        return sum([len(actions) for prob, actions in SYMBOL_ACTIONS])
 
-    def total_symbol_len(self):
-        return len(PROBLEM_ACTIONS)
+    @classmethod
+    def total_symbol_len(cls):
+        return len(SYMBOL_ACTIONS)
 
-    def symbol_action_to_action_id(self, symbol: str, action: str):
-        return self.symbol_action_id_mapping[symbol][action]
+    @classmethod
+    def symbol_action_to_action_id(cls, symbol: str, action: str):
+        return cls.get_instance().symbol_action_id_mapping[symbol][action]
 
-    def symbol_to_symbol_id(self, symbol: str):
-        return PROBLEM_ACTIONS.index(symbol)
+    @classmethod
+    def symbol_to_symbol_id(cls, symbol: str):
+        for index, (origin_symbol, _) in enumerate(SYMBOL_ACTIONS):
+            if symbol == origin_symbol:
+                return index
+        raise Exception
 
-    def action_id_to_action(self, action_id: int):
-        return self.action_id_to_prob_action[action_id][1]
+    @classmethod
+    def action_id_to_action(cls, action_id: int):
+        return cls.get_instance().action_id_to_prob_action[action_id][1]
 
-    def possible_action_ids(self, symbol: str):
-        action_to_id_dict = self.symbol_action_id_mapping[symbol]
+    @classmethod
+    def possible_action_ids(cls, symbol: str):
+        action_to_id_dict = cls.get_instance().symbol_action_id_mapping[symbol]
         return [action_to_id_dict[action] for action in action_to_id_dict]

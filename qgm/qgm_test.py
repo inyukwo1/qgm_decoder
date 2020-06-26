@@ -1,6 +1,7 @@
 import unittest
 import json
 from sql_ds.sql_ds import SQLDataStructure
+from sql_ds.sql_ds_to_string import beutify
 from qgm.qgm_import_from_sql_ds import qgm_import_from_sql_ds
 
 
@@ -131,40 +132,9 @@ class QGMConvertTest(unittest.TestCase):
                 }:
                     continue
 
-                def simple_canonicalize_sql_query(sql_query):
-                    sql_query = " ".join(sql_query.split())
-                    sql_query = sql_query.replace(";", "")
-                    sql_query = sql_query.replace(" ASC", "")
-                    sql_query = sql_query.replace('"', "'")
-                    sql_query = sql_query.replace("COUNT ", "count")
-                    sql_query = sql_query.replace("( ", "(")
-                    sql_query = sql_query.replace(" )", ")")
-                    sql_query = sql_query.replace(" , ", ", ")
-                    sql_query = sql_query.replace("IN(SELECT", "IN (SELECT")
-                    sql_query = sql_query.replace("AVG (", "AVG(")
-
-                    start_pos = 0
-                    sql_query_split = sql_query.split(" ")
-                    while "ON" in sql_query_split[start_pos:]:
-                        on_pos = sql_query_split.index("ON", start_pos)
-                        if int(sql_query_split[on_pos + 1][1]) > int(
-                            sql_query_split[on_pos + 3][1]
-                        ):
-                            (
-                                sql_query_split[on_pos + 1],
-                                sql_query_split[on_pos + 3],
-                            ) = (
-                                sql_query_split[on_pos + 3],
-                                sql_query_split[on_pos + 1],
-                            )
-
-                        start_pos = on_pos + 1
-                    sql_query = " ".join(sql_query_split)
-                    return sql_query
-
                 db = table_data[datum["db_id"]]
                 db["col_set"] = datum["col_set"]
-                sql_query = simple_canonicalize_sql_query(datum["query"])
+                sql_query = beutify(datum["query"])
                 spider_sql = datum["sql"]
 
                 try:
@@ -175,19 +145,9 @@ class QGMConvertTest(unittest.TestCase):
                         continue
                     sql_ds_reconvert = SQLDataStructure()
                     sql_ds_reconvert.import_from_qgm(qqgm)
-                    reconvert = simple_canonicalize_sql_query(
-                        sql_ds_reconvert.to_string()
-                    )
+                    reconvert = sql_ds_reconvert.to_string()
 
-                    sql_query_split = sql_query.split()
                     reconvert_split = reconvert.split()
-                    for q_idx in range(len(sql_query_split)):
-                        if "distinct(" in sql_query_split[q_idx]:
-                            new_str = sql_query_split[q_idx].replace(
-                                "distinct(", "DISTINCT "
-                            )[:-1]
-                            sql_query_split[q_idx] = new_str
-                    sql_query = " ".join(sql_query_split)
                     # TODO not we don't support distinct
                     sql_query = sql_query.replace("DISTINCT ", "")
 

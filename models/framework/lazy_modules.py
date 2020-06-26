@@ -73,7 +73,6 @@ class LazyLinear(nn.Module, LazyModule):
         tensor_list = [inputs[0] for inputs in self.later_buffer]
         if len(tensor_list[0].size()) == 2:
             tensor_length = [len(item) for item in tensor_list]
-
             stacked_tensors = torch.zeros(
                 len(tensor_list), max(tensor_length), tensor_list[0].shape[-1]
             ).cuda()

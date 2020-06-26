@@ -2,25 +2,29 @@ import torch
 
 
 class Loss:
-    def __init__(self):
-        keys = [
-            "box_operator",
-            "order",
-            "head_agg",
-            "head_col",
-            "head_num",
-            "predicate_agg",
-            "predicate_col",
-            "predicate_op",
-            "predicate_num",
-            "quantifier_num",
-            "quantifier_tab",
-            "sketch",
-            "detail",
-            "total",
-            "none",
-        ]
+    def __init__(self, keys=None):
+        if keys is None:
+            keys = [
+                "box_operator",
+                "order",
+                "head_agg",
+                "head_col",
+                "head_num",
+                "predicate_agg",
+                "predicate_col",
+                "predicate_op",
+                "predicate_num",
+                "quantifier_num",
+                "quantifier_tab",
+                "sketch",
+                "detail",
+                "total",
+                "none",
+            ]
         self.loss_dic = {key: torch.tensor(0.0).cuda() for key in keys}
+
+    def _get_key(self, action_node, prev_actions):
+        return action_node
 
     def add(self, value, action_node, prev_actions):
         key = self._get_key(action_node, prev_actions)
@@ -50,7 +54,7 @@ class Loss:
     def __add__(self, other):
         if other == 0:
             return self
-        new_loss = Loss()
+        new_loss = Loss([key for key in other.loss_dic])
         for key in self.loss_dic:
             new_loss.loss_dic[key] = self.loss_dic[key] + other.loss_dic[key]
         return new_loss

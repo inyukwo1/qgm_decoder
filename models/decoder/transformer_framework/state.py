@@ -1,20 +1,23 @@
 import torch
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from models.framework.sequential_monad import State
 from models.framework.utils import assert_dim
-from rule.noqgm.noqgm_loss import NOQGM_Loss_New
-from rule.semql.semql_loss import SemQL_Loss_New
-from rule.grammar import Symbol, Action
+from rule.loss import Loss
+from rule.acc import Acc
+from qgm.qgm_action import Symbol, Action, QGM_ACTION
+from qgm.qgm import QGM, SYMBOL_ACTIONS
 
 
 class TransformerState(State):
-    def __init__(self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic):
+    def __init__(self, encoded_src, encoded_col, encoded_tab, col_tab_dic, nlq):
         self.step_cnt = 0
         self.encoded_src = encoded_src
         self.encoded_col = encoded_col
         self.encoded_tab = encoded_tab
         self.col_tab_dic = col_tab_dic
-        self.grammar = grammar
+        self.nlq = nlq
+        self.history: List[Tuple[Symbol, Action]] = []
+        self.history_indices_by_tagging = {"predicate_col": [], "projection_col": []}
 
     @classmethod
     def is_not_done(cls, state) -> bool:
@@ -27,8 +30,8 @@ class TransformerState(State):
     def is_gold(self):
         pass
 
-    def step(self):
-        self.step_cnt += 1
+    def ready(self):
+        pass
 
     def get_encoded_src(self):
         return self.encoded_src
@@ -39,187 +42,194 @@ class TransformerState(State):
     def get_encoded_tab(self):
         return self.encoded_tab
 
-    def get_history_actions(self) -> List[Action]:
-        pass
-
-    def get_history_symbols(self) -> List[Symbol]:
+    def get_history_symbol_actions(self) -> List[Tuple[Symbol, Action]]:
         pass
 
     def get_current_symbol(self) -> Symbol:
         pass
 
-    def impossible_table_indices(self, idx) -> List[int]:
+    def invalid_table_indices(self, idx) -> List[int]:
         pass
 
-    def is_sel_mode(self):
+    def get_prev_pointer(self):
         pass
 
-    def physical_step_cnt(self):
-        c_cnt = 0
-        for symbol in self.get_history_symbols():
-            if symbol == "C":
-                c_cnt += 1
+    def get_history_indices_by_tagging(self, tagging):
+        return self.history_indices_by_tagging[tagging]
 
-        current_symbol: Symbol = self.get_current_symbol()
-        if current_symbol == "C":
-            c_cnt += 1
-        return self.step_cnt + c_cnt * 4
+    def get_last_symbol_in_history(self, symbol_list):
+        for idx in range(len(self.history) - 1, -1, -1):
+            symbol, action = self.history[idx]
+            if symbol in symbol_list:
+                return symbol
+        return None
 
 
 class TransformerStateGold(TransformerState):
     def __init__(
         self,
         cfg,
-        grammar,
         encoded_src,
         encoded_col,
         encoded_tab,
         col_tab_dic: Dict[int, List[int]],
-        gold: List[Action],
+        qgm: QGM,
+        nlq,
     ):
         TransformerState.__init__(
-            self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
+            self, encoded_src, encoded_col, encoded_tab, col_tab_dic, nlq
         )
         self.soft_labeling = cfg.soft_labeling
         self.label_smoothing = cfg.label_smoothing
-        self.gold: List[Action] = gold
-        if cfg.rule == "noqgm":
-            self.loss = NOQGM_Loss_New()
-        elif cfg.rule == "semql":
-            self.loss = SemQL_Loss_New()
-        else:
-            raise NotImplementedError("not yet")
+        self.qgm = qgm
+        self.qgm_construct_generator = qgm.qgm_construct()
+        self.current_symbol = None
+        self.current_action = None
+        self.prev_pointer = None
+        self.is_done = False
+
+        self.loss = Loss(
+            [symbol for symbol, _ in SYMBOL_ACTIONS] + ["detail", "sketch", "total"]
+        )
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
-        assert state.step_cnt <= len(state.gold)
-        return state.step_cnt < len(state.gold)
+        return not state.is_done
 
     @classmethod
     def combine_loss(cls, states: List["TransformerStateGold"]):
         return sum([state.loss for state in states])
 
+    def ready(self):
+        if self.current_symbol is not None:
+            if self.current_symbol == "C":
+                if (
+                    self.get_last_symbol_in_history(
+                        ["select_col_num", "predicate_col_done"]
+                    )
+                    == "select_col_num"
+                ):
+                    self.history_indices_by_tagging["projection_col"] += [
+                        len(self.history)
+                    ]
+                else:
+                    self.history_indices_by_tagging["predicate_col"] += [
+                        len(self.history)
+                    ]
+            self.history += [(self.current_symbol, self.current_action)]
+        symbol, action, pointer = next(self.qgm_construct_generator)
+        self.current_symbol = symbol
+        self.current_action = action
+        self.prev_pointer = pointer
+        if symbol is None:
+            self.is_done = True
+
     def is_gold(self):
         return True
 
-    def get_history_actions(self) -> List[Action]:
-        return self.gold[: self.step_cnt]
-
-    def get_history_symbols(self) -> List[Symbol]:
-        symbol_list = [action[0] for action in self.gold]
-        return symbol_list[: self.step_cnt]
+    def get_history_symbol_actions(self) -> List[Tuple[Symbol, Action]]:
+        return self.history
 
     def get_current_symbol(self) -> Symbol:
-        return self.gold[self.step_cnt][0] if self.step_cnt < len(self.gold) else None
+        return self.current_symbol
 
     def invalid_table_indices(self, idx) -> List[int]:
-        prev_col_idx = self.gold[idx - 1][1]
+        prev_col_idx = self.history[idx - 1][1]
         valid_indices = self.col_tab_dic[prev_col_idx]
         invalid_indices = [
             idx for idx in self.col_tab_dic[0] if idx not in valid_indices
         ]
         return invalid_indices
 
-    def apply_loss(self, step_idx, prod: torch.Tensor) -> None:
-        gold_action = self.gold[step_idx]
-        gold_symbol = gold_action[0]
+    def apply_loss(self, prod: torch.Tensor) -> None:
+        gold_symbol = self.current_symbol
+        gold_action = self.current_action
         if gold_symbol in {"C", "T"}:
-            gold_action_idx = gold_action[1]
+            gold_action_idx = gold_action
         else:
-            assert_dim([self.grammar.get_action_len()], prod)
-            gold_action_idx = self.grammar.action_to_aid[gold_action]
-        prev_actions: List[Action] = self.gold[: self.step_cnt]
-        if self.soft_labeling:
-            # Info
-            pred_indices = (prod != float("-inf")).nonzero()
-            num_classes = len((prod != float("-inf")).nonzero())
-            # New labels
-            new_answer_label = (
-                1 - self.label_smoothing
-            ) + self.label_smoothing / num_classes
-            if num_classes == 1:
-                new_answer_label = 1 - new_answer_label
-            else:
-                new_non_answer_label = (1 - new_answer_label) / (num_classes - 1)
-            # Sum
-            summed_score = 0
-            for pred_idx in pred_indices:
-                pred_idx = int(pred_idx[0])
-                if pred_idx == gold_action_idx:
-                    summed_score += prod[pred_idx] * new_answer_label
-                else:
-                    summed_score += prod[pred_idx] * new_non_answer_label
-            self.loss.add(-summed_score, gold_symbol, prev_actions)
-        else:
-            self.loss.add(-prod[gold_action_idx], gold_symbol, prev_actions)
+            assert_dim([QGM_ACTION.total_action_len()], prod)
+            gold_action_idx = QGM_ACTION.symbol_action_to_action_id(
+                gold_symbol, gold_action
+            )
+        prev_actions = self.history[:]
+        self.loss.add(-prod[gold_action_idx], gold_symbol, prev_actions)
 
-    def is_sel_mode(self):
-        if self.get_current_symbol() == "Root":
-            return False
-        for i in range(self.step_cnt, -1, -1):
-            if self.gold[i][0] == "Sel":
-                return True
-            elif self.gold[i][0] == "Filter":
-                return False
-        assert False
+    def get_prev_pointer(self):
+        return self.prev_pointer
 
 
 class TransformerStatePred(TransformerState):
     def __init__(
         self,
-        grammar,
         encoded_src,
         encoded_col,
         encoded_tab,
         col_tab_dic,
         gold,
+        db,
+        nlq,
         is_analyze=True,
     ):
         TransformerState.__init__(
-            self, grammar, encoded_src, encoded_col, encoded_tab, col_tab_dic
+            self, encoded_src, encoded_col, encoded_tab, col_tab_dic, nlq
         )
         self.is_analyze = is_analyze
-        self.probs: List = []
-        self.preds: List[Action] = []
-        self.nonterminal_symbol_stack: List[Symbol] = [grammar.start_symbol]
-        self.gold = gold
+        self.current_symbol = None
+        if is_analyze:
+            self.qgm = gold
+            self.current_action = None
+            self.qgm_acc = Acc()
+            self.wrong = False
+        else:
+            self.qgm = QGM(db, False)
+            self.prediction_setter = None
+        self.prev_pointer = None
+        self.qgm_constructor = self.qgm.qgm_construct()
+        self.is_done = False
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
-        return state.nonterminal_symbol_stack != [] and state.step_cnt < 60
+        return state.is_done is not True and len(state.history) < 60
 
     @classmethod
-    def get_preds(
-        cls, states: List["TransformerStatePred"]
-    ) -> Dict[str, List[List[Action]]]:
-        return [state.preds for state in states]
+    def get_preds(cls, states: List["TransformerStatePred"]) -> List[QGM]:
+        return [state.qgm for state in states]
+
+    @classmethod
+    def get_accs(cls, states: List["TransformerStatePred"]):
+        return sum([state.qgm_acc for state in states])
+
+    def ready(self):
+        if self.is_analyze:
+            symbol, action, prev_pointer = next(self.qgm_constructor)
+            self.current_symbol = symbol
+            self.current_action = action
+            self.prev_pointer = prev_pointer
+        else:
+            symbol, prediction_setter, prev_pointer = next(self.qgm_constructor)
+            self.current_symbol = symbol
+            self.prediction_setter = prediction_setter
+            self.prev_pointer = prev_pointer
+
+        if symbol is None:
+            self.is_done = True
+            if self.is_analyze:
+                if self.wrong:
+                    self.qgm_acc.wrong("total")
+                else:
+                    self.qgm_acc.correct("total")
 
     def is_gold(self):
         return False
 
-    def get_history_actions(self) -> List[Action]:
-        if self.is_analyze:
-            return self.gold[: self.step_cnt]
-        else:
-            return self.preds[: self.step_cnt]
-
-    def get_history_symbols(self) -> List[Symbol]:
-        if self.is_analyze:
-            symbol_list = [action[0] for action in self.gold]
-        else:
-            symbol_list = [action[0] for action in self.preds]
-        return symbol_list[: self.step_cnt]
+    def get_history_symbol_actions(self) -> List[Tuple[Symbol, Action]]:
+        return self.history
 
     def get_current_symbol(self) -> Symbol:
-        return (
-            self.nonterminal_symbol_stack[0] if self.nonterminal_symbol_stack else None
-        )
+        return self.current_symbol
 
     def invalid_table_indices(self, idx) -> List[int]:
-        if self.is_analyze:
-            prev_col_idx = self.gold[idx - 1][1]
-        else:
-            prev_col_idx = self.preds[idx - 1][1]
+        prev_col_idx = self.history[idx - 1][1]
         valid_indices = self.col_tab_dic[prev_col_idx]
         invalid_indices = [
             idx for idx in self.col_tab_dic[0] if idx not in valid_indices
@@ -227,67 +237,37 @@ class TransformerStatePred(TransformerState):
         return invalid_indices
 
     def apply_pred(self, prod):
-        # Save action prob at current step
-        self.probs += [prod.cpu().numpy().tolist()]
-
         # Select highest prob action
         pred_idx = torch.argmax(prod).item()
+        current_symbol = self.current_symbol
         if self.is_analyze:
-            gold_action = self.gold[len(self.preds)]
-
-        current_symbol = self.nonterminal_symbol_stack.pop(0)
-        if current_symbol == "C":
-            assert_dim([len(self.col_tab_dic)], prod)
-            action: Action = (current_symbol, pred_idx)
-            if self.is_analyze:
-                new_nonterminal_symbols = self.grammar.parse_nonterminal_symbol(
-                    gold_action
-                )
+            action = self.current_action
+            if current_symbol in {"C", "T"}:
+                pred_action = pred_idx
             else:
-                new_nonterminal_symbols = self.grammar.parse_nonterminal_symbol(action)
-        elif current_symbol == "T":
-            assert_dim([len(self.col_tab_dic[0])], prod)
-            action: Action = (current_symbol, pred_idx)
-            new_nonterminal_symbols = []
+                pred_action = QGM_ACTION.action_id_to_action(pred_idx)
+            if action == pred_action:
+                self.qgm_acc.correct(current_symbol)
+            else:
+                self.qgm_acc.wrong(current_symbol)
+                self.wrong = True
         else:
-            action: Action = self.grammar.aid_to_action[pred_idx]
-            # new_nonterminal_symbols = self.grammar.parse_nonterminal_symbol(action)
-            if self.is_analyze:
-                if gold_action[0] == "Filter" and gold_action[1] == 0:
-                    filter_num = 0
-                    for act in self.gold[: len(self.preds)]:
-                        if act[0] == "Filter":
-                            filter_num += 1
-                    new_nonterminal_symbols = ["Op" for _ in range(filter_num)]
-                else:
-                    new_nonterminal_symbols = self.grammar.parse_nonterminal_symbol(
-                        gold_action
-                    )
+            if current_symbol in {"C", "T"}:
+                action = pred_idx
             else:
-                if action[0] == "Filter" and action[1] == 0:
-                    filter_num = 0
-                    for act in self.gold[: len(self.preds)]:
-                        if act[0] == "Filter":
-                            filter_num += 1
-                    new_nonterminal_symbols = ["Op" for _ in range(filter_num)]
-                else:
-                    new_nonterminal_symbols = self.grammar.parse_nonterminal_symbol(
-                        action
-                    )
-        self.nonterminal_symbol_stack = (
-            new_nonterminal_symbols + self.nonterminal_symbol_stack
-        )
-        self.preds.append(action)
+                action = QGM_ACTION.action_id_to_action(pred_idx)
+            self.prediction_setter(action)
+        if self.current_symbol == "C":
+            if (
+                self.get_last_symbol_in_history(
+                    ["select_col_num", "predicate_col_done"]
+                )
+                == "select_col_num"
+            ):
+                self.history_indices_by_tagging["projection_col"] += [len(self.history)]
+            else:
+                self.history_indices_by_tagging["predicate_col"] += [len(self.history)]
+        self.history.append((current_symbol, action))
 
-    def is_sel_mode(self):
-        if self.get_current_symbol() in ["Root", "Filter"]:
-            return False
-        if self.get_current_symbol() == "Sel":
-            return True
-        history_symbols = self.get_history_symbols()
-        for i in range(self.step_cnt - 1, -1, -1):
-            if history_symbols[i] == "Sel":
-                return True
-            elif history_symbols[i] == "Filter":
-                return False
-        assert False
+    def get_prev_pointer(self):
+        return self.prev_pointer

@@ -12,14 +12,15 @@ from nltk.stem import WordNetLemmatizer
 import logging
 
 from src.dataset import Example
-from qgm.qgm import QGM
 from qgm.qgm_import_from_sql_ds import qgm_import_from_sql_ds
 from sql_ds.sql_ds import SQLDataStructure
+from sql_ds.sql_ds_to_string import beutify
 from preprocess.rule import lf
 from preprocess.rule.semQL import *
 import src.relation as relation
 from rule.noqgm.noqgm import NOQGM
 from rule.semql.semql import SemQL
+from rule.acc import Acc
 from heat_map import *
 from transformers import *
 
@@ -424,7 +425,7 @@ def to_batch_seq(data_list, table_data):
         example.sql_json = copy.deepcopy(data)
         examples.append(example)
 
-    examples.sort(key=lambda elem: len(elem.gt))
+    # examples.sort(key=lambda elem: len(elem.gt))
 
     return examples
 
@@ -489,7 +490,7 @@ def epoch_train(
     is_train=True,
     optimize_freq=1,
 ):
-
+    validation_func()
     model.train()
     # shuffle
     def chunks(lst, n):
@@ -573,11 +574,12 @@ def epoch_train(
 
 
 def epoch_acc(
-    model, batch_size, sql_data, return_details=False,
+    model, batch_size, sql_data, with_gold=True,
 ):
     model.eval()
     pred = []
     gold = []
+    acc = Acc()
     details_list = []
     example_list = []
     for st in tqdm(range(0, len(sql_data), batch_size)):
@@ -585,27 +587,17 @@ def epoch_acc(
         examples = sql_data[st:ed]
         examples.sort(key=lambda example: -len(example.src_sent))
         example_list += examples
-        output = model.parse(examples, return_details=return_details)
-        if return_details:
-            out, details = output
-            details_list += details
-            pred += out
+        output = model.parse(examples, with_gold=with_gold)
+        if with_gold:
+            acc += output
         else:
             pred += output
         gold += [example.gt for example in examples]
 
-    # Calculate acc
-    if model.cfg.rule == "noqgm":
-        total_acc, is_correct_list = NOQGM.noqgm.cal_acc(pred, gold)
-    elif model.cfg.rule == "semql":
-        total_acc, is_correct_list = SemQL.semql.cal_acc(pred, gold)
+    if with_gold:
+        return acc
     else:
-        raise NotImplementedError("not yet")
-
-    if return_details:
-        return total_acc, is_correct_list, pred, gold, example_list, details_list
-    else:
-        return total_acc
+        return pred
 
 
 def load_data_new(
@@ -621,7 +613,7 @@ def load_data_new(
     log.info("Loading data from {}".format(sql_path))
 
     with open(sql_path) as f:
-        data = lower_keys(json.load(f))
+        data = json.load(f)
         for datum in data:
             # Filter out some datas
             if remove_punc and datum["question_arg"][-1] in [["?"], ["."]]:
@@ -651,10 +643,19 @@ def load_data_new(
                 gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
                 data["gt"] = gt
         elif cfg.rule == "qgm":
-            sql_ds = SQLDataStructure.import_from_spider_sql(data["sql"], db)
-            qgm = qgm_import_from_sql_ds(sql_ds)
-            if qgm is not None:
-                data["gt"] = qgm
+            try:
+                sql_ds = SQLDataStructure.import_from_spider_sql(data["sql"], db)
+                qgm = qgm_import_from_sql_ds(sql_ds)
+                sql_ds_reconvert = SQLDataStructure()
+                sql_ds_reconvert.import_from_qgm(qgm)
+                reconvert = sql_ds_reconvert.to_string()
+                origin = beutify(data["query"])
+                origin = origin.replace("DISTINCT ", "")
+                assert reconvert.lower() == origin.lower()
+                if qgm is not None:
+                    data["gt"] = qgm
+            except:
+                pass
         else:
             raise NotImplementedError("not yet")
 
