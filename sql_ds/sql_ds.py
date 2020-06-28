@@ -349,6 +349,25 @@ class SQLWithOrder(SQLBase):
     def get_from_clause(self):
         return self.sql_by_set.get_from_clause()
 
+    def get_select_clauses(self):
+        select_clauses = []
+        for (set_op, sql_with_group,) in self.sql_by_set.sql_with_group_chain:
+            # TODO currently support no op in select
+            for left_hand in sql_with_group.sql_select_clause.sql_left_hand_list:
+                select_clauses.append(left_hand.sql_column_with_agg)
+        return select_clauses
+
+    def get_where_clauses(self):
+        conj_where_clauses = []
+        for (set_op, sql_with_group,) in self.sql_by_set.sql_with_group_chain:
+            # TODO currently support no op in select
+            for (
+                conj,
+                where_clause,
+            ) in sql_with_group.sql_where_clause.sql_where_clause_one_chain:
+                conj_where_clauses.append((conj, where_clause))
+        return conj_where_clauses
+
 
 class SQLDataStructure:
     def __init__(self, db=None):
@@ -369,31 +388,6 @@ class SQLDataStructure:
     def to_string(self):
         sql_query = self.sql_with_order.to_string()
         return sql_query
-
-    def get_select_clauses(self):
-        select_clauses = []
-        for (
-            set_op,
-            sql_with_group,
-        ) in self.sql_with_order.sql_by_set.sql_with_group_chain:
-            # TODO currently support no op in select
-            for left_hand in sql_with_group.sql_select_clause.sql_left_hand_list:
-                select_clauses.append(left_hand.sql_column_with_agg)
-        return select_clauses
-
-    def get_where_clauses(self):
-        conj_where_clauses = []
-        for (
-            set_op,
-            sql_with_group,
-        ) in self.sql_with_order.sql_by_set.sql_with_group_chain:
-            # TODO currently support no op in select
-            for (
-                conj,
-                where_clause,
-            ) in sql_with_group.sql_where_clause.sql_where_clause_one_chain:
-                conj_where_clauses.append((conj, where_clause))
-        return conj_where_clauses
 
     # Implemented in sql_ds_categorize.py
     def has_table_without_col(self):

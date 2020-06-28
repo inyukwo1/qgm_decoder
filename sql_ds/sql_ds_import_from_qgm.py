@@ -16,11 +16,13 @@ from sql_ds.sql_ds import (
     SQLTable,
     SQLColumn,
     SQLValue,
+    SQLBase,
     WHERE_OPS,
     UNIT_OPS,
     AGG_OPS,
 )
-from qgm.qgm import QGM, QGMProjectionBox, QGMPredicateBox, QGMColumn
+from qgm.qgm import QGM, QGMProjectionBox, QGMPredicateBox, QGMColumn, QGMSubqueryBox
+from typing import Union
 
 
 def _sql_left_hand_import_from_agg_setwise_colid(
@@ -38,11 +40,12 @@ def _sql_left_hand_import_from_agg_setwise_colid(
     return sql_left_hand
 
 
-def _sql_where_clause_import_from_qgm_predicate_box(
-    sql_with_group: SQLWithGroup, qgm_predicate_box: QGMPredicateBox
+def _sql_where_clause_import_from_qgm_predicate_box_or_subquery_box(
+    sql_with_group: SQLWithGroup,
+    qgm_predicate_or_subquery_box: Union[QGMPredicateBox, QGMSubqueryBox],
 ):
     where_clause = SQLWhereClause(sql_with_group)
-    for conj, qgm_local_predicate in qgm_predicate_box.local_predicates:
+    for conj, qgm_local_predicate in qgm_predicate_or_subquery_box.local_predicates:
         qgm_column: QGMColumn = qgm_local_predicate.find_col()
         where_clause_one = SQLHavingWhereClauseOne(where_clause)
         sql_left_hand = _sql_left_hand_import_from_agg_setwise_colid(
@@ -54,23 +57,31 @@ def _sql_where_clause_import_from_qgm_predicate_box(
         )
         where_clause_one.left_hand = sql_left_hand
         where_clause_one.op = qgm_local_predicate.op
+
+        def import_value_or_subquery(value_or_subquery):
+            if isinstance(value_or_subquery, QGMSubqueryBox):  # subquery
+                sql_with_order = _sql_with_order_import_from_qgm_subquery_box(
+                    where_clause_one, value_or_subquery
+                )
+                value_or_sql_with_order = sql_with_order
+            else:
+                sqlvalue = SQLValue(where_clause_one)
+                sqlvalue.value = value_or_subquery
+                value_or_sql_with_order = sqlvalue
+            return value_or_sql_with_order
+
         if where_clause_one.op == "between":
-            sqlvalue = SQLValue(where_clause_one)
-            sqlvalue.value = qgm_local_predicate.value_or_subquery[
-                0
-            ]  # TODO currently not supporting subquery
-            where_clause_one.right_hand = sqlvalue
-            sqlvalue2 = SQLValue(where_clause_one)
-            sqlvalue2.value = qgm_local_predicate.value_or_subquery[
-                1
-            ]  # TODO currently not supporting subquery
-            where_clause_one.right_hand2 = sqlvalue2
+            where_clause_one.right_hand = import_value_or_subquery(
+                qgm_local_predicate.value_or_subquery[0]
+            )
+
+            where_clause_one.right_hand2 = import_value_or_subquery(
+                qgm_local_predicate.value_or_subquery[1]
+            )
         else:
-            sqlvalue = SQLValue(where_clause_one)
-            sqlvalue.value = (
+            where_clause_one.right_hand = import_value_or_subquery(
                 qgm_local_predicate.value_or_subquery
-            )  # TODO currently not supporting subquery
-            where_clause_one.right_hand = sqlvalue
+            )
         where_clause.sql_where_clause_one_chain.append((conj, where_clause_one))
     return where_clause
 
@@ -105,13 +116,14 @@ def _sql_from_clause_import_from_qgm(sql_with_group: SQLWithGroup, qgm: QGM):
 
 def _sql_with_group_import_from_qgm(sql_by_set: SQLBySet, qgm: QGM):
     sql_with_group = SQLWithGroup(sql_by_set)
+
     sql_with_group.sql_from_clause = _sql_from_clause_import_from_qgm(
         sql_with_group, qgm
     )
     sql_with_group.sql_select_clause = _sql_select_clause_import_from_qgm_projection_box(
         sql_with_group, qgm.base_boxes.projection_box
     )
-    sql_with_group.sql_where_clause = _sql_where_clause_import_from_qgm_predicate_box(
+    sql_with_group.sql_where_clause = _sql_where_clause_import_from_qgm_predicate_box_or_subquery_box(
         sql_with_group, qgm.base_boxes.predicate_box
     )
     # TODO support group clause
@@ -119,12 +131,58 @@ def _sql_with_group_import_from_qgm(sql_by_set: SQLBySet, qgm: QGM):
     return sql_with_group
 
 
-def _sql_by_set_import_from_qgm(sql_with_order: SQLWithOrder, qgm: QGM):
+def _sql_with_group_import_from_qgm_subquery_box(
+    sql_by_set: SQLBySet, qgm_subquery_box: QGMSubqueryBox
+):
+    sql_with_group = SQLWithGroup(sql_by_set)
+    from_clause = SQLFromClause(sql_with_group)
+    from_clause.tables_chain = []
+    from_clause.join_clauses_chain = []
+    from_clause.extend_using_shortest_path(
+        qgm_subquery_box.projection.find_col().table_id
+    )
+    for conj, predicate in qgm_subquery_box.local_predicates:
+        from_clause.extend_using_shortest_path(predicate.find_col().table_id)
+    sql_with_group.sql_from_clause = from_clause
+
+    select_clause = SQLSelectClause(sql_with_group)
+    qgm_column = qgm_subquery_box.projection.find_col()
+    sql_left_hand = _sql_left_hand_import_from_agg_setwise_colid(
+        select_clause,
+        sql_with_group.sql_from_clause,
+        qgm_subquery_box.projection.agg,
+        qgm_column.setwise_column_id,
+        qgm_column.table_id,
+    )
+    select_clause.sql_left_hand_list.append(sql_left_hand)
+    sql_with_group.sql_select_clause = select_clause
+
+    sql_with_group.sql_where_clause = _sql_where_clause_import_from_qgm_predicate_box_or_subquery_box(
+        sql_with_group, qgm_subquery_box
+    )
+
+    return sql_with_group
+
+
+def _sql_by_set_import_from_qgm_or_subquery(
+    sql_with_order: SQLWithOrder, qgm_or_subquery: Union[QGM, QGMSubqueryBox]
+):
     sql_by_set = SQLBySet(sql_with_order)
     # TODO currently don't support set operator
-    sql_by_set.sql_with_group_chain.append(
-        ("", _sql_with_group_import_from_qgm(sql_by_set, qgm))
-    )
+    if isinstance(qgm_or_subquery, QGM):
+        sql_by_set.sql_with_group_chain.append(
+            ("", _sql_with_group_import_from_qgm(sql_by_set, qgm_or_subquery))
+        )
+    else:
+        sql_by_set.sql_with_group_chain.append(
+            (
+                "",
+                _sql_with_group_import_from_qgm_subquery_box(
+                    sql_by_set, qgm_or_subquery
+                ),
+            )
+        )
+
     return sql_by_set
 
 
@@ -133,9 +191,22 @@ def _sql_order_clause_import_from_qgm(sql_with_order):
     return None
 
 
+def _sql_with_order_import_from_qgm_subquery_box(
+    parent: SQLBase, qgm_subquery_box: QGMSubqueryBox
+):
+    sql_with_order = SQLWithOrder(parent)
+    sql_with_order.sql_by_set = _sql_by_set_import_from_qgm_or_subquery(
+        sql_with_order, qgm_subquery_box
+    )
+    # TODO supporting sql order clause
+    return sql_with_order
+
+
 def _sql_with_order_import_from_qgm(sql_ds: SQLDataStructure, qgm: QGM):
     sql_with_order = SQLWithOrder(sql_ds)
-    sql_with_order.sql_by_set = _sql_by_set_import_from_qgm(sql_with_order, qgm)
+    sql_with_order.sql_by_set = _sql_by_set_import_from_qgm_or_subquery(
+        sql_with_order, qgm
+    )
     sql_with_order.sql_order_clause = _sql_order_clause_import_from_qgm(sql_with_order)
     return sql_with_order
 

@@ -72,6 +72,18 @@ class QGMBase:
         self.parent = parent
         self.db = parent.db
 
+    def find_base_box(self):
+        ancestor = self.parent
+        while not isinstance(ancestor, QGMBaseBox):
+            ancestor = ancestor.parent
+        return ancestor
+
+    def find_qgm_root(self):
+        ancestor = self.parent
+        while not isinstance(ancestor, QGM):
+            ancestor = ancestor.parent
+        return ancestor
+
 
 class QGMColumn(QGMBase):
     def __init__(self, parent):
@@ -81,9 +93,66 @@ class QGMColumn(QGMBase):
         self.is_primary_key: bool = None
         self.table_id: int = None
 
+    def __eq__(self, other):
+        return (
+            self.origin_column_id == other.origin_column_id
+            and self.setwise_column_id == other.setwise_column_id
+            and self.is_primary_key == other.is_primary_key
+            and self.table_id == other.table_id
+        )
+
+    def infer_origin_column_id(self):
+        if self.setwise_column_id == 0:
+            self.origin_column_id = 0
+            return
+        col_name = self.db["col_set"][self.setwise_column_id]
+        for idx, (tab_id, ori_col_name) in enumerate(self.db["column_names"]):
+            if tab_id == self.table_id and col_name == ori_col_name:
+                self.origin_column_id = idx
+                return
+        assert False
+
     def import_from_sql_column(self, sql_column):
         # implemented in qgm_import_from_sql_ds.py
         pass
+
+
+class QGMSubqueryBox(QGMBase):
+    def __init__(self, parent):
+        QGMBase.__init__(self, parent)
+        self.projection: QGMProjection = None
+        self.local_predicates: List[Tuple[str, QGMLocalPredicate]] = []
+
+    def __eq__(self, other):
+        for (my_conj, my_predicate), (other_conj, other_predicate) in zip(
+            self.local_predicates, other.local_predicates
+        ):
+            if my_conj != other_conj or my_predicate != other_predicate:
+                return False
+        return self.projection == other.projection
+
+    def set_projection(self, qgm_column, agg):
+        new_col_pointer = self.find_base_box().add_predicate_column_returning_col_pointer(  # TODO projection? predicate?
+            qgm_column
+        )
+        new_projection = QGMProjection(self, agg, new_col_pointer)
+        self.projection = new_projection
+
+    def add_local_predicate(self, conj, qgm_column: QGMColumn, op, value_or_subquery):
+        new_col_pointer = self.find_base_box().add_predicate_column_returning_col_pointer(
+            qgm_column
+        )
+        self.add_local_predicate_using_base_col(
+            conj, op, new_col_pointer, value_or_subquery
+        )
+
+    def add_local_predicate_using_base_col(
+        self, conj, op, col_pointer, value_or_subquery
+    ):
+        new_local_predicate = QGMLocalPredicate(
+            self, op, col_pointer, value_or_subquery
+        )
+        self.local_predicates.append((conj, new_local_predicate))
 
 
 class QGMLocalPredicate(QGMBase):
@@ -95,12 +164,37 @@ class QGMLocalPredicate(QGMBase):
         self.col_pointer = col_pointer
         self.value_or_subquery = value_or_subquery
 
+    def __eq__(self, other):
+
+        return (
+            self.op == other.op
+            and self.col_pointer == other.col_pointer
+            and (
+                (
+                    not isinstance(self.value_or_subquery, QGMSubqueryBox)
+                    and not isinstance(other.value_or_subquery, QGMSubqueryBox)
+                )
+                or self.value_or_subquery == other.value_or_subquery
+            )
+        )
+
+    def if_op_between_right_hand_first_value(self):
+        assert self.op == "between"
+        return not isinstance(self.value_or_subquery[0], QGMSubqueryBox)
+
+    def if_op_between_right_hand_second_value(self):
+        assert self.op == "between"
+        return not isinstance(self.value_or_subquery[1], QGMSubqueryBox)
+
+    def is_right_hand_value(self):
+        return not isinstance(self.value_or_subquery, QGMSubqueryBox)
+
     def find_col(self):
-        predicatebox = self.parent
-        assert isinstance(predicatebox, QGMPredicateBox)
-        basebox = predicatebox.parent
-        assert isinstance(basebox, QGMBaseBox)
-        return basebox.predicate_cols[self.col_pointer]
+        ancient = self.parent
+        while not isinstance(ancient, QGMBaseBox):
+            ancient = ancient.parent
+
+        return ancient.predicate_cols[self.col_pointer]
 
 
 class QGMPredicateBox(QGMBase):
@@ -108,7 +202,25 @@ class QGMPredicateBox(QGMBase):
         QGMBase.__init__(self, parent)
         self.local_predicates: List[Tuple[str, QGMLocalPredicate]] = []
 
-    def add_local_predicate(self, conj, op, col_pointer, value_or_subquery):
+    def __eq__(self, other):
+        for (my_conj, my_predicate), (other_conj, other_predicate) in zip(
+            self.local_predicates, other.local_predicates
+        ):
+            if my_conj != other_conj or my_predicate != other_predicate:
+                return False
+        return True
+
+    def add_local_predicate(self, conj, qgm_column: QGMColumn, op, value_or_subquery):
+        new_col_pointer = self.find_base_box().add_predicate_column_returning_col_pointer(
+            qgm_column
+        )
+        self.add_local_predicate_using_base_col(
+            conj, op, new_col_pointer, value_or_subquery
+        )
+
+    def add_local_predicate_using_base_col(
+        self, conj, op, col_pointer, value_or_subquery
+    ):
         new_local_predicate = QGMLocalPredicate(
             self, op, col_pointer, value_or_subquery
         )
@@ -121,12 +233,22 @@ class QGMProjection(QGMBase):
         self.agg = agg
         self.col_pointer = col_pointer
 
+    def __eq__(self, other):
+        return self.agg == other.agg and self.col_pointer == other.col_pointer
+
     def find_col(self):
-        projectionbox = self.parent
-        assert isinstance(projectionbox, QGMProjectionBox)
-        basebox = projectionbox.parent
-        assert isinstance(basebox, QGMBaseBox)
-        return basebox.select_cols[self.col_pointer]
+        ancient = self.parent
+        contained_subquery = False
+        while not isinstance(ancient, QGMBaseBox):
+            if isinstance(ancient, QGMSubqueryBox):
+                contained_subquery = True
+            ancient = ancient.parent
+
+        return (
+            ancient.predicate_cols[self.col_pointer]
+            if contained_subquery
+            else ancient.select_cols[self.col_pointer]
+        )
 
 
 class QGMProjectionBox(QGMBase):
@@ -134,7 +256,19 @@ class QGMProjectionBox(QGMBase):
         QGMBase.__init__(self, parent)
         self.projections = []
 
-    def add_projection(self, agg, col_pointer):
+    def __eq__(self, other):
+        for my_projection, other_projection in zip(self.projections, other.projections):
+            if my_projection != other_projection:
+                return False
+        return True
+
+    def add_projection(self, qgm_column: QGMColumn, agg):
+        new_col_pointer = self.find_base_box().add_projection_column_returning_col_pointer(
+            qgm_column
+        )
+        self.add_projection_using_base_col(agg, new_col_pointer)
+
+    def add_projection_using_base_col(self, agg, col_pointer):
         new_projection = QGMProjection(self, agg, col_pointer)
         self.projections.append(new_projection)
 
@@ -147,17 +281,30 @@ class QGMBaseBox(QGMBase):
         self.predicate_box = QGMPredicateBox(self)
         self.projection_box = QGMProjectionBox(self)
 
-    def add_select_column(self, qgm_column: QGMColumn, agg):
+    def __eq__(self, other):
+        for my_select_col, other_select_col in zip(self.select_cols, other.select_cols):
+            if my_select_col != other_select_col:
+                return False
+
+        for my_predicate_col, other_predicate_col in zip(
+            self.predicate_cols, other.predicate_cols
+        ):
+            if my_predicate_col != other_predicate_col:
+                return False
+        return (
+            self.predicate_box == other.predicate_box
+            and self.projection_box == other.projection_box
+        )
+
+    def add_projection_column_returning_col_pointer(self, qgm_column: QGMColumn):
         new_col_pointer = len(self.select_cols)
         self.select_cols.append(qgm_column)
-        self.projection_box.add_projection(agg, new_col_pointer)
+        return new_col_pointer
 
-    def add_local_predicate(self, conj, qgm_column: QGMColumn, op, value_or_subquery):
+    def add_predicate_column_returning_col_pointer(self, qgm_column: QGMColumn):
         new_col_pointer = len(self.predicate_cols)
         self.predicate_cols.append(qgm_column)
-        self.predicate_box.add_local_predicate(
-            conj, op, new_col_pointer, value_or_subquery
-        )
+        return new_col_pointer
 
 
 class QGM:
@@ -165,8 +312,11 @@ class QGM:
         self.is_gold = is_gold
         self.db = db
         self.pointer = None
-        self.prev_action_id = None
+        self.prev_action_ids = []
         self.base_boxes = QGMBaseBox(self)
+
+    def __eq__(self, other):
+        return self.base_boxes == other.base_boxes
 
     @classmethod
     def import_from_sql_ds(cls):
