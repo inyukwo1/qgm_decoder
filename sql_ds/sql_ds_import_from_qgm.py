@@ -21,7 +21,14 @@ from sql_ds.sql_ds import (
     UNIT_OPS,
     AGG_OPS,
 )
-from qgm.qgm import QGM, QGMProjectionBox, QGMPredicateBox, QGMColumn, QGMSubqueryBox
+from qgm.qgm import (
+    QGM,
+    QGMProjectionBox,
+    QGMPredicateBox,
+    QGMColumn,
+    QGMSubqueryBox,
+    QGMBaseBox,
+)
 from typing import Union
 
 
@@ -186,9 +193,26 @@ def _sql_by_set_import_from_qgm_or_subquery(
     return sql_by_set
 
 
-def _sql_order_clause_import_from_qgm(sql_with_order):
-    # TODO
-    return None
+def _sql_order_clause_import_from_qgm(
+    sql_with_order, qgm_basebox_or_subquerybox: Union[QGMBaseBox, QGMSubqueryBox]
+):
+    if qgm_basebox_or_subquerybox.orderby_box is None:
+        return None
+    qgm_order_clause = qgm_basebox_or_subquerybox.orderby_box
+    sql_order_clause = SQLOrderClause(sql_with_order)
+    sql_order_clause.limit_num = qgm_order_clause.limit_num
+    sql_order_clause.sql_order_direction = qgm_order_clause.direction
+    lefthand = _sql_left_hand_import_from_agg_setwise_colid(
+        sql_order_clause,
+        sql_with_order.get_from_clause(),
+        qgm_order_clause.agg,
+        qgm_order_clause.find_col().setwise_column_id,
+        qgm_order_clause.find_col().table_id,
+    )
+    # TODO assume one column
+    sql_order_clause.sql_column_with_agg_list.append(lefthand)
+
+    return sql_order_clause
 
 
 def _sql_with_order_import_from_qgm_subquery_box(
@@ -207,7 +231,9 @@ def _sql_with_order_import_from_qgm(sql_ds: SQLDataStructure, qgm: QGM):
     sql_with_order.sql_by_set = _sql_by_set_import_from_qgm_or_subquery(
         sql_with_order, qgm
     )
-    sql_with_order.sql_order_clause = _sql_order_clause_import_from_qgm(sql_with_order)
+    sql_with_order.sql_order_clause = _sql_order_clause_import_from_qgm(
+        sql_with_order, qgm.base_boxes
+    )
     return sql_with_order
 
 

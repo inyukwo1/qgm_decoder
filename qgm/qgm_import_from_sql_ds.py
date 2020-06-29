@@ -16,7 +16,6 @@ def qgm_import_from_sql_ds(sql_ds: SQLDataStructure):
         or sql_ds.has_subquery_select()
         or sql_ds.has_set_operator()
         or sql_ds.has_grouping()
-        or sql_ds.has_ordering()
         or sql_ds.has_table_without_col()
     ):  # TODO currently not supporting conditions
         return None
@@ -38,6 +37,22 @@ def qgm_import_from_sql_ds(sql_ds: SQLDataStructure):
         append_local_predicate_from_conj_predicate(
             new_qgm.base_boxes.predicate_box, conj, prediate
         )
+    order_clause = sql_ds.sql_with_order.sql_order_clause
+    if order_clause is not None:
+        assert len(order_clause.sql_column_with_agg_list) == 1
+        assert order_clause.sql_column_with_agg_list[0].op == "none"
+        sql_column_with_agg = order_clause.sql_column_with_agg_list[
+            0
+        ].sql_column_with_agg
+        new_column = QGMColumn(new_qgm.base_boxes)
+        new_column.import_from_sql_column(sql_column_with_agg.sql_column)
+        new_qgm.base_boxes.add_orderby(
+            order_clause.sql_order_direction,
+            sql_column_with_agg.agg,
+            order_clause.limit_num,
+            new_column,
+        )
+
     return new_qgm
 
 
@@ -96,6 +111,22 @@ def qgm_import_value_or_subquery_from_sql_ds(
         subquery_box.set_projection(new_column, sql_column_with_agg.agg)
         for conj, predicate in predicates:
             append_local_predicate_from_conj_predicate(subquery_box, conj, predicate)
+
+        order_clause = sql_subquery.sql_order_clause
+        if order_clause is not None:
+            assert len(order_clause.sql_column_with_agg_list) == 1
+            assert order_clause.sql_column_with_agg_list[0].op == "none"
+            sql_column_with_agg = order_clause.sql_column_with_agg_list[
+                0
+            ].sql_column_with_agg
+            new_column = QGMColumn(subquery_box.find_base_box())
+            new_column.import_from_sql_column(sql_column_with_agg.sql_column)
+            subquery_box.add_orderby(
+                order_clause.sql_order_direction,
+                sql_column_with_agg.agg,
+                order_clause.limit_num,
+                new_column,
+            )
         return subquery_box
 
 

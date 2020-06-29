@@ -42,8 +42,9 @@ SYMBOL_ACTIONS = [
         ],
     ),
     ("value_or_subquery", ["value", "subquery"]),
+    ("op_done", ["done", "do"]),
     ("subquery_agg", ["none", "max", "min", "count", "sum", "avg"]),
-    ("subquery_predicate_col_done", ["done", "do"]),
+    ("subquery_op_done", ["done", "do"]),
     ("subquery_predicate_and_or", ["and", "or"]),
     (
         "subquery_predicate_op",
@@ -62,6 +63,9 @@ SYMBOL_ACTIONS = [
             "not in",
         ],
     ),
+    ("orderby_exists", ["no", "yes"]),
+    ("orderby_agg", ["none", "max", "min", "count", "sum", "avg"]),
+    ("orderby_direction", ["asc", "desc"]),
     ("C", []),
     ("T", []),
 ]
@@ -122,6 +126,7 @@ class QGMSubqueryBox(QGMBase):
         QGMBase.__init__(self, parent)
         self.projection: QGMProjection = None
         self.local_predicates: List[Tuple[str, QGMLocalPredicate]] = []
+        self.orderby_box: QGMOrderbyBox = None
 
     def __eq__(self, other):
         for (my_conj, my_predicate), (other_conj, other_predicate) in zip(
@@ -153,6 +158,16 @@ class QGMSubqueryBox(QGMBase):
             self, op, col_pointer, value_or_subquery
         )
         self.local_predicates.append((conj, new_local_predicate))
+
+    def add_orderby(self, direction, agg, limit_num, qgm_column: QGMColumn):
+        new_col_pointer = self.find_base_box().add_predicate_column_returning_col_pointer(
+            qgm_column
+        )
+        self.add_orderby_using_base_col(direction, agg, limit_num, new_col_pointer)
+
+    def add_orderby_using_base_col(self, direction, agg, limit_num, col_pointer):
+        new_orderby_box = QGMOrderbyBox(self, direction, agg, limit_num, col_pointer)
+        self.orderby_box = new_orderby_box
 
 
 class QGMLocalPredicate(QGMBase):
@@ -273,6 +288,29 @@ class QGMProjectionBox(QGMBase):
         self.projections.append(new_projection)
 
 
+class QGMOrderbyBox(QGMBase):
+    def __init__(self, parent, direction, agg, limit_num, col_pointer):
+        QGMBase.__init__(self, parent)
+        self.agg = agg
+        self.col_pointer = col_pointer
+        self.direction = direction
+        self.limit_num = limit_num
+
+    def __eq__(self, other):
+        return (
+            self.agg == other.agg
+            and self.col_pointer == other.col_pointer
+            and self.direction == other.direction
+        )
+
+    def find_col(self):
+        ancient = self.parent
+        while not isinstance(ancient, QGMBaseBox):
+            ancient = ancient.parent
+
+        return ancient.predicate_cols[self.col_pointer]
+
+
 class QGMBaseBox(QGMBase):
     def __init__(self, parent):
         QGMBase.__init__(self, parent)
@@ -280,6 +318,7 @@ class QGMBaseBox(QGMBase):
         self.predicate_cols: List[QGMColumn] = []
         self.predicate_box = QGMPredicateBox(self)
         self.projection_box = QGMProjectionBox(self)
+        self.orderby_box: QGMOrderbyBox = None
 
     def __eq__(self, other):
         for my_select_col, other_select_col in zip(self.select_cols, other.select_cols):
@@ -305,6 +344,14 @@ class QGMBaseBox(QGMBase):
         new_col_pointer = len(self.predicate_cols)
         self.predicate_cols.append(qgm_column)
         return new_col_pointer
+
+    def add_orderby(self, direction, agg, limit_num, qgm_column: QGMColumn):
+        new_col_pointer = self.add_predicate_column_returning_col_pointer(qgm_column)
+        self.add_orderby_using_base_col(direction, agg, limit_num, new_col_pointer)
+
+    def add_orderby_using_base_col(self, direction, agg, limit_num, col_pointer):
+        new_orderby_box = QGMOrderbyBox(self, direction, agg, limit_num, col_pointer)
+        self.orderby_box = new_orderby_box
 
 
 class QGM:

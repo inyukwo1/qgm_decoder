@@ -1,5 +1,6 @@
 from qgm.qgm import (
     QGM,
+    QGMBaseBox,
     QGMColumn,
     QGMSubqueryBox,
     QGMPredicateBox,
@@ -100,14 +101,14 @@ def qgm_construct_subquery(
         yield "subquery_agg", agg, predicate_col_pointer_getter()
         predicate_col_pointer_increaser()
         for op_idx in range(len(subquery_box.local_predicates)):
-            yield "subquery_predicate_col_done", "do", None
+            yield "subquery_op_done", "do", None
             yield from qgm_construct_predicate_op(
                 subquery_box,
                 predicate_col_pointer_getter,
                 predicate_col_pointer_increaser,
                 op_idx,
             )
-        yield "subquery_predicate_col_done", "done", None
+        yield "subquery_op_done", "done", None
     else:
 
         def set_projection_agg(action_id):
@@ -118,16 +119,16 @@ def qgm_construct_subquery(
                 predicate_col_pointer_getter(),
             )
 
-        def set_subquery_predicate_col_done(action_id):
+        def set_subquery_op_done(action_id):
             qgm.prev_action_ids += [action_id]
 
         yield "subquery_agg", set_projection_agg, predicate_col_pointer_getter()
         predicate_col_pointer_increaser()
         for op_idx in range(10):
-            yield "subquery_predicate_col_done", set_subquery_predicate_col_done, None
-            subquery_predicate_col_done = action_id_to_action(qgm.prev_action_ids[-1])
-            assert subquery_predicate_col_done in {"do", "done"}
-            if subquery_predicate_col_done == "done":
+            yield "subquery_op_done", set_subquery_op_done, None
+            subquery_op_done = action_id_to_action(qgm.prev_action_ids[-1])
+            assert subquery_op_done in {"do", "done"}
+            if subquery_op_done == "done":
                 break
             yield from qgm_construct_predicate_op(
                 subquery_box,
@@ -135,6 +136,9 @@ def qgm_construct_subquery(
                 predicate_col_pointer_increaser,
                 op_idx,
             )
+    yield from qgm_construct_orderby(
+        subquery_box, predicate_col_pointer_getter, predicate_col_pointer_increaser
+    )
 
 
 def qgm_construct_predicate_op(
@@ -147,8 +151,6 @@ def qgm_construct_predicate_op(
     current_col_pointer = predicate_col_pointer_getter()
 
     if qgm.is_gold:
-        if op_idx >= len(subquery_or_predicate_box.local_predicates):
-            print("x")
         conj, local_predicate = subquery_or_predicate_box.local_predicates[op_idx]
         if op_idx != 0:
             assert conj in {"and", "or"}
@@ -296,6 +298,50 @@ def qgm_construct_projection_agg(qgm: QGM, projection_col_pointer, agg_idx):
         yield "projection_agg", set_projection_agg, projection_col_pointer
 
 
+def qgm_construct_orderby(
+    qgm_basebox_or_subquerybox: Union[QGMBaseBox, QGMSubqueryBox],
+    predicate_col_pointer_getter,
+    predicate_col_pointer_increaser,
+):
+    qgm = qgm_basebox_or_subquerybox.find_qgm_root()
+    if qgm.is_gold:
+        if qgm_basebox_or_subquerybox.orderby_box is None:
+            yield "orderby_exists", "no", None
+            return
+        else:
+            yield "orderby_exists", "yes", None
+        current_col_pointer = predicate_col_pointer_getter()
+        yield "orderby_direction", qgm_basebox_or_subquerybox.orderby_box.direction, current_col_pointer
+        yield "orderby_agg", qgm_basebox_or_subquerybox.orderby_box.agg, current_col_pointer
+        predicate_col_pointer_increaser()
+    else:
+
+        def set_orderby_exists(action_id):
+            qgm.prev_action_ids += [action_id]
+
+        def set_orderby_direction(action_id):
+            qgm.prev_action_ids += [action_id]
+
+        def set_orderby_agg(action_id):
+            qgm.prev_action_ids += [action_id]
+
+        yield "orderby_exists", set_orderby_exists, None
+        orderby_exists = action_id_to_action(qgm.prev_action_ids[-1])
+        assert orderby_exists in {"no", "yes"}
+        if orderby_exists == "no":
+            return
+        current_col_pointer = predicate_col_pointer_getter()
+        yield "orderby_direction", set_orderby_direction, current_col_pointer
+        yield "orderby_agg", set_orderby_agg, current_col_pointer
+        direction = QGM_ACTION.action_id_to_action(qgm.prev_action_ids[-2])
+        agg = QGM_ACTION.action_id_to_action(qgm.prev_action_ids[-1])
+
+        qgm_basebox_or_subquerybox.add_orderby(
+            direction, agg, "value", current_col_pointer
+        )
+        predicate_col_pointer_increaser()
+
+
 def qgm_construct(self: QGM):
     yield from qgm_construct_select_col_num(self)
     select_col_num = (
@@ -314,7 +360,6 @@ def qgm_construct(self: QGM):
             if action_id_to_action(self.prev_action_ids[-1]) == "done":
                 break
         yield from qgm_condtruct_predicate_col(self, predicate_col_idx)
-
     predicate_col_pointer = {"pointer": 0}
 
     def predicate_col_pointer_getter():
@@ -323,15 +368,36 @@ def qgm_construct(self: QGM):
     def predicate_col_pointer_increaser():
         predicate_col_pointer["pointer"] += 1
 
-    for op_idx in range(10):
-        if predicate_col_pointer["pointer"] >= len(self.base_boxes.predicate_cols):
-            break
-        yield from qgm_construct_predicate_op(
-            self.base_boxes.predicate_box,
-            predicate_col_pointer_getter,
-            predicate_col_pointer_increaser,
-            op_idx,
-        )
+    if self.is_gold:
+        for op_idx in range(len(self.base_boxes.predicate_box.local_predicates)):
+            yield "op_done", "do", None
+            yield from qgm_construct_predicate_op(
+                self.base_boxes.predicate_box,
+                predicate_col_pointer_getter,
+                predicate_col_pointer_increaser,
+                op_idx,
+            )
+        yield "op_done", "done", None
+    else:
+
+        def set_op_done(action_id):
+            self.prev_action_ids += [action_id]
+
+        for op_idx in range(10):
+            yield "op_done", set_op_done, None
+            op_done = action_id_to_action(self.prev_action_ids[-1])
+            assert op_done in {"do", "done"}
+            if op_done == "done":
+                break
+            yield from qgm_construct_predicate_op(
+                self.base_boxes.predicate_box,
+                predicate_col_pointer_getter,
+                predicate_col_pointer_increaser,
+                op_idx,
+            )
+    yield from qgm_construct_orderby(
+        self.base_boxes, predicate_col_pointer_getter, predicate_col_pointer_increaser
+    )
 
     projection_col_pointer = 0
     for agg_idx in range(10):
