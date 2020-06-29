@@ -204,6 +204,9 @@ class SQLFromClause(SQLBase):
             new_sql_table.abbrev_table_id = 1
             self.tables_chain += [new_sql_table]
             return True
+        for table in self.tables_chain:
+            if table.table_id == tab_id:
+                return True
         candidates = [{"current": tab_id, "visited": [tab_id], "join_paths": [],}]
 
         def explore_neighbor(candidate):

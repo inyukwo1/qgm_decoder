@@ -251,7 +251,7 @@ class QGMProjection(QGMBase):
     def __eq__(self, other):
         return self.agg == other.agg and self.col_pointer == other.col_pointer
 
-    def find_col(self):
+    def find_col(self) -> QGMColumn:
         ancient = self.parent
         contained_subquery = False
         while not isinstance(ancient, QGMBaseBox):
@@ -269,7 +269,7 @@ class QGMProjection(QGMBase):
 class QGMProjectionBox(QGMBase):
     def __init__(self, parent):
         QGMBase.__init__(self, parent)
-        self.projections = []
+        self.projections: List[QGMProjection] = []
 
     def __eq__(self, other):
         for my_projection, other_projection in zip(self.projections, other.projections):
@@ -376,4 +376,7 @@ class QGM:
         pass
 
     def fast_comparison(self, other_qgm: "QGM"):
+        pass
+
+    def qgm_canonicalize(self):
         pass

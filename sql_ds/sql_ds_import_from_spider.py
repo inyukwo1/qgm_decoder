@@ -21,7 +21,7 @@ from sql_ds.sql_ds import (
 )
 
 
-def sql_with_order_import_from_spider_sql(self: SQLWithOrder, sql):
+def sql_with_order_import_from_spider_sql(self: SQLWithOrder, sql, subquery=False):
     self.sql_by_set = SQLBySet(self)
     self.sql_by_set.import_from_spider_sql(sql)
     if sql["orderBy"]:
@@ -115,7 +115,7 @@ def sql_having_where_clause_one_import_from_spider_sql(
     def parse_val_or_subquery(val):
         if isinstance(val, dict):  # subquery
             val_or_subquery = SQLWithOrder(self)
-            val_or_subquery.import_from_spider_sql(val)
+            val_or_subquery.import_from_spider_sql(val, subquery=True)
         else:
             val_or_subquery = SQLValue(self)
             val_or_subquery.import_from_spider_sql(val)

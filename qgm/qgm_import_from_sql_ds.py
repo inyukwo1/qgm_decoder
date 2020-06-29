@@ -105,7 +105,6 @@ def qgm_import_value_or_subquery_from_sql_ds(
             len(select_clause_columns) == 1
         )  # TODO currently we don't support not in, in
         sql_column_with_agg = select_clause_columns[0]
-        assert sql_column_with_agg.agg != "none"
         new_column = QGMColumn(subquery_box)
         new_column.import_from_sql_column(sql_column_with_agg.sql_column)
         subquery_box.set_projection(new_column, sql_column_with_agg.agg)

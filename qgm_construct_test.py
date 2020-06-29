@@ -65,6 +65,7 @@ if __name__ == "__main__":
     with open(dev_path) as f:
         data = json.load(f)
         passed_num = 0
+        converted_num = 0
         for idx, datum in enumerate(data):
             db = table_data[datum["db_id"]]
             db["col_set"] = datum["col_set"]
@@ -100,4 +101,15 @@ if __name__ == "__main__":
                 assert prev_idx == new_qgm_prev_idx
             assert new_qgm == qgm
             passed_num += 1
+            qgm.qgm_canonicalize()
+            if new_qgm != qgm:
+                sql_ds_reconvert = SQLDataStructure()
+                sql_ds_reconvert.import_from_qgm(qgm)
+                reconvert = sql_ds_reconvert.to_string()
+                print(reconvert)
+                print(origin)
+                print("")
+                converted_num += 1
+
     print(passed_num)
+    print(converted_num)

@@ -222,7 +222,9 @@ def _sql_with_order_import_from_qgm_subquery_box(
     sql_with_order.sql_by_set = _sql_by_set_import_from_qgm_or_subquery(
         sql_with_order, qgm_subquery_box
     )
-    # TODO supporting sql order clause
+    sql_with_order.sql_order_clause = _sql_order_clause_import_from_qgm(
+        sql_with_order, qgm_subquery_box
+    )
     return sql_with_order
 
 
