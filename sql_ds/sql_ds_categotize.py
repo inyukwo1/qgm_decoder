@@ -97,17 +97,6 @@ def has_subquery(self: SQLDataStructure):
 
 
 def has_set_operator(self: SQLDataStructure):
-
-    for (
-        set_op,
-        sql_with_group,
-    ) in self.sql_with_order.sql_by_set.sql_with_group_chain:
-        for (
-            conj,
-            where_clause,
-        ) in sql_with_group.sql_where_clause.sql_where_clause_one_chain:
-            if where_clause.op in {"not in", "in"}:
-                return True
     return self.sql_with_order.sql_by_set.has_set_operator()
 
 

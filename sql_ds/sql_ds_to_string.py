@@ -24,6 +24,9 @@ def beutify(sql_query):
     sql_query = sql_query.replace(" ASC", "")
     sql_query = sql_query.replace('"', "'")
     sql_query = sql_query.replace("COUNT ", "count")
+    sql_query = sql_query.replace("SUM ", "sum")
+    sql_query = sql_query.replace("MAX ", "max")
+    sql_query = sql_query.replace("MIN ", "min")
     sql_query = sql_query.replace("( ", "(")
     sql_query = sql_query.replace(" )", ")")
     sql_query = sql_query.replace(" , ", ", ")
@@ -34,11 +37,16 @@ def beutify(sql_query):
     sql_query_split = sql_query.split(" ")
     while "ON" in sql_query_split[start_pos:]:
         on_pos = sql_query_split.index("ON", start_pos)
-        if int(sql_query_split[on_pos + 1][1]) > int(sql_query_split[on_pos + 3][1]):
-            (sql_query_split[on_pos + 1], sql_query_split[on_pos + 3],) = (
-                sql_query_split[on_pos + 3],
-                sql_query_split[on_pos + 1],
-            )
+        try:
+            if int(sql_query_split[on_pos + 1][1]) > int(
+                sql_query_split[on_pos + 3][1]
+            ):
+                (sql_query_split[on_pos + 1], sql_query_split[on_pos + 3],) = (
+                    sql_query_split[on_pos + 3],
+                    sql_query_split[on_pos + 1],
+                )
+        except:
+            pass
 
         start_pos = on_pos + 1
     for q_idx in range(len(sql_query_split)):
@@ -211,7 +219,11 @@ def sql_table_to_string(self: SQLTable, with_abb):
 
 
 def sql_column_to_string(self: SQLColumn):
-    if not self.multi_table_ancester or self.sql_table is None:
+    if (
+        not self.multi_table_ancester
+        or self.sql_table is None
+        or self.origin_column_id == 0
+    ):
         return self.column_name()
     else:
         return "T{}.{}".format(self.sql_table.abbrev_table_id, self.column_name())

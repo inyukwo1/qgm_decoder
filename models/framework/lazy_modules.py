@@ -224,7 +224,7 @@ class LazyTransformerDecoder(nn.Module, LazyModule):
         self.in_dim = in_dim
         self._init_positional_embedding()
 
-    def _init_positional_embedding(self, dropout=0.1, max_len=150):
+    def _init_positional_embedding(self, dropout=0.1, max_len=500):
         d_model = self.in_dim
 
         self.pos_dropout = nn.Dropout(p=dropout)

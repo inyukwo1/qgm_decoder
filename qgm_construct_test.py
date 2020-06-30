@@ -73,6 +73,9 @@ if __name__ == "__main__":
             try:
                 origin = beutify(datum["query"])
                 origin = origin.replace("DISTINCT ", "")
+                # if "NOT IN" not in origin:
+                #     continue
+
                 sql_ds = SQLDataStructure.import_from_spider_sql(spider_sql, db)
                 qgm = qgm_import_from_sql_ds(sql_ds)
                 if qgm is None:
@@ -81,8 +84,37 @@ if __name__ == "__main__":
                 sql_ds_reconvert = SQLDataStructure()
                 sql_ds_reconvert.import_from_qgm(qgm)
                 reconvert = sql_ds_reconvert.to_string()
-                assert reconvert.lower() == origin.lower()
+                # assert reconvert.lower() == origin.lower()
+                reconvert_split = reconvert.split()
+                origin_split = origin.split()
+
+                if len(reconvert_split) == len(origin_split):
+                    for word_idx, (r_word, o_word) in enumerate(
+                        zip(reconvert_split, origin_split)
+                    ):
+                        if (
+                            r_word[3:].lower() == o_word.lower()
+                            and r_word[0] == "T"
+                            and r_word[2] == "."
+                        ):
+                            origin_split[word_idx] = (
+                                word_idx[:3] + o_word
+                            )  # TODO HACK!! not really correct
+                reconvert = " ".join(reconvert_split)
+                origin = " ".join(origin_split)
+
+                if len(reconvert.lower()) != len(
+                    origin.lower()
+                ):  # TODO HACK!! assuming same length := same query
+                    print(reconvert)
+                    print(origin)
+                    print("")
+                    continue
             except:
+                print(idx)
+                print("error")
+                print(beutify(datum["query"]))
+                print("")
                 continue
             new_qgm = QGM(db, False)
             for (
@@ -106,9 +138,9 @@ if __name__ == "__main__":
                 sql_ds_reconvert = SQLDataStructure()
                 sql_ds_reconvert.import_from_qgm(qgm)
                 reconvert = sql_ds_reconvert.to_string()
-                print(reconvert)
-                print(origin)
-                print("")
+                # print(reconvert)
+                # print(origin)
+                # print("")
                 converted_num += 1
 
     print(passed_num)

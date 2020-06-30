@@ -78,7 +78,10 @@ class SQLColumn(SQLBase):
         self.setwise_column_id: int = None
         self.is_primary_key: bool = None
         self.sql_table: SQLTable = None
-        self.multi_table_ancester = False
+
+    @property
+    def multi_table_ancester(self):
+        return len(self.infer_from_clause().tables_chain) > 1
 
     def fill_aux_info(self, from_clause):
         setwise_column_id, tab_id = self._infer_setwise_col_tab_id(from_clause)
@@ -122,8 +125,6 @@ class SQLColumn(SQLBase):
             self.sql_table = None
             return
 
-        if len(from_clause.tables_chain) > 1:
-            self.multi_table_ancester = True
         if try_find_parent_table():
             return
         from_clause.extend_using_shortest_path(tab_id)

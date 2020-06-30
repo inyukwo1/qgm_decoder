@@ -28,6 +28,7 @@ from qgm.qgm import (
     QGMColumn,
     QGMSubqueryBox,
     QGMBaseBox,
+    QGMGroupbyBox,
 )
 from typing import Union
 
@@ -110,14 +111,63 @@ def _sql_select_clause_import_from_qgm_projection_box(
     return select_clause
 
 
+def _sql_group_clause_import_from_qgm_groupby_box(
+    sql_with_group: SQLWithGroup, qgm_groupbx_box: QGMGroupbyBox
+):
+    if qgm_groupbx_box is None:
+        return None
+    qgm_column = qgm_groupbx_box.find_col()
+    group_clause = SQLGroupClause(sql_with_group)
+    sql_column = SQLColumn(group_clause)
+    group_clause.sql_column = sql_column
+    sql_column.setwise_column_id = qgm_column.setwise_column_id
+    sql_column._find_parent_table(sql_with_group.sql_from_clause, qgm_column.table_id)
+    sql_column.infer_origin_col_id()
+    having_clause = SQLHavingClause(group_clause)
+    group_clause.sql_having_clause = having_clause
+    if qgm_groupbx_box.having_predicate is not None:
+        having_clause_one = SQLHavingWhereClauseOne(having_clause)
+        having_clause.sql_having_clause_one_chain.append(("", having_clause_one))
+        having_clause_one.left_hand = _sql_left_hand_import_from_agg_setwise_colid(
+            having_clause_one,
+            sql_with_group.sql_from_clause,
+            qgm_groupbx_box.having_agg,
+            qgm_groupbx_box.having_predicate.find_col().setwise_column_id,
+            qgm_groupbx_box.having_predicate.find_col().table_id,
+        )
+        having_clause_one.op = qgm_groupbx_box.having_predicate.op
+
+        def import_value_or_subquery(value_or_subquery):
+            if isinstance(value_or_subquery, QGMSubqueryBox):  # subquery
+                sql_with_order = _sql_with_order_import_from_qgm_subquery_box(
+                    having_clause_one, value_or_subquery
+                )
+                value_or_sql_with_order = sql_with_order
+            else:
+                sqlvalue = SQLValue(having_clause_one)
+                sqlvalue.value = value_or_subquery
+                value_or_sql_with_order = sqlvalue
+            return value_or_sql_with_order
+
+        if having_clause_one.op == "between":
+            having_clause_one.right_hand = import_value_or_subquery(
+                qgm_groupbx_box.having_predicate.value_or_subquery[0]
+            )
+
+            having_clause_one.right_hand2 = import_value_or_subquery(
+                qgm_groupbx_box.having_predicate.value_or_subquery[1]
+            )
+        else:
+            having_clause_one.right_hand = import_value_or_subquery(
+                qgm_groupbx_box.having_predicate.value_or_subquery
+            )
+    return group_clause
+
+
 def _sql_from_clause_import_from_qgm(sql_with_group: SQLWithGroup, qgm: QGM):
     from_clause = SQLFromClause(sql_with_group)
     from_clause.tables_chain = []
     from_clause.join_clauses_chain = []
-    for qgm_col in qgm.base_boxes.select_cols:
-        from_clause.extend_using_shortest_path(qgm_col.table_id)
-    for qgm_col in qgm.base_boxes.predicate_cols:
-        from_clause.extend_using_shortest_path(qgm_col.table_id)
     return from_clause
 
 
@@ -133,7 +183,9 @@ def _sql_with_group_import_from_qgm(sql_by_set: SQLBySet, qgm: QGM):
     sql_with_group.sql_where_clause = _sql_where_clause_import_from_qgm_predicate_box_or_subquery_box(
         sql_with_group, qgm.base_boxes.predicate_box
     )
-    # TODO support group clause
+    sql_with_group.sql_group_clause = _sql_group_clause_import_from_qgm_groupby_box(
+        sql_with_group, qgm.base_boxes.groupby_box
+    )
 
     return sql_with_group
 
@@ -166,6 +218,9 @@ def _sql_with_group_import_from_qgm_subquery_box(
 
     sql_with_group.sql_where_clause = _sql_where_clause_import_from_qgm_predicate_box_or_subquery_box(
         sql_with_group, qgm_subquery_box
+    )
+    sql_with_group.sql_group_clause = _sql_group_clause_import_from_qgm_groupby_box(
+        sql_with_group, qgm_subquery_box.groupby_box
     )
 
     return sql_with_group

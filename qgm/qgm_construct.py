@@ -336,9 +336,72 @@ def qgm_construct_orderby(
         direction = QGM_ACTION.action_id_to_action(qgm.prev_action_ids[-2])
         agg = QGM_ACTION.action_id_to_action(qgm.prev_action_ids[-1])
 
-        qgm_basebox_or_subquerybox.add_orderby(
+        qgm_basebox_or_subquerybox.add_orderby_using_base_col(
             direction, agg, "value", current_col_pointer
         )
+        predicate_col_pointer_increaser()
+
+
+def qgm_construct_groupby(
+    qgm_basebox_or_subquerybox: Union[QGMBaseBox, QGMSubqueryBox],
+    predicate_col_pointer_getter,
+    predicate_col_pointer_increaser,
+):
+    qgm = qgm_basebox_or_subquerybox.find_qgm_root()
+    if qgm.is_gold:
+        if qgm_basebox_or_subquerybox.groupby_box is None:
+            yield "groupby_exists", "no", None
+            return
+        else:
+            yield "groupby_exists", "yes", None
+            predicate_col_pointer_increaser()
+            if qgm_basebox_or_subquerybox.groupby_box.having_predicate is None:
+                yield "having_exists", "no", None
+            else:
+                yield "having_exists", "yes", None
+                current_col_pointer = predicate_col_pointer_getter()
+                yield "having_agg", qgm_basebox_or_subquerybox.groupby_box.having_agg, current_col_pointer
+                yield "predicate_op", qgm_basebox_or_subquerybox.groupby_box.having_predicate.op, current_col_pointer
+                predicate_col_pointer_increaser()
+    else:
+
+        def set_groupby_exists(action_id):
+            qgm.prev_action_ids += [action_id]
+
+        def set_having_exists(action_id):
+            qgm.prev_action_ids += [action_id]
+
+        def set_having_agg(action_id):
+            qgm.prev_action_ids += [action_id]
+
+        def set_having_op(action_id):
+            qgm.prev_action_ids += [action_id]
+
+        yield "groupby_exists", set_groupby_exists, None
+        groupby_exists = action_id_to_action(qgm.prev_action_ids[-1])
+        assert groupby_exists in {"no", "yes"}
+        if groupby_exists == "no":
+            return
+        yield "having_exists", set_having_exists, None
+        having_exists = action_id_to_action(qgm.prev_action_ids[-1])
+        current_col_pointer = predicate_col_pointer_getter()
+        predicate_col_pointer_increaser()
+        assert having_exists in {"no", "yes"}
+        if having_exists == "no":
+            qgm_basebox_or_subquerybox.add_groupby_using_base_col(current_col_pointer)
+            return
+
+        current_col_pointer = predicate_col_pointer_getter()
+        yield "having_agg", set_having_agg, current_col_pointer
+        agg = QGM_ACTION.action_id_to_action(qgm.prev_action_ids[-1])
+        yield "predicate_op", set_having_op, current_col_pointer
+        op = QGM_ACTION.action_id_to_action(qgm.prev_action_ids[-1])
+
+        having_col_pointer = predicate_col_pointer_getter()
+        qgm_basebox_or_subquerybox.add_groupby_using_base_col(
+            current_col_pointer, having_col_pointer, agg, op, "value"
+        )
+
         predicate_col_pointer_increaser()
 
 
@@ -351,7 +414,7 @@ def qgm_construct(self: QGM):
     )
     for select_col_idx in range(select_col_num):
         yield from qgm_construct_select_col(self, select_col_idx)
-    for predicate_col_idx in range(10):  # predicate at most 10
+    for predicate_col_idx in range(20):  # predicate at most 10
         yield from qgm_construct_infer_predicate_col_or_not(self, predicate_col_idx)
         if self.is_gold:
             if predicate_col_idx == len(self.base_boxes.predicate_cols):
@@ -395,6 +458,9 @@ def qgm_construct(self: QGM):
                 predicate_col_pointer_increaser,
                 op_idx,
             )
+    yield from qgm_construct_groupby(
+        self.base_boxes, predicate_col_pointer_getter, predicate_col_pointer_increaser
+    )
     yield from qgm_construct_orderby(
         self.base_boxes, predicate_col_pointer_getter, predicate_col_pointer_increaser
     )

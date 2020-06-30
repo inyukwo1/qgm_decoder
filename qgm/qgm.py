@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 
 OPS = (
@@ -66,6 +66,9 @@ SYMBOL_ACTIONS = [
     ("orderby_exists", ["no", "yes"]),
     ("orderby_agg", ["none", "max", "min", "count", "sum", "avg"]),
     ("orderby_direction", ["asc", "desc"]),
+    ("groupby_exists", ["no", "yes"]),
+    ("having_exists", ["no", "yes"]),
+    ("having_agg", ["none", "max", "min", "count", "sum", "avg"]),
     ("C", []),
     ("T", []),
 ]
@@ -126,6 +129,7 @@ class QGMSubqueryBox(QGMBase):
         QGMBase.__init__(self, parent)
         self.projection: QGMProjection = None
         self.local_predicates: List[Tuple[str, QGMLocalPredicate]] = []
+        self.groupby_box: QGMGroupbyBox = None
         self.orderby_box: QGMOrderbyBox = None
 
     def __eq__(self, other):
@@ -169,6 +173,53 @@ class QGMSubqueryBox(QGMBase):
         new_orderby_box = QGMOrderbyBox(self, direction, agg, limit_num, col_pointer)
         self.orderby_box = new_orderby_box
 
+    def add_groupby(
+        self,
+        qgm_column: QGMColumn,
+        having_column: QGMColumn = None,
+        having_agg=None,
+        having_op=None,
+        having_value_or_subquery=None,
+    ):
+        new_col_pointer = self.find_base_box().add_predicate_column_returning_col_pointer(
+            qgm_column
+        )
+        having_col_pointer = (
+            self.find_base_box().add_predicate_column_returning_col_pointer(
+                having_column
+            )
+            if having_column is not None
+            else None
+        )
+        self.add_groupby_using_base_col(
+            new_col_pointer,
+            having_col_pointer,
+            having_agg,
+            having_op,
+            having_value_or_subquery,
+        )
+
+    def add_groupby_using_base_col(
+        self,
+        col_pointer,
+        having_col_pointer=None,
+        having_agg=None,
+        having_op=None,
+        having_value_or_subquery=None,
+    ):
+        having_agg = having_agg
+        having_op = having_op
+        having_value_or_subquery = having_value_or_subquery
+        new_groupby_box = QGMGroupbyBox(
+            self,
+            col_pointer,
+            having_col_pointer,
+            having_agg,
+            having_op,
+            having_value_or_subquery,
+        )
+        self.groupby_box = new_groupby_box
+
 
 class QGMLocalPredicate(QGMBase):
     def __init__(
@@ -180,7 +231,6 @@ class QGMLocalPredicate(QGMBase):
         self.value_or_subquery = value_or_subquery
 
     def __eq__(self, other):
-
         return (
             self.op == other.op
             and self.col_pointer == other.col_pointer
@@ -208,7 +258,6 @@ class QGMLocalPredicate(QGMBase):
         ancient = self.parent
         while not isinstance(ancient, QGMBaseBox):
             ancient = ancient.parent
-
         return ancient.predicate_cols[self.col_pointer]
 
 
@@ -311,6 +360,41 @@ class QGMOrderbyBox(QGMBase):
         return ancient.predicate_cols[self.col_pointer]
 
 
+class QGMGroupbyBox(QGMBase):
+    def __init__(
+        self,
+        parent,
+        col_pointer,
+        having_col_pointer=None,
+        having_agg=None,
+        having_op=None,
+        having_value_or_subquery=None,
+    ):
+        QGMBase.__init__(self, parent)
+        self.col_pointer = col_pointer
+        self.having_agg: Optional[str] = None
+        self.having_predicate: Optional[QGMLocalPredicate] = None
+        if having_col_pointer is not None:
+            self.having_agg = having_agg
+            self.having_predicate = QGMLocalPredicate(
+                self, having_op, having_col_pointer, having_value_or_subquery
+            )
+
+    def __eq__(self, other):
+        return (
+            self.col_pointer == other.col_pointer
+            and self.having_agg == other.having_agg
+            and self.having_predicate == other.having_predicate
+        )
+
+    def find_col(self):
+        ancient = self.parent
+        while not isinstance(ancient, QGMBaseBox):
+            ancient = ancient.parent
+
+        return ancient.predicate_cols[self.col_pointer]
+
+
 class QGMBaseBox(QGMBase):
     def __init__(self, parent):
         QGMBase.__init__(self, parent)
@@ -318,6 +402,7 @@ class QGMBaseBox(QGMBase):
         self.predicate_cols: List[QGMColumn] = []
         self.predicate_box = QGMPredicateBox(self)
         self.projection_box = QGMProjectionBox(self)
+        self.groupby_box: QGMGroupbyBox = None
         self.orderby_box: QGMOrderbyBox = None
 
     def __eq__(self, other):
@@ -352,6 +437,49 @@ class QGMBaseBox(QGMBase):
     def add_orderby_using_base_col(self, direction, agg, limit_num, col_pointer):
         new_orderby_box = QGMOrderbyBox(self, direction, agg, limit_num, col_pointer)
         self.orderby_box = new_orderby_box
+
+    def add_groupby(
+        self,
+        qgm_column: QGMColumn,
+        having_column: QGMColumn = None,
+        having_agg=None,
+        having_op=None,
+        having_value_or_subquery=None,
+    ):
+        new_col_pointer = self.add_predicate_column_returning_col_pointer(qgm_column)
+        having_col_pointer = (
+            self.add_predicate_column_returning_col_pointer(having_column)
+            if having_column is not None
+            else None
+        )
+        self.add_groupby_using_base_col(
+            new_col_pointer,
+            having_col_pointer,
+            having_agg,
+            having_op,
+            having_value_or_subquery,
+        )
+
+    def add_groupby_using_base_col(
+        self,
+        col_pointer,
+        having_col_pointer=None,
+        having_agg=None,
+        having_op=None,
+        having_value_or_subquery=None,
+    ):
+        having_agg = having_agg
+        having_op = having_op
+        having_value_or_subquery = having_value_or_subquery
+        new_groupby_box = QGMGroupbyBox(
+            self,
+            col_pointer,
+            having_col_pointer,
+            having_agg,
+            having_op,
+            having_value_or_subquery,
+        )
+        self.groupby_box = new_groupby_box
 
 
 class QGM:

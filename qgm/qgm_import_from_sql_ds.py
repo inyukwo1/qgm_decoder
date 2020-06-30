@@ -15,7 +15,6 @@ def qgm_import_from_sql_ds(sql_ds: SQLDataStructure):
         sql_ds.has_subquery_from()
         or sql_ds.has_subquery_select()
         or sql_ds.has_set_operator()
-        or sql_ds.has_grouping()
         or sql_ds.has_table_without_col()
     ):  # TODO currently not supporting conditions
         return None
@@ -37,6 +36,51 @@ def qgm_import_from_sql_ds(sql_ds: SQLDataStructure):
         append_local_predicate_from_conj_predicate(
             new_qgm.base_boxes.predicate_box, conj, prediate
         )
+    group_clause = sql_ds.sql_with_order.sql_by_set.sql_with_group_chain[0][
+        1
+    ].sql_group_clause
+    if group_clause is not None:
+        assert len(sql_ds.sql_with_order.sql_by_set.sql_with_group_chain) == 1
+        new_column = QGMColumn(new_qgm.base_boxes)
+        new_column.import_from_sql_column(group_clause.sql_column)
+        having_clause = group_clause.sql_having_clause
+        if len(having_clause.sql_having_clause_one_chain) == 0:
+            new_qgm.base_boxes.add_groupby(new_column)
+        else:
+            having_column = QGMColumn(new_qgm.base_boxes)
+            assert len(having_clause.sql_having_clause_one_chain) == 1
+            having_clause_one = having_clause.sql_having_clause_one_chain[0][1]
+            having_column.import_from_sql_column(
+                having_clause_one.left_hand.sql_column_with_agg.sql_column
+            )
+
+            new_qgm.base_boxes.add_groupby(
+                new_column,
+                having_column,
+                having_clause_one.left_hand.sql_column_with_agg.agg,
+                having_clause_one.op,
+                None,
+            )
+            if having_clause_one.op == "between":
+                value_or_subquery = (
+                    qgm_import_value_or_subquery_from_sql_ds(
+                        new_qgm.base_boxes.groupby_box.having_predicate,
+                        having_clause_one.right_hand,
+                    ),
+                    qgm_import_value_or_subquery_from_sql_ds(
+                        new_qgm.base_boxes.groupby_box.having_predicate,
+                        having_clause_one.right_hand2,
+                    ),
+                )
+            else:
+                value_or_subquery = qgm_import_value_or_subquery_from_sql_ds(
+                    new_qgm.base_boxes.groupby_box.having_predicate,
+                    having_clause_one.right_hand,
+                )
+            new_qgm.base_boxes.groupby_box.having_predicate.value_or_subquery = (
+                value_or_subquery
+            )
+
     order_clause = sql_ds.sql_with_order.sql_order_clause
     if order_clause is not None:
         assert len(order_clause.sql_column_with_agg_list) == 1
@@ -94,6 +138,7 @@ def qgm_import_value_or_subquery_from_sql_ds(
         return sql_value_or_subquery.value
     else:
         subquery_box = QGMSubqueryBox(parent)
+        qgm_base = subquery_box.find_base_box()
         sql_subquery: SQLWithOrder = sql_value_or_subquery
         select_clause_columns: List[
             SQLColumnWithAgg
@@ -103,13 +148,58 @@ def qgm_import_value_or_subquery_from_sql_ds(
         ] = sql_subquery.get_where_clauses()
         assert (
             len(select_clause_columns) == 1
-        )  # TODO currently we don't support not in, in
+        )  # TODO currently we dont support multi col selection in subquery
         sql_column_with_agg = select_clause_columns[0]
-        new_column = QGMColumn(subquery_box)
+        new_column = QGMColumn(qgm_base)
         new_column.import_from_sql_column(sql_column_with_agg.sql_column)
         subquery_box.set_projection(new_column, sql_column_with_agg.agg)
         for conj, predicate in predicates:
             append_local_predicate_from_conj_predicate(subquery_box, conj, predicate)
+
+        group_clause = sql_subquery.sql_by_set.sql_with_group_chain[0][
+            1
+        ].sql_group_clause
+        if group_clause is not None:
+            assert len(sql_subquery.sql_by_set.sql_with_group_chain) == 1
+            new_column = QGMColumn(qgm_base)
+            new_column.import_from_sql_column(group_clause.sql_column)
+            having_clause = group_clause.sql_having_clause
+            if len(having_clause.sql_having_clause_one_chain) == 0:
+                subquery_box.add_groupby(new_column)
+            else:
+                having_column = QGMColumn(qgm_base)
+                assert len(having_clause.sql_having_clause_one_chain) == 1
+                having_clause_one = having_clause.sql_having_clause_one_chain[0][1]
+                having_column.import_from_sql_column(
+                    having_clause_one.left_hand.sql_column_with_agg.sql_column
+                )
+
+                subquery_box.add_groupby(
+                    new_column,
+                    having_column,
+                    having_clause_one.left_hand.sql_column_with_agg.agg,
+                    having_clause_one.op,
+                    None,
+                )
+                if having_clause_one.op == "between":
+                    value_or_subquery = (
+                        qgm_import_value_or_subquery_from_sql_ds(
+                            subquery_box.groupby_box.having_predicate,
+                            having_clause_one.right_hand,
+                        ),
+                        qgm_import_value_or_subquery_from_sql_ds(
+                            subquery_box.groupby_box.having_predicate,
+                            having_clause_one.right_hand2,
+                        ),
+                    )
+                else:
+                    value_or_subquery = qgm_import_value_or_subquery_from_sql_ds(
+                        subquery_box.groupby_box.having_predicate,
+                        having_clause_one.right_hand,
+                    )
+                subquery_box.groupby_box.having_predicate.value_or_subquery = (
+                    value_or_subquery
+                )
 
         order_clause = sql_subquery.sql_order_clause
         if order_clause is not None:
