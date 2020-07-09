@@ -212,7 +212,11 @@ class TransformerDecoderFramework(nn.Module):
             decoder_out: torch.Tensor = prev_tensor_dict["decoder_out"].result
 
             current_symbol: Symbol = state.get_current_symbol()
-            if current_symbol in {"predicate_op", "predicate_conj", "projection_agg"}:
+            if state.get_prev_pointer() is not None and current_symbol in {
+                "predicate_op",
+                "predicate_conj",
+                "projection_agg",
+            }:
                 tagging = (
                     "projection_col"
                     if current_symbol == "projection_agg"
@@ -240,8 +244,13 @@ class TransformerDecoderFramework(nn.Module):
         ) -> Dict[str, TensorPromise]:
             def calc_prod_with_idx_and_symbol(org_idx, symbol):
                 if symbol == "C":
+                    invalid_indices = None
+                    if state.is_to_find_key_column():
+                        invalid_indices = state.invalid_key_column_indices(org_idx)
+                    elif state.is_to_find_prev_column():
+                        invalid_indices = state.invalid_prev_column_indices()
                     prod = self.infer_column_similarity.forward_later(
-                        decoder_out, state.get_encoded_col(), None
+                        decoder_out, state.get_encoded_col(), invalid_indices
                     )
                 elif symbol == "T":
                     prod = self.infer_table_similarity.forward_later(

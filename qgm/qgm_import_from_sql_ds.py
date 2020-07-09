@@ -15,7 +15,6 @@ def qgm_import_from_sql_ds(sql_ds: SQLDataStructure):
         sql_ds.has_subquery_from()
         or sql_ds.has_subquery_select()
         or sql_ds.has_set_operator()
-        or sql_ds.has_table_without_col()
     ):  # TODO currently not supporting conditions
         return None
     new_qgm = QGM(sql_ds.db, True)
@@ -29,7 +28,7 @@ def qgm_import_from_sql_ds(sql_ds: SQLDataStructure):
         new_column = QGMColumn(new_qgm.base_boxes)
         new_column.import_from_sql_column(sql_column_with_agg.sql_column)
         new_qgm.base_boxes.projection_box.add_projection(
-            new_column, sql_column_with_agg.agg
+            new_column, None, sql_column_with_agg.agg
         )
 
     for conj, prediate in predicates:
@@ -41,11 +40,13 @@ def qgm_import_from_sql_ds(sql_ds: SQLDataStructure):
     ].sql_group_clause
     if group_clause is not None:
         assert len(sql_ds.sql_with_order.sql_by_set.sql_with_group_chain) == 1
-        new_column = QGMColumn(new_qgm.base_boxes)
-        new_column.import_from_sql_column(group_clause.sql_column)
+        column_setwise_id = group_clause.sql_column.setwise_column_id
+        table_id = group_clause.sql_column.sql_table.table_id
+        is_key = group_clause.sql_column.is_primary_key
+
         having_clause = group_clause.sql_having_clause
         if len(having_clause.sql_having_clause_one_chain) == 0:
-            new_qgm.base_boxes.add_groupby(new_column)
+            new_qgm.base_boxes.add_groupby(column_setwise_id, table_id, is_key)
         else:
             having_column = QGMColumn(new_qgm.base_boxes)
             assert len(having_clause.sql_having_clause_one_chain) == 1
@@ -55,7 +56,9 @@ def qgm_import_from_sql_ds(sql_ds: SQLDataStructure):
             )
 
             new_qgm.base_boxes.add_groupby(
-                new_column,
+                column_setwise_id,
+                table_id,
+                is_key,
                 having_column,
                 having_clause_one.left_hand.sql_column_with_agg.agg,
                 having_clause_one.op,
@@ -66,16 +69,19 @@ def qgm_import_from_sql_ds(sql_ds: SQLDataStructure):
                     qgm_import_value_or_subquery_from_sql_ds(
                         new_qgm.base_boxes.groupby_box.having_predicate,
                         having_clause_one.right_hand,
+                        having_clause_one.left_hand.sql_column_with_agg.sql_column,
                     ),
                     qgm_import_value_or_subquery_from_sql_ds(
                         new_qgm.base_boxes.groupby_box.having_predicate,
                         having_clause_one.right_hand2,
+                        having_clause_one.left_hand.sql_column_with_agg.sql_column,
                     ),
                 )
             else:
                 value_or_subquery = qgm_import_value_or_subquery_from_sql_ds(
                     new_qgm.base_boxes.groupby_box.having_predicate,
                     having_clause_one.right_hand,
+                    having_clause_one.left_hand.sql_column_with_agg.sql_column,
                 )
             new_qgm.base_boxes.groupby_box.having_predicate.value_or_subquery = (
                 value_or_subquery
@@ -118,21 +124,36 @@ def append_local_predicate_from_conj_predicate(
         op = "not in"
     else:
         op = predicate.op
-    parent.add_local_predicate(conj, new_column, op, None)
+    if predicate.left_hand.sql_column_with_agg.sql_column.is_key:
+        parent.add_local_predicate(conj, None, new_column, op, None)
+    else:
+        parent.add_local_predicate(conj, new_column, None, op, None)
     if predicate.op == "between":
         value_or_subquery = (
-            qgm_import_value_or_subquery_from_sql_ds(parent, predicate.right_hand),
-            qgm_import_value_or_subquery_from_sql_ds(parent, predicate.right_hand2),
+            qgm_import_value_or_subquery_from_sql_ds(
+                parent,
+                predicate.right_hand,
+                predicate.left_hand.sql_column_with_agg.sql_column,
+            ),
+            qgm_import_value_or_subquery_from_sql_ds(
+                parent,
+                predicate.right_hand2,
+                predicate.left_hand.sql_column_with_agg.sql_column,
+            ),
         )
     else:
         value_or_subquery = qgm_import_value_or_subquery_from_sql_ds(
-            parent, predicate.right_hand
+            parent,
+            predicate.right_hand,
+            predicate.left_hand.sql_column_with_agg.sql_column,
         )
     parent.local_predicates[-1][1].value_or_subquery = value_or_subquery
 
 
 def qgm_import_value_or_subquery_from_sql_ds(
-    parent: QGMBase, sql_value_or_subquery: Union[SQLValue, SQLWithOrder]
+    parent: QGMBase,
+    sql_value_or_subquery: Union[SQLValue, SQLWithOrder],
+    prev_column: SQLColumn,
 ):
     if isinstance(sql_value_or_subquery, SQLValue):
         return sql_value_or_subquery.value
@@ -150,9 +171,23 @@ def qgm_import_value_or_subquery_from_sql_ds(
             len(select_clause_columns) == 1
         )  # TODO currently we dont support multi col selection in subquery
         sql_column_with_agg = select_clause_columns[0]
-        new_column = QGMColumn(qgm_base)
-        new_column.import_from_sql_column(sql_column_with_agg.sql_column)
-        subquery_box.set_projection(new_column, sql_column_with_agg.agg)
+        if sql_column_with_agg.sql_column.is_key:
+            subquery_box.set_projection_by_key(
+                sql_column_with_agg.agg,
+                sql_column_with_agg.sql_column.setwise_column_id,
+                sql_column_with_agg.sql_column.sql_table.table_id,
+            )
+        else:
+            assert (
+                prev_column.setwise_column_id
+                == sql_column_with_agg.sql_column.setwise_column_id
+                and prev_column.sql_table.table_id
+                == sql_column_with_agg.sql_column.sql_table.table_id
+            )
+            col_pointer = subquery_box.find_base_box().find_predicate_col_pointer(
+                prev_column.setwise_column_id, prev_column.sql_table.table_id
+            )
+            subquery_box.set_projection_by_pointer(sql_column_with_agg.agg, col_pointer)
         for conj, predicate in predicates:
             append_local_predicate_from_conj_predicate(subquery_box, conj, predicate)
 
@@ -161,11 +196,12 @@ def qgm_import_value_or_subquery_from_sql_ds(
         ].sql_group_clause
         if group_clause is not None:
             assert len(sql_subquery.sql_by_set.sql_with_group_chain) == 1
-            new_column = QGMColumn(qgm_base)
-            new_column.import_from_sql_column(group_clause.sql_column)
+            column_id = group_clause.sql_column.setwise_column_id
+            table_id = group_clause.sql_column.sql_table.table_id
+            is_key = group_clause.sql_column.is_primary_key
             having_clause = group_clause.sql_having_clause
             if len(having_clause.sql_having_clause_one_chain) == 0:
-                subquery_box.add_groupby(new_column)
+                subquery_box.add_groupby(column_id, table_id, is_key)
             else:
                 having_column = QGMColumn(qgm_base)
                 assert len(having_clause.sql_having_clause_one_chain) == 1
@@ -175,7 +211,9 @@ def qgm_import_value_or_subquery_from_sql_ds(
                 )
 
                 subquery_box.add_groupby(
-                    new_column,
+                    column_id,
+                    table_id,
+                    is_key,
                     having_column,
                     having_clause_one.left_hand.sql_column_with_agg.agg,
                     having_clause_one.op,
@@ -186,16 +224,19 @@ def qgm_import_value_or_subquery_from_sql_ds(
                         qgm_import_value_or_subquery_from_sql_ds(
                             subquery_box.groupby_box.having_predicate,
                             having_clause_one.right_hand,
+                            having_clause_one.left_hand.sql_column_with_agg.sql_column,
                         ),
                         qgm_import_value_or_subquery_from_sql_ds(
                             subquery_box.groupby_box.having_predicate,
                             having_clause_one.right_hand2,
+                            having_clause_one.left_hand.sql_column_with_agg.sql_column,
                         ),
                     )
                 else:
                     value_or_subquery = qgm_import_value_or_subquery_from_sql_ds(
                         subquery_box.groupby_box.having_predicate,
                         having_clause_one.right_hand,
+                        having_clause_one.left_hand.sql_column_with_agg.sql_column,
                     )
                 subquery_box.groupby_box.having_predicate.value_or_subquery = (
                     value_or_subquery
@@ -222,7 +263,6 @@ def qgm_import_value_or_subquery_from_sql_ds(
 def qgm_column_import_from_sql_column(self: QGMColumn, sql_column: SQLColumn):
     self.origin_column_id = sql_column.origin_column_id
     self.setwise_column_id = sql_column.setwise_column_id
-    self.is_primary_key = sql_column.is_primary_key
     self.table_id = sql_column.sql_table.table_id
 
 

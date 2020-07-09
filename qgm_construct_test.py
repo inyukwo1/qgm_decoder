@@ -72,19 +72,23 @@ if __name__ == "__main__":
             spider_sql = datum["sql"]
             try:
                 origin = beutify(datum["query"])
+
+                if "(SELECT" not in origin:
+                    continue
                 origin = origin.replace("DISTINCT ", "")
-                # if "NOT IN" not in origin:
-                #     continue
 
                 sql_ds = SQLDataStructure.import_from_spider_sql(spider_sql, db)
                 qgm = qgm_import_from_sql_ds(sql_ds)
                 if qgm is None:
+                    print(idx)
+                    print("not supporting")
+                    print(origin)
+                    print("")
                     # TODO not supporting qgm yet
                     continue
                 sql_ds_reconvert = SQLDataStructure()
                 sql_ds_reconvert.import_from_qgm(qgm)
                 reconvert = sql_ds_reconvert.to_string()
-                # assert reconvert.lower() == origin.lower()
                 reconvert_split = reconvert.split()
                 origin_split = origin.split()
 
@@ -106,6 +110,7 @@ if __name__ == "__main__":
                 if len(reconvert.lower()) != len(
                     origin.lower()
                 ):  # TODO HACK!! assuming same length := same query
+                    print(idx)
                     print(reconvert)
                     print(origin)
                     print("")
@@ -117,20 +122,19 @@ if __name__ == "__main__":
                 print("")
                 continue
             new_qgm = QGM(db, False)
-            for (
-                (symbol, answer, prev_idx),
-                (new_symbol, setter, new_qgm_prev_idx),
-            ) in zip(qgm.qgm_construct(), new_qgm.qgm_construct()):
+            for ((symbol, answer, prev_idx), (new_symbol, new_qgm_prev_idx),) in zip(
+                qgm.qgm_construct(), new_qgm.qgm_construct()
+            ):
                 if symbol is None:
                     assert new_symbol is None
                     break
                 assert symbol == new_symbol
-                if symbol in {"C", "T"}:
-                    action_id = answer
-                else:
-                    action_id = QGM_ACTION.symbol_action_to_action_id(symbol, answer)
-                setter(action_id)
+                new_qgm.apply_action(symbol, answer)
                 assert prev_idx == new_qgm_prev_idx
+
+            sql_ds_reconvert = SQLDataStructure()
+            sql_ds_reconvert.import_from_qgm(new_qgm)
+            reconvert = sql_ds_reconvert.to_string()
             assert new_qgm == qgm
             passed_num += 1
             qgm.qgm_canonicalize()

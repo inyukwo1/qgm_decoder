@@ -76,8 +76,26 @@ class SQLColumn(SQLBase):
         SQLBase.__init__(self, parent)
         self.origin_column_id: int = None
         self.setwise_column_id: int = None
-        self.is_primary_key: bool = None
         self.sql_table: SQLTable = None
+
+    @property
+    def is_primary_key(self):
+        if self.origin_column_id is None:
+            self.infer_origin_col_id()
+        return self.origin_column_id in self.db["primary_keys"]
+
+    @property
+    def is_foreign_key(self):
+        if self.origin_column_id is None:
+            self.infer_origin_col_id()
+        for f, p in self.db["foreign_keys"]:
+            if f == self.origin_column_id:
+                return True
+        return False
+
+    @property
+    def is_key(self):
+        return self.is_primary_key or self.is_foreign_key
 
     @property
     def multi_table_ancester(self):

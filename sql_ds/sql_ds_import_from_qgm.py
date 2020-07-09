@@ -116,7 +116,7 @@ def _sql_group_clause_import_from_qgm_groupby_box(
 ):
     if qgm_groupbx_box is None:
         return None
-    qgm_column = qgm_groupbx_box.find_col()
+    qgm_column = qgm_groupbx_box.column
     group_clause = SQLGroupClause(sql_with_group)
     sql_column = SQLColumn(group_clause)
     group_clause.sql_column = sql_column

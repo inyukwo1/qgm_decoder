@@ -69,6 +69,7 @@ SYMBOL_ACTIONS = [
     ("groupby_exists", ["no", "yes"]),
     ("having_exists", ["no", "yes"]),
     ("having_agg", ["none", "max", "min", "count", "sum", "avg"]),
+    ("col_previous_key_stack", ["previous", "key", "stack"]),
     ("C", []),
     ("T", []),
 ]
@@ -97,8 +98,26 @@ class QGMColumn(QGMBase):
         QGMBase.__init__(self, parent)
         self.origin_column_id: int = None
         self.setwise_column_id: int = None
-        self.is_primary_key: bool = None
         self.table_id: int = None
+
+    @property
+    def is_primary_key(self):
+        if self.origin_column_id is None:
+            self.infer_origin_column_id()
+        return self.origin_column_id in self.db["primary_keys"]
+
+    @property
+    def is_foreign_key(self):
+        if self.origin_column_id is None:
+            self.infer_origin_column_id()
+        for f, p in self.db["foreign_keys"]:
+            if f == self.origin_column_id:
+                return True
+        return False
+
+    @property
+    def is_key(self):
+        return self.is_primary_key or self.is_foreign_key
 
     def __eq__(self, other):
         return (
@@ -140,26 +159,45 @@ class QGMSubqueryBox(QGMBase):
                 return False
         return self.projection == other.projection
 
-    def set_projection(self, qgm_column, agg):
-        new_col_pointer = self.find_base_box().add_predicate_column_returning_col_pointer(  # TODO projection? predicate?
-            qgm_column
-        )
-        new_projection = QGMProjection(self, agg, new_col_pointer)
+    def set_projection_by_pointer(self, agg, col_pointer):
+        new_projection = QGMProjection(self, agg, col_pointer, None)
         self.projection = new_projection
 
-    def add_local_predicate(self, conj, qgm_column: QGMColumn, op, value_or_subquery):
-        new_col_pointer = self.find_base_box().add_predicate_column_returning_col_pointer(
-            qgm_column
-        )
-        self.add_local_predicate_using_base_col(
-            conj, op, new_col_pointer, value_or_subquery
-        )
+    def set_projection_by_key(self, agg, key_col_id, key_tab_id):
+        new_projection = QGMProjection(self, agg, None, None)
+        self.projection = new_projection
+        key_column = QGMColumn(self.projection)
+        key_column.setwise_column_id = key_col_id
+        key_column.table_id = key_tab_id
+        key_column.infer_origin_column_id()
+        self.projection.key_column = key_column
+
+    def add_local_predicate(
+        self,
+        conj,
+        qgm_column: Optional[QGMColumn],
+        key_column: Optional[QGMColumn],
+        op,
+        value_or_subquery,
+    ):
+        assert qgm_column is None or key_column is None
+        if key_column is None:
+            new_col_pointer = self.find_base_box().add_predicate_column_returning_col_pointer(
+                qgm_column
+            )
+            self.add_local_predicate_using_base_col(
+                conj, op, new_col_pointer, None, value_or_subquery
+            )
+        else:
+            self.add_local_predicate_using_base_col(
+                conj, op, None, key_column, value_or_subquery
+            )
 
     def add_local_predicate_using_base_col(
-        self, conj, op, col_pointer, value_or_subquery
+        self, conj, op, col_pointer, key_column, value_or_subquery
     ):
         new_local_predicate = QGMLocalPredicate(
-            self, op, col_pointer, value_or_subquery
+            self, op, col_pointer, key_column, value_or_subquery
         )
         self.local_predicates.append((conj, new_local_predicate))
 
@@ -175,15 +213,14 @@ class QGMSubqueryBox(QGMBase):
 
     def add_groupby(
         self,
-        qgm_column: QGMColumn,
+        column_setwise_id,
+        table_id,
+        is_key,
         having_column: QGMColumn = None,
         having_agg=None,
         having_op=None,
         having_value_or_subquery=None,
     ):
-        new_col_pointer = self.find_base_box().add_predicate_column_returning_col_pointer(
-            qgm_column
-        )
         having_col_pointer = (
             self.find_base_box().add_predicate_column_returning_col_pointer(
                 having_column
@@ -191,28 +228,14 @@ class QGMSubqueryBox(QGMBase):
             if having_column is not None
             else None
         )
-        self.add_groupby_using_base_col(
-            new_col_pointer,
-            having_col_pointer,
-            having_agg,
-            having_op,
-            having_value_or_subquery,
-        )
-
-    def add_groupby_using_base_col(
-        self,
-        col_pointer,
-        having_col_pointer=None,
-        having_agg=None,
-        having_op=None,
-        having_value_or_subquery=None,
-    ):
         having_agg = having_agg
         having_op = having_op
         having_value_or_subquery = having_value_or_subquery
         new_groupby_box = QGMGroupbyBox(
             self,
-            col_pointer,
+            column_setwise_id,
+            table_id,
+            is_key,
             having_col_pointer,
             having_agg,
             having_op,
@@ -223,11 +246,13 @@ class QGMSubqueryBox(QGMBase):
 
 class QGMLocalPredicate(QGMBase):
     def __init__(
-        self, parent, op, col_pointer, value_or_subquery
+        self, parent, op, col_pointer, key_column, value_or_subquery
     ):  # can be tuple if op == between
         QGMBase.__init__(self, parent)
         self.op = op
         self.col_pointer = col_pointer
+        self.key_column: Optional[QGMColumn] = key_column
+        assert col_pointer is None or key_column is None
         self.value_or_subquery = value_or_subquery
 
     def __eq__(self, other):
@@ -255,6 +280,9 @@ class QGMLocalPredicate(QGMBase):
         return not isinstance(self.value_or_subquery, QGMSubqueryBox)
 
     def find_col(self):
+        assert self.col_pointer is None or self.key_column is None
+        if self.key_column is not None:
+            return self.key_column
         ancient = self.parent
         while not isinstance(ancient, QGMBaseBox):
             ancient = ancient.parent
@@ -274,33 +302,46 @@ class QGMPredicateBox(QGMBase):
                 return False
         return True
 
-    def add_local_predicate(self, conj, qgm_column: QGMColumn, op, value_or_subquery):
-        new_col_pointer = self.find_base_box().add_predicate_column_returning_col_pointer(
-            qgm_column
-        )
-        self.add_local_predicate_using_base_col(
-            conj, op, new_col_pointer, value_or_subquery
-        )
+    def add_local_predicate(
+        self, conj, qgm_column: QGMColumn, key_column: QGMColumn, op, value_or_subquery
+    ):
+        assert qgm_column is None or key_column is None
+        if key_column is None:
+            new_col_pointer = self.find_base_box().add_predicate_column_returning_col_pointer(
+                qgm_column
+            )
+            self.add_local_predicate_using_base_col(
+                conj, op, new_col_pointer, None, value_or_subquery
+            )
+        else:
+            self.add_local_predicate_using_base_col(
+                conj, op, None, key_column, value_or_subquery
+            )
 
     def add_local_predicate_using_base_col(
-        self, conj, op, col_pointer, value_or_subquery
+        self, conj, op, col_pointer, key_column, value_or_subquery
     ):
         new_local_predicate = QGMLocalPredicate(
-            self, op, col_pointer, value_or_subquery
+            self, op, col_pointer, key_column, value_or_subquery
         )
         self.local_predicates.append((conj, new_local_predicate))
 
 
 class QGMProjection(QGMBase):
-    def __init__(self, parent, agg, col_pointer):
+    def __init__(self, parent, agg, col_pointer, key_column: Optional[QGMColumn]):
         QGMBase.__init__(self, parent)
         self.agg = agg
         self.col_pointer = col_pointer
+        self.key_column: Optional[QGMColumn] = key_column
+        assert col_pointer is None or key_column is None
 
     def __eq__(self, other):
         return self.agg == other.agg and self.col_pointer == other.col_pointer
 
     def find_col(self) -> QGMColumn:
+        assert self.col_pointer is None or self.key_column is None
+        if self.key_column is not None:
+            return self.key_column
         ancient = self.parent
         contained_subquery = False
         while not isinstance(ancient, QGMBaseBox):
@@ -326,14 +367,18 @@ class QGMProjectionBox(QGMBase):
                 return False
         return True
 
-    def add_projection(self, qgm_column: QGMColumn, agg):
-        new_col_pointer = self.find_base_box().add_projection_column_returning_col_pointer(
-            qgm_column
-        )
-        self.add_projection_using_base_col(agg, new_col_pointer)
+    def add_projection(self, qgm_column: QGMColumn, key_column: QGMColumn, agg):
+        assert qgm_column is None or key_column is None
+        if key_column is None:
+            new_col_pointer = self.find_base_box().add_projection_column_returning_col_pointer(
+                qgm_column
+            )
+            self.add_projection_using_base_col(agg, new_col_pointer, None)
+        else:
+            self.add_projection_using_base_col(agg, None, key_column)
 
-    def add_projection_using_base_col(self, agg, col_pointer):
-        new_projection = QGMProjection(self, agg, col_pointer)
+    def add_projection_using_base_col(self, agg, col_pointer, key_column):
+        new_projection = QGMProjection(self, agg, col_pointer, key_column)
         self.projections.append(new_projection)
 
 
@@ -364,35 +409,35 @@ class QGMGroupbyBox(QGMBase):
     def __init__(
         self,
         parent,
-        col_pointer,
+        column_setwise_id,
+        table_id,
+        is_key,
         having_col_pointer=None,
         having_agg=None,
         having_op=None,
         having_value_or_subquery=None,
     ):
         QGMBase.__init__(self, parent)
-        self.col_pointer = col_pointer
+        self.column = QGMColumn(self)
+        self.column.setwise_column_id = column_setwise_id
+        self.column.table_id = table_id
+        self.column.infer_origin_column_id()
+        self.is_key = is_key
+
         self.having_agg: Optional[str] = None
         self.having_predicate: Optional[QGMLocalPredicate] = None
         if having_col_pointer is not None:
             self.having_agg = having_agg
             self.having_predicate = QGMLocalPredicate(
-                self, having_op, having_col_pointer, having_value_or_subquery
+                self, having_op, having_col_pointer, None, having_value_or_subquery
             )
 
     def __eq__(self, other):
         return (
-            self.col_pointer == other.col_pointer
+            self.column == other.column
             and self.having_agg == other.having_agg
             and self.having_predicate == other.having_predicate
         )
-
-    def find_col(self):
-        ancient = self.parent
-        while not isinstance(ancient, QGMBaseBox):
-            ancient = ancient.parent
-
-        return ancient.predicate_cols[self.col_pointer]
 
 
 class QGMBaseBox(QGMBase):
@@ -418,6 +463,8 @@ class QGMBaseBox(QGMBase):
         return (
             self.predicate_box == other.predicate_box
             and self.projection_box == other.projection_box
+            and self.groupby_box == other.groupby_box
+            and self.orderby_box == other.orderby_box
         )
 
     def add_projection_column_returning_col_pointer(self, qgm_column: QGMColumn):
@@ -440,20 +487,23 @@ class QGMBaseBox(QGMBase):
 
     def add_groupby(
         self,
-        qgm_column: QGMColumn,
+        column_setwise_id,
+        table_id,
+        is_key,
         having_column: QGMColumn = None,
         having_agg=None,
         having_op=None,
         having_value_or_subquery=None,
     ):
-        new_col_pointer = self.add_predicate_column_returning_col_pointer(qgm_column)
         having_col_pointer = (
             self.add_predicate_column_returning_col_pointer(having_column)
             if having_column is not None
             else None
         )
         self.add_groupby_using_base_col(
-            new_col_pointer,
+            column_setwise_id,
+            table_id,
+            is_key,
             having_col_pointer,
             having_agg,
             having_op,
@@ -462,18 +512,19 @@ class QGMBaseBox(QGMBase):
 
     def add_groupby_using_base_col(
         self,
-        col_pointer,
+        column_setwise_id,
+        table_id,
+        is_key,
         having_col_pointer=None,
         having_agg=None,
         having_op=None,
         having_value_or_subquery=None,
     ):
-        having_agg = having_agg
-        having_op = having_op
-        having_value_or_subquery = having_value_or_subquery
         new_groupby_box = QGMGroupbyBox(
             self,
-            col_pointer,
+            column_setwise_id,
+            table_id,
+            is_key,
             having_col_pointer,
             having_agg,
             having_op,
@@ -481,17 +532,28 @@ class QGMBaseBox(QGMBase):
         )
         self.groupby_box = new_groupby_box
 
+    def find_predicate_col_pointer(self, setwise_column_id, table_id):
+        last_col_pointer = -1
+        for col_pointer, col in enumerate(self.predicate_cols):
+            if col.setwise_column_id == setwise_column_id and col.table_id == table_id:
+                last_col_pointer = col_pointer
+        return last_col_pointer
+
 
 class QGM:
     def __init__(self, db, is_gold):  # we use spider-like db
         self.is_gold = is_gold
         self.db = db
         self.pointer = None
-        self.prev_action_ids = []
+        self.prev_symbol_actions = []
         self.base_boxes = QGMBaseBox(self)
 
     def __eq__(self, other):
         return self.base_boxes == other.base_boxes
+
+    def apply_action(self, symbol, action):
+
+        self.prev_symbol_actions += [(symbol, action)]
 
     @classmethod
     def import_from_sql_ds(cls):

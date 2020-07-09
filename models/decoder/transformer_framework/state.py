@@ -49,7 +49,14 @@ class TransformerState(State):
         pass
 
     def invalid_table_indices(self, idx) -> List[int]:
-        pass
+        if self.history[idx - 1][0] == "col_previous_key_stack":
+            return []
+        prev_col_idx = self.history[idx - 1][1]
+        valid_indices = self.col_tab_dic[prev_col_idx]
+        invalid_indices = [
+            idx for idx in self.col_tab_dic[0] if idx not in valid_indices
+        ]
+        return invalid_indices
 
     def get_prev_pointer(self):
         pass
@@ -63,6 +70,69 @@ class TransformerState(State):
             if symbol in symbol_list:
                 return symbol
         return None
+
+    def is_to_find_key_column(self):
+        if len(self.history) < 2:
+            return False
+        last_symbol, last_action = self.history[-2]
+        if last_action == "key":
+            assert last_symbol == "col_previous_key_stack"
+            return True
+        return False
+
+    def invalid_key_column_indices(self, org_idx):
+        prev_tab_idx = self.history[org_idx - 1][1]
+        valid_cols = [
+            col_id
+            for col_id in range(len(self.qgm.db["col_set"]))
+            if prev_tab_idx in self.col_tab_dic[col_id]
+        ]
+        valid_col_keys = []
+        for col_id in valid_cols:
+            for p in self.qgm.db["primary_keys"]:
+                if col_id == p:
+                    valid_col_keys.append(col_id)
+                    break
+            for f, _ in self.qgm.db["foreign_keys"]:
+                if col_id == f:
+                    valid_col_keys.append(col_id)
+                    break
+        if len(valid_col_keys) == 0:
+            valid_col_keys.append(valid_cols[1])
+        invalid_indices = [
+            col_id
+            for col_id in range(len(self.qgm.db["col_set"]))
+            if col_id not in valid_col_keys
+        ]
+        return invalid_indices
+
+    def invalid_prev_column_indices(self):
+        valid_cols = [action for symbol, action in self.history if symbol == "C"]
+        assert len(valid_cols) >= 1
+        invalid_indices = [
+            col_id
+            for col_id in range(len(self.qgm.db["col_set"]))
+            if col_id not in valid_cols
+        ]
+        return invalid_indices
+
+    def is_to_find_prev_column(self):
+        if not self.history:
+            return False
+        last_symbol, last_action = self.history[-1]
+        if last_action == "previous":
+            assert last_symbol == "col_previous_key_stack"
+            return True
+        return False
+
+    def is_to_find_prev_table(self):
+        if len(self.history) < 2:
+            return False
+        last_symbol, last_action = self.history[-2]
+        if last_action == "previous":
+            assert last_symbol == "col_previous_key_stack"
+            return True
+        return False
 
 
 class TransformerStateGold(TransformerState):
@@ -133,14 +203,6 @@ class TransformerStateGold(TransformerState):
     def get_current_symbol(self) -> Symbol:
         return self.current_symbol
 
-    def invalid_table_indices(self, idx) -> List[int]:
-        prev_col_idx = self.history[idx - 1][1]
-        valid_indices = self.col_tab_dic[prev_col_idx]
-        invalid_indices = [
-            idx for idx in self.col_tab_dic[0] if idx not in valid_indices
-        ]
-        return invalid_indices
-
     def apply_loss(self, prod: torch.Tensor) -> None:
         gold_symbol = self.current_symbol
         gold_action = self.current_action
@@ -206,9 +268,8 @@ class TransformerStatePred(TransformerState):
             self.current_action = action
             self.prev_pointer = prev_pointer
         else:
-            symbol, prediction_setter, prev_pointer = next(self.qgm_constructor)
+            symbol, prev_pointer = next(self.qgm_constructor)
             self.current_symbol = symbol
-            self.prediction_setter = prediction_setter
             self.prev_pointer = prev_pointer
 
         if symbol is None:
@@ -227,14 +288,6 @@ class TransformerStatePred(TransformerState):
 
     def get_current_symbol(self) -> Symbol:
         return self.current_symbol
-
-    def invalid_table_indices(self, idx) -> List[int]:
-        prev_col_idx = self.history[idx - 1][1]
-        valid_indices = self.col_tab_dic[prev_col_idx]
-        invalid_indices = [
-            idx for idx in self.col_tab_dic[0] if idx not in valid_indices
-        ]
-        return invalid_indices
 
     def apply_pred(self, prod):
         # Select highest prob action
@@ -256,7 +309,7 @@ class TransformerStatePred(TransformerState):
                 action = pred_idx
             else:
                 action = QGM_ACTION.action_id_to_action(pred_idx)
-            self.prediction_setter(action)
+            self.qgm.apply_action(current_symbol, action)
         if self.current_symbol == "C":
             if (
                 self.get_last_symbol_in_history(

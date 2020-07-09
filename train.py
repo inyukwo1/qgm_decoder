@@ -123,8 +123,6 @@ def train(cfg):
     dataset_name = cfg.dataset.name
 
     def validation():
-        pass
-
         global val_step, best_val_acc
         val_acc = utils.epoch_acc(model, cfg.batch_size, val_data).get_acc_dict()
 
