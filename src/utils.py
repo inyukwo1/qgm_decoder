@@ -631,18 +631,7 @@ def load_data_new(
         data["column_names"] = db["column_names"]
 
         # Append ground truth
-        if cfg.rule == "noqgm":
-            gt_str = NOQGM.create_data(data["sql"], db)
-            if gt_str and gt_str is not True:
-                gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
-                data["gt"] = gt
-        elif cfg.rule == "semql":
-            # gt_str = SemQL.create_data(data["qgm"])
-            gt_str = data["rule_label"]
-            if gt_str and NOQGM.create_data(data["sql"], db) and gt_str is not True:
-                gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
-                data["gt"] = gt
-        elif cfg.rule == "qgm":
+        if cfg.rule == "qgm":
             try:
                 sql_ds = SQLDataStructure.import_from_spider_sql(data["sql"], db)
                 qgm = qgm_import_from_sql_ds(sql_ds)
@@ -663,15 +652,16 @@ def load_data_new(
 
     # Filter some db
     if is_bert:
-        sql_data = [
-            data
-            for data in sql_data
-            if data["db_id"] != "baseball_1"
-            and data["db_id"] != "cre_Drama_Workshop_Groups"
-            and data["db_id"] != "sakila_1"
-            and data["db_id"] != "formula_1"
-            and data["db_id"] != "soccer_1"
-        ]
+        assert False  # TODO
+        # sql_data = [
+        #     data
+        #     for data in sql_data
+        #     if data["db_id"] != "baseball_1"
+        #     and data["db_id"] != "cre_Drama_Workshop_Groups"
+        #     and data["db_id"] != "sakila_1"
+        #     and data["db_id"] != "formula_1"
+        #     and data["db_id"] != "soccer_1"
+        # ]
 
     # Filter data with qgm that has nested query
     # sql_data = filter_datas(sql_data, query_type)

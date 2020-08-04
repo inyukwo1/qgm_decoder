@@ -5,6 +5,7 @@ from qgm.qgm import QGM
 from qgm.qgm_action import QGM_ACTION
 from sql_ds.sql_ds import SQLDataStructure
 from sql_ds.sql_ds_to_string import beutify
+import sys, traceback
 
 
 # class QGMConvertTest(unittest.TestCase):
@@ -114,7 +115,9 @@ if __name__ == "__main__":
                 print(idx)
                 print("error")
                 print(beutify(datum["query"]))
+                traceback.print_exc()
                 print("")
+                break
                 continue
             new_qgm = QGM(db, False)
             for (
