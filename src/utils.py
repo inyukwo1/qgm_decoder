@@ -374,7 +374,7 @@ def to_batch_seq(data_list, table_data):
             ]
             for x in data["col_set"]
         ]
-        col_set_iter[0] = ["count", "number", "many"]
+        col_set_iter[0] = ["*"]
 
         # table
         table_names = [
