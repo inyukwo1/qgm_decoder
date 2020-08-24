@@ -5,7 +5,6 @@ from qgm.qgm import QGM
 from qgm.qgm_action import QGM_ACTION
 from sql_ds.sql_ds import SQLDataStructure
 from sql_ds.sql_ds_to_string import beutify
-import sys, traceback
 
 
 # class QGMConvertTest(unittest.TestCase):
@@ -66,68 +65,25 @@ if __name__ == "__main__":
     with open(dev_path) as f:
         data = json.load(f)
         passed_num = 0
-        converted_num = 0
         for idx, datum in enumerate(data):
-            if idx in {155}:
-                # f-p 아닌 조인
-                continue
             db = table_data[datum["db_id"]]
             db["col_set"] = datum["col_set"]
             spider_sql = datum["sql"]
-            try:
-                origin = beutify(datum["query"])
-                origin = origin.replace("DISTINCT ", "")
-                # if "NOT IN" not in origin:
-                #     continue
 
-                sql_ds = SQLDataStructure.import_from_spider_sql(spider_sql, db)
-                qgm = qgm_import_from_sql_ds(sql_ds)
-                if qgm is None:
-                    print(idx)
-                    print("not supporting")
-                    print(beutify(datum["query"]))
-                    print(datum["question"])
-                    print("")
-                    # TODO not supporting qgm yet
-                    continue
-                sql_ds_reconvert = SQLDataStructure()
-                sql_ds_reconvert.import_from_qgm(qgm)
-                reconvert = sql_ds_reconvert.to_string()
-                # assert reconvert.lower() == origin.lower()
-                reconvert_split = reconvert.split()
-                origin_split = origin.split()
-
-                if len(reconvert_split) == len(origin_split):
-                    for word_idx, (r_word, o_word) in enumerate(
-                        zip(reconvert_split, origin_split)
-                    ):
-                        if (
-                            r_word[3:].lower() == o_word.lower()
-                            and r_word[0] == "T"
-                            and r_word[2] == "."
-                        ):
-                            origin_split[word_idx] = (
-                                word_idx[:3] + o_word
-                            )  # TODO HACK!! not really correct
-                reconvert = " ".join(reconvert_split)
-                origin = " ".join(origin_split)
-
-                if len(reconvert.lower()) != len(
-                    origin.lower()
-                ):  # TODO HACK!! assuming same length := same query
-                    print(reconvert)
-                    print(origin)
-                    print("")
-                    continue
-            except:
-                print(idx)
-                print("error")
-                print(beutify(datum["query"]))
-                print(datum["question"])
-                print("")
-                # traceback.print_exc()
-                # break
+            # try:
+            sql_ds = SQLDataStructure.import_from_spider_sql(spider_sql, db)
+            qgm = qgm_import_from_sql_ds(sql_ds)
+            if qgm is None:
+                # TODO not supporting qgm yet
                 continue
+            sql_ds_reconvert = SQLDataStructure()
+            sql_ds_reconvert.import_from_qgm(qgm)
+            reconvert = sql_ds_reconvert.to_string()
+            origin = beutify(datum["query"])
+            origin = origin.replace("DISTINCT ", "")
+            assert reconvert.lower() == origin.lower()
+            # except:
+            #     continue
             new_qgm = QGM(db, False)
             for (
                 (symbol, answer, prev_idx),
@@ -137,23 +93,8 @@ if __name__ == "__main__":
                     assert new_symbol is None
                     break
                 assert symbol == new_symbol
-                if symbol in {"C", "T"}:
-                    action_id = answer
-                else:
-                    action_id = QGM_ACTION.symbol_action_to_action_id(symbol, answer)
-                setter(action_id)
+                setter(QGM_ACTION.symbol_action_to_action_id(symbol, answer))
                 assert prev_idx == new_qgm_prev_idx
             assert new_qgm == qgm
             passed_num += 1
-            qgm.qgm_canonicalize()
-            if new_qgm != qgm:
-                sql_ds_reconvert = SQLDataStructure()
-                sql_ds_reconvert.import_from_qgm(qgm)
-                reconvert = sql_ds_reconvert.to_string()
-                # print(reconvert)
-                # print(origin)
-                # print("")
-                converted_num += 1
-
     print(passed_num)
-    print(converted_num)

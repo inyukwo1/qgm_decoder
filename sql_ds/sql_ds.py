@@ -76,7 +76,6 @@ class SQLColumn(SQLBase):
         SQLBase.__init__(self, parent)
         self.origin_column_id: int = None
         self.setwise_column_id: int = None
-        self.is_primary_key: bool = None
         self.sql_table: SQLTable = None
 
     @property
@@ -87,7 +86,6 @@ class SQLColumn(SQLBase):
         setwise_column_id, tab_id = self._infer_setwise_col_tab_id(from_clause)
         self.setwise_column_id = setwise_column_id
         self._find_parent_table(from_clause, tab_id)
-        # TODO fill is_primary_key
 
     def infer_origin_col_id(self):
         if self.setwise_column_id == 0:
@@ -135,11 +133,57 @@ class SQLColumn(SQLBase):
     def _infer_table_star(self, from_sql_tables):
         if len(from_sql_tables) == 1:
             return from_sql_tables[0].table_id
+        elif len(from_sql_tables) == 2:
+            tab_id_1 = from_sql_tables[0].table_id
+            tab_id_2 = from_sql_tables[1].table_id
+            group_ancestor = self.parent
+            while not isinstance(group_ancestor, SQLWithGroup) and not isinstance(
+                group_ancestor, SQLWithOrder
+            ):
+                group_ancestor = group_ancestor.parent
+            if isinstance(group_ancestor, SQLWithOrder):
+                group_ancestor = group_ancestor.sql_by_set.sql_with_group_chain[0][1]
+            if group_ancestor.sql_group_clause is not None:
+                group_column = group_ancestor.sql_group_clause.sql_column
+                if group_column.is_primary():
+                    return (
+                        tab_id_2
+                        if group_column.sql_table.table_id == tab_id_1
+                        else tab_id_1
+                    )
+                elif group_column.is_foreign():
+                    return (
+                        tab_id_1
+                        if group_column.sql_table.table_id == tab_id_1
+                        else tab_id_2
+                    )
+            else:
+                for (
+                    conj,
+                    where_clause,
+                ) in group_ancestor.sql_where_clause.sql_where_clause_one_chain:
+                    if (
+                        where_clause.left_hand.sql_column_with_agg.sql_column.sql_table
+                        == tab_id_1
+                    ):
+                        return tab_id_2
+                    else:
+                        return tab_id_1
         else:
             assert False  # TODO make rules for this!
 
     def column_name(self):
         return self.db["column_names_original"][self.origin_column_id][1]
+
+    def is_primary(self):
+        assert self.origin_column_id is not None
+        return self.origin_column_id in self.db["primary_keys"]
+
+    def is_foreign(self):
+        for f, p in self.db["foreign_keys"]:
+            if f == self.origin_column_id:
+                return True
+        return False
 
 
 class SQLTable(SQLBase):

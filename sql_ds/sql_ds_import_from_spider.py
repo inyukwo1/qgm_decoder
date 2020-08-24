@@ -78,13 +78,14 @@ def sql_by_set_import_from_spider_sql(self: SQLBySet, sql):
 def sql_with_group_import_from_spider_sql(self: SQLWithGroup, sql):
     self.sql_from_clause = SQLFromClause(self)
     self.sql_from_clause.import_from_spider_sql(sql["from"])
-    self.sql_select_clause = SQLSelectClause(self)
-    self.sql_select_clause.import_from_spider_sql(sql["select"])
+
     self.sql_where_clause = SQLWhereClause(self)
     self.sql_where_clause.import_from_spider_sql(sql["where"])
     if len(sql["groupBy"]) > 0:
         self.sql_group_clause = SQLGroupClause(self)
         self.sql_group_clause.import_from_spider_sql(sql["groupBy"], sql["having"])
+    self.sql_select_clause = SQLSelectClause(self)
+    self.sql_select_clause.import_from_spider_sql(sql["select"])
 
 
 def sql_group_clause_import_from_spider_sql(

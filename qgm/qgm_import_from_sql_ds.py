@@ -15,7 +15,6 @@ def qgm_import_from_sql_ds(sql_ds: SQLDataStructure):
         sql_ds.has_subquery_from()
         or sql_ds.has_subquery_select()
         or sql_ds.has_set_operator()
-        or sql_ds.has_table_without_col()
     ):  # TODO currently not supporting conditions
         return None
     new_qgm = QGM(sql_ds.db, True)
@@ -222,7 +221,6 @@ def qgm_import_value_or_subquery_from_sql_ds(
 def qgm_column_import_from_sql_column(self: QGMColumn, sql_column: SQLColumn):
     self.origin_column_id = sql_column.origin_column_id
     self.setwise_column_id = sql_column.setwise_column_id
-    self.is_primary_key = sql_column.is_primary_key
     self.table_id = sql_column.sql_table.table_id
 
 

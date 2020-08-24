@@ -97,14 +97,12 @@ class QGMColumn(QGMBase):
         QGMBase.__init__(self, parent)
         self.origin_column_id: int = None
         self.setwise_column_id: int = None
-        self.is_primary_key: bool = None
         self.table_id: int = None
 
     def __eq__(self, other):
         return (
             self.origin_column_id == other.origin_column_id
             and self.setwise_column_id == other.setwise_column_id
-            and self.is_primary_key == other.is_primary_key
             and self.table_id == other.table_id
         )
 
