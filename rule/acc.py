@@ -1,11 +1,17 @@
-from qgm.qgm import SYMBOL_ACTIONS
+from qgm.qgm_action import QGM_ACTION
 
 
 class Acc:
     def __init__(self):
-        self.correct_dict = {symbol: 0 for symbol, _ in SYMBOL_ACTIONS}
+        self.correct_dict = {
+            symbol: 0
+            for symbol, _ in QGM_ACTION.get_instance().state_action_dict.items()
+        }
         self.correct_dict.update({"total": 0})
-        self.cnt_dict = {symbol: 0 for symbol, _ in SYMBOL_ACTIONS}
+        self.cnt_dict = {
+            symbol: 0
+            for symbol, _ in QGM_ACTION.get_instance().state_action_dict.items()
+        }
         self.cnt_dict.update({"total": 0})
 
     def correct(self, symbol):

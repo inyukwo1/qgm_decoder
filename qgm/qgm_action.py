@@ -1,5 +1,5 @@
-from qgm.qgm import SYMBOL_ACTIONS
 from typing import NewType
+import json
 
 Symbol = NewType("Symbol", str)
 Action = NewType("Action", str)
@@ -15,10 +15,16 @@ class QGM_ACTION:
         return cls.instance
 
     def __init__(self):
+        with open("data/state_actions.json") as f:
+            self.state_action_dict = json.load(f)
+
+        self.state_action_dict["C"] = []
+        self.state_action_dict["T"] = []
+
         self.symbol_action_id_mapping = dict()
         self.action_id_to_prob_action = dict()
         action_id = 0
-        for symbol, actions in SYMBOL_ACTIONS:
+        for symbol, actions in self.state_action_dict.items():
             self.symbol_action_id_mapping[symbol] = dict()
             for action in actions:
                 self.symbol_action_id_mapping[symbol][action] = action_id
@@ -27,11 +33,16 @@ class QGM_ACTION:
 
     @classmethod
     def total_action_len(cls):
-        return sum([len(actions) for prob, actions in SYMBOL_ACTIONS])
+        return sum(
+            [
+                len(actions)
+                for prob, actions in cls.get_instance().state_action_dict.items()
+            ]
+        )
 
     @classmethod
     def total_symbol_len(cls):
-        return len(SYMBOL_ACTIONS)
+        return len(cls.get_instance().state_action_dict)
 
     @classmethod
     def symbol_action_to_action_id(cls, symbol: str, action: str):
@@ -39,7 +50,9 @@ class QGM_ACTION:
 
     @classmethod
     def symbol_to_symbol_id(cls, symbol: str):
-        for index, (origin_symbol, _) in enumerate(SYMBOL_ACTIONS):
+        for index, (origin_symbol, _) in enumerate(
+            cls.get_instance().state_action_dict.items()
+        ):
             if symbol == origin_symbol:
                 return index
         raise Exception

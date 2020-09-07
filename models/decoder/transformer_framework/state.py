@@ -17,7 +17,7 @@ class TransformerState(State):
         self.col_tab_dic = col_tab_dic
         self.nlq = nlq
         self.history: List[Tuple[Symbol, Action]] = []
-        self.history_indices_by_tagging = {"predicate_col": [], "projection_col": []}
+        self.history_indices = []
 
     @classmethod
     def is_not_done(cls, state) -> bool:
@@ -51,11 +51,8 @@ class TransformerState(State):
     def invalid_table_indices(self, idx) -> List[int]:
         pass
 
-    def get_prev_pointer(self):
+    def get_base_col_pointer(self):
         pass
-
-    def get_history_indices_by_tagging(self, tagging):
-        return self.history_indices_by_tagging[tagging]
 
     def get_last_symbol_in_history(self, symbol_list):
         for idx in range(len(self.history) - 1, -1, -1):
@@ -73,7 +70,7 @@ class TransformerStateGold(TransformerState):
         encoded_col,
         encoded_tab,
         col_tab_dic: Dict[int, List[int]],
-        qgm: QGM,
+        qgm,
         nlq,
     ):
         TransformerState.__init__(
@@ -82,10 +79,9 @@ class TransformerStateGold(TransformerState):
         self.soft_labeling = cfg.soft_labeling
         self.label_smoothing = cfg.label_smoothing
         self.qgm = qgm
-        self.qgm_construct_generator = qgm.qgm_construct()
         self.current_symbol = None
         self.current_action = None
-        self.prev_pointer = None
+        self.base_col_pointer = None
         self.is_done = False
 
         self.loss = Loss(
@@ -103,26 +99,15 @@ class TransformerStateGold(TransformerState):
     def ready(self):
         if self.current_symbol is not None:
             if self.current_symbol == "C":
-                if (
-                    self.get_last_symbol_in_history(
-                        ["select_col_num", "predicate_col_done"]
-                    )
-                    == "select_col_num"
-                ):
-                    self.history_indices_by_tagging["projection_col"] += [
-                        len(self.history)
-                    ]
-                else:
-                    self.history_indices_by_tagging["predicate_col"] += [
-                        len(self.history)
-                    ]
+                self.history_indices += [len(self.history)]
             self.history += [(self.current_symbol, self.current_action)]
-        symbol, action, pointer = next(self.qgm_construct_generator)
-        self.current_symbol = symbol
-        self.current_action = action
-        self.prev_pointer = pointer
-        if symbol is None:
+        if len(self.qgm) == 0:
             self.is_done = True
+        else:
+            symbol, action, pointer = self.qgm.pop(0)
+            self.current_symbol = symbol
+            self.current_action = action
+            self.base_col_pointer = pointer
 
     def is_gold(self):
         return True
@@ -154,8 +139,8 @@ class TransformerStateGold(TransformerState):
         prev_actions = self.history[:]
         self.loss.add(-prod[gold_action_idx], gold_symbol, prev_actions)
 
-    def get_prev_pointer(self):
-        return self.prev_pointer
+    def get_base_col_pointer(self):
+        return self.base_col_pointer
 
 
 class TransformerStatePred(TransformerState):
@@ -181,10 +166,8 @@ class TransformerStatePred(TransformerState):
             self.qgm_acc = Acc()
             self.wrong = False
         else:
-            self.qgm = QGM(db, False)
-            self.prediction_setter = None
-        self.prev_pointer = None
-        self.qgm_constructor = self.qgm.qgm_construct()
+            assert False
+        self.base_col_pointer = None
         self.is_done = False
 
     @classmethod
@@ -201,23 +184,20 @@ class TransformerStatePred(TransformerState):
 
     def ready(self):
         if self.is_analyze:
-            symbol, action, prev_pointer = next(self.qgm_constructor)
-            self.current_symbol = symbol
-            self.current_action = action
-            self.prev_pointer = prev_pointer
+            if len(self.qgm) == 0:
+                self.is_done = True
+                if self.is_analyze:
+                    if self.wrong:
+                        self.qgm_acc.wrong("total")
+                    else:
+                        self.qgm_acc.correct("total")
+            else:
+                symbol, action, pointer = self.qgm.pop(0)
+                self.current_symbol = symbol
+                self.current_action = action
+                self.base_col_pointer = pointer
         else:
-            symbol, prediction_setter, prev_pointer = next(self.qgm_constructor)
-            self.current_symbol = symbol
-            self.prediction_setter = prediction_setter
-            self.prev_pointer = prev_pointer
-
-        if symbol is None:
-            self.is_done = True
-            if self.is_analyze:
-                if self.wrong:
-                    self.qgm_acc.wrong("total")
-                else:
-                    self.qgm_acc.correct("total")
+            assert False
 
     def is_gold(self):
         return False
@@ -252,22 +232,10 @@ class TransformerStatePred(TransformerState):
                 self.qgm_acc.wrong(current_symbol)
                 self.wrong = True
         else:
-            if current_symbol in {"C", "T"}:
-                action = pred_idx
-            else:
-                action = QGM_ACTION.action_id_to_action(pred_idx)
-            self.prediction_setter(action)
+            assert False
         if self.current_symbol == "C":
-            if (
-                self.get_last_symbol_in_history(
-                    ["select_col_num", "predicate_col_done"]
-                )
-                == "select_col_num"
-            ):
-                self.history_indices_by_tagging["projection_col"] += [len(self.history)]
-            else:
-                self.history_indices_by_tagging["predicate_col"] += [len(self.history)]
+            self.history_indices += [len(self.history)]
         self.history.append((current_symbol, action))
 
-    def get_prev_pointer(self):
-        return self.prev_pointer
+    def get_base_col_pointer(self):
+        return self.base_col_pointer

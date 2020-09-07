@@ -391,6 +391,32 @@ def to_batch_seq(data_list, table_data):
         col_tab_dic = get_col_tab_dic(tab_cols, tab_ids, data)
         tab_col_dic = get_tab_col_dic(col_tab_dic)
 
+        gt = []
+        actions = data["gt"]["actions"]
+        states = data["gt"]["states"]
+        column_pointers = data["gt"]["column_pointer"]
+        for action, state, column_pointer in zip(actions, states, column_pointers):
+            if isinstance(action, dict):
+                column_name = action["col_name"]
+                table_name = action["table_name"]
+                table_id = [
+                    name.lower() for name in table["table_names_original"]
+                ].index(table_name.lower())
+                spider_col_id = None
+                for spider_col_id, (spider_table_id, spider_column_name) in enumerate(
+                    table["column_names_original"]
+                ):
+                    if (
+                        spider_column_name.lower() == column_name.lower()
+                        and spider_table_id == table_id
+                    ):
+                        break
+                pretty_col_name = data["column_names"][spider_col_id][1]
+                gt.append(("C", data["col_set"].index(pretty_col_name), -1))
+                gt.append(("T", table_id, -1))
+            else:
+                gt.append((state, action, column_pointer))
+
         # Hot type
         process_dict = process(data, data["db"])
         schema_linking(
@@ -416,7 +442,7 @@ def to_batch_seq(data_list, table_data):
             col_tab_dic=col_tab_dic,
             tab_col_dic=tab_col_dic,
             relation=data["relation"] if "relation" in data else None,
-            gt=data["gt"],
+            gt=gt,
             db_id=data["db_id"],
             db=data["db"],
             data=data,
@@ -531,7 +557,7 @@ def epoch_train(
             for key, item in tmp.items():
                 total_loss[key] += [float(item)]
         elif decoder_name == "transformer":
-            loss = result.loss_dic["sketch"] + result.loss_dic["detail"]
+            loss = result.loss_dic["total"]
 
             # Save
             if not total_loss:
@@ -562,9 +588,6 @@ def epoch_train(
                 optimizer.zero_grad()
                 if bert_optimizer:
                     bert_optimizer.zero_grad()
-            if idx % (batch_size * (len(sql_data) // 5)) == 0:
-                validation_func()
-                model.train()
 
     # Average loss
     for key in total_loss.keys():
@@ -601,6 +624,7 @@ def epoch_acc(
 
 
 def load_data_new(
+    qgm_path,
     sql_path,
     table_data,
     use_small=False,
@@ -610,21 +634,49 @@ def load_data_new(
     cfg=None,
 ):
     sql_data = []
+    qgm_data = []
     log.info("Loading data from {}".format(sql_path))
 
     with open(sql_path) as f:
-        data = json.load(f)
-        for datum in data:
-            # Filter out some datas
-            if remove_punc and datum["question_arg"][-1] in [["?"], ["."]]:
-                del datum["question_arg"][-1]
-                del datum["question_arg_type"][-1]
+        with open(qgm_path) as g:
+            data = json.load(f)
+            qgm_json = json.load(g)
 
-            if "FROM (" not in datum["query"]:
+            assert len(data) == len(qgm_json)
+
+            for datum, qgm_datum in zip(data, qgm_json):
+                # Filter out some datas
+                if remove_punc and datum["question_arg"][-1] in [["?"], ["."]]:
+                    del datum["question_arg"][-1]
+                    del datum["question_arg_type"][-1]
+                datum["query"] = datum["query"].replace("  ", " ")
+                datum["query"] = datum["query"].replace("  ", " ")
+                datum["query"] = datum["query"].replace("  ", " ")
+                assert "  " not in datum["query"]
+                if "actions" not in qgm_datum:
+                    continue
+                if query_type == "simple":
+                    if "join" in datum["query"].lower():
+                        continue
+                    if "group" in datum["query"].lower():
+                        continue
+                    if "(select" in datum["query"].lower():
+                        continue
+                    if "( select" in datum["query"].lower():
+                        continue
+                    if "order" in datum["query"].lower():
+                        continue
+                    if "intersect" in datum["query"].lower():
+                        continue
+                    if "union" in datum["query"].lower():
+                        continue
+                    if "except" in datum["query"].lower():
+                        continue
                 sql_data += [datum]
+                qgm_data += [qgm_datum]
 
     # Add db info
-    for data in sql_data:
+    for data, qgm_datum in zip(sql_data, qgm_data):
         db = table_data[data["db_id"]]
         db["col_set"] = data["col_set"]
         data["db"] = db
@@ -643,19 +695,7 @@ def load_data_new(
                 gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
                 data["gt"] = gt
         elif cfg.rule == "qgm":
-            try:
-                sql_ds = SQLDataStructure.import_from_spider_sql(data["sql"], db)
-                qgm = qgm_import_from_sql_ds(sql_ds)
-                sql_ds_reconvert = SQLDataStructure()
-                sql_ds_reconvert.import_from_qgm(qgm)
-                reconvert = sql_ds_reconvert.to_string()
-                origin = beutify(data["query"])
-                origin = origin.replace("DISTINCT ", "")
-                assert reconvert.lower() == origin.lower()
-                if qgm is not None:
-                    data["gt"] = qgm
-            except:
-                pass
+            data["gt"] = qgm_datum
         else:
             raise NotImplementedError("not yet")
 
@@ -685,7 +725,9 @@ def load_dataset(
     # Get paths
     table_path = os.path.join(dataset_path, "tables.json")
     train_path = os.path.join(dataset_path, "train.json")
+    train_qgm_path = os.path.join(dataset_path, "spider_qgm_train.json")
     val_path = os.path.join(dataset_path, "dev.json")
+    val_qgm_path = os.path.join(dataset_path, "spider_qgm_dev.json")
     table_data = []
 
     # Tables as dictionary
@@ -713,11 +755,28 @@ def load_dataset(
 
     # Load data
     train_data = load_data_new(
-        train_path, table_data, is_toy, is_bert, query_type, remove_punc, cfg
+        train_qgm_path,
+        train_path,
+        table_data,
+        is_toy,
+        is_bert,
+        query_type,
+        remove_punc,
+        cfg,
     )
     val_data = load_data_new(
-        val_path, table_data, is_toy, is_bert, query_type, remove_punc, cfg
+        val_qgm_path,
+        val_path,
+        table_data,
+        is_toy,
+        is_bert,
+        query_type,
+        remove_punc,
+        cfg,
     )
+
+    print(len(train_data))
+    print(len(val_data))
 
     # # Append sql
     # for data in train_data:

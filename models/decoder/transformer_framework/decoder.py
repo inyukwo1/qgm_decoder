@@ -46,17 +46,13 @@ class TransformerDecoderFramework(nn.Module):
         self.infer_symbol_affine_layer = LazyLinear(dim, dim)
         self.infer_tgt_linear_layer = LazyLinear(dim * 2, dim)
         self.infer_out_linear_layer = LazyLinear(dim, dim)
-        self.infer_out_linear_layer_pointer_dict = nn.ModuleDict(
-            {
-                "predicate_op": LazyLinear(dim * 2, dim),
-                "predicate_conj": LazyLinear(dim * 2, dim),
-                "projection_agg": LazyLinear(dim * 2, dim),
-            }
-        )
+        self.infer_out_linear_layer_pointer_dict = LazyLinear(dim * 2, dim)
         self.infer_action_similarity = LazyCalculateSimilarity(dim, dim)
         self.infer_column_similarity = LazyCalculateSimilarity(dim, dim)
         self.infer_table_similarity = LazyCalculateSimilarity(dim, dim)
         self.padding_action_tensor = nn.Parameter(torch.rand(self.dim))
+
+        self.col_end_tensor = nn.Parameter(torch.rand(self.dim))
 
         self.symbol_emb = nn.Embedding(QGM_ACTION.total_symbol_len(), dim)
         self.action_emb = nn.Embedding(QGM_ACTION.total_action_len(), dim)
@@ -116,7 +112,7 @@ class TransformerDecoderFramework(nn.Module):
                     encoded_col[b_idx][: col_lens[b_idx]],
                     encoded_tab[b_idx][: tab_lens[b_idx]],
                     col_tab_dic[b_idx],
-                    golds[b_idx],
+                    golds[b_idx][:],
                     nlqs[b_idx],
                 )
                 for b_idx in range(b_size)
@@ -129,7 +125,7 @@ class TransformerDecoderFramework(nn.Module):
                     encoded_col[b_idx][: col_lens[b_idx]],
                     encoded_tab[b_idx][: tab_lens[b_idx]],
                     col_tab_dic[b_idx],
-                    golds[b_idx],
+                    golds[b_idx][:],
                     dbs[b_idx],
                     nlqs[b_idx],
                     golds is not None,
@@ -212,22 +208,21 @@ class TransformerDecoderFramework(nn.Module):
             decoder_out: torch.Tensor = prev_tensor_dict["decoder_out"].result
 
             current_symbol: Symbol = state.get_current_symbol()
-            if current_symbol in {"predicate_op", "predicate_conj", "projection_agg"}:
-                tagging = (
-                    "projection_col"
-                    if current_symbol == "projection_agg"
-                    else "predicate_col"
-                )
-                predicate_col_pointer = state.get_prev_pointer()
-                history_idx = state.get_history_indices_by_tagging(tagging)[
-                    predicate_col_pointer
-                ]
-                physical_idx = history_idx * (self.padding_num + 1)
-                decoder_out_promise: TensorPromise = self.infer_out_linear_layer_pointer_dict[
-                    current_symbol
-                ].forward_later(
-                    torch.cat((decoder_out[physical_idx], decoder_out[-1],), dim=-1,)
-                )
+            if current_symbol not in {"BASE_COL_EXIST", "C", "T"}:
+                predicate_col_pointer = state.get_base_col_pointer()
+                if predicate_col_pointer == len(state.history_indices):
+                    decoder_out_promise: TensorPromise = self.infer_out_linear_layer_pointer_dict.forward_later(
+                        torch.cat((self.col_end_tensor, decoder_out[-1],), dim=-1,)
+                    )
+
+                else:
+                    history_idx = state.history_indices[predicate_col_pointer]
+                    physical_idx = history_idx * (self.padding_num + 1)
+                    decoder_out_promise: TensorPromise = self.infer_out_linear_layer_pointer_dict.forward_later(
+                        torch.cat(
+                            (decoder_out[physical_idx], decoder_out[-1],), dim=-1,
+                        )
+                    )
             else:
                 decoder_out_promise: TensorPromise = self.infer_out_linear_layer.forward_later(
                     decoder_out[-1]
