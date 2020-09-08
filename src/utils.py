@@ -601,6 +601,7 @@ def epoch_acc(
 
 
 def load_data_new(
+    qgm_path,
     sql_path,
     table_data,
     use_small=False,
@@ -610,21 +611,49 @@ def load_data_new(
     cfg=None,
 ):
     sql_data = []
+    qgm_data = []
     log.info("Loading data from {}".format(sql_path))
 
     with open(sql_path) as f:
-        data = json.load(f)
-        for datum in data:
-            # Filter out some datas
-            if remove_punc and datum["question_arg"][-1] in [["?"], ["."]]:
-                del datum["question_arg"][-1]
-                del datum["question_arg_type"][-1]
+        with open(qgm_path) as g:
+            data = json.load(f)
+            qgm_json = json.load(g)
 
-            if "FROM (" not in datum["query"]:
+            assert len(data) == len(qgm_json)
+
+            for datum, qgm_datum in zip(data, qgm_json):
+                # Filter out some datas
+                if remove_punc and datum["question_arg"][-1] in [["?"], ["."]]:
+                    del datum["question_arg"][-1]
+                    del datum["question_arg_type"][-1]
+                datum["query"] = datum["query"].replace("  ", " ")
+                datum["query"] = datum["query"].replace("  ", " ")
+                datum["query"] = datum["query"].replace("  ", " ")
+                assert "  " not in datum["query"]
+                if "actions" not in qgm_datum:
+                    continue
+                if query_type == "simple":
+                    if "join" in datum["query"].lower():
+                        continue
+                    if "group" in datum["query"].lower():
+                        continue
+                    if "(select" in datum["query"].lower():
+                        continue
+                    if "( select" in datum["query"].lower():
+                        continue
+                    if "order" in datum["query"].lower():
+                        continue
+                    if "intersect" in datum["query"].lower():
+                        continue
+                    if "union" in datum["query"].lower():
+                        continue
+                    if "except" in datum["query"].lower():
+                        continue
                 sql_data += [datum]
+                qgm_data += [qgm_datum]
 
     # Add db info
-    for data in sql_data:
+    for data, qgm_m in zip(sql_data, qgm_data):
         db = table_data[data["db_id"]]
         db["col_set"] = data["col_set"]
         data["db"] = db
@@ -654,12 +683,27 @@ def load_data_new(
                 assert reconvert.lower() == origin.lower()
                 if qgm is not None:
                     data["gt"] = qgm
+                    data["qgm"] = qgm_m
             except:
                 pass
         else:
             raise NotImplementedError("not yet")
 
     sql_data = [item for item in sql_data if "gt" in item]
+    with open(qgm_path + "debug", "w") as f:
+        f.write(
+            json.dumps(
+                [
+                    {
+                        "question": item["question"],
+                        "query": item["query"],
+                        "qgm": item["qgm"],
+                    }
+                    for item in sql_data
+                ],
+                indent=4,
+            )
+        )
 
     # Filter some db
     if is_bert:
@@ -684,7 +728,9 @@ def load_dataset(
 ):
     # Get paths
     table_path = os.path.join(dataset_path, "tables.json")
+    train_qgm_path = os.path.join(dataset_path, "spider_qgm_train.json")
     train_path = os.path.join(dataset_path, "train.json")
+    val_qgm_path = os.path.join(dataset_path, "spider_qgm_dev.json")
     val_path = os.path.join(dataset_path, "dev.json")
     table_data = []
 
@@ -713,11 +759,28 @@ def load_dataset(
 
     # Load data
     train_data = load_data_new(
-        train_path, table_data, is_toy, is_bert, query_type, remove_punc, cfg
+        train_qgm_path,
+        train_path,
+        table_data,
+        is_toy,
+        is_bert,
+        query_type,
+        remove_punc,
+        cfg,
     )
     val_data = load_data_new(
-        val_path, table_data, is_toy, is_bert, query_type, remove_punc, cfg
+        val_qgm_path,
+        val_path,
+        table_data,
+        is_toy,
+        is_bert,
+        query_type,
+        remove_punc,
+        cfg,
     )
+
+    print(len(train_data))
+    print(len(val_data))
 
     # # Append sql
     # for data in train_data:
