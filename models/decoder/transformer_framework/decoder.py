@@ -57,6 +57,8 @@ class TransformerDecoderFramework(nn.Module):
         self.symbol_emb = nn.Embedding(QGM_ACTION.total_symbol_len(), dim)
         self.action_emb = nn.Embedding(QGM_ACTION.total_action_len(), dim)
 
+        self.wrong_trace = []
+
     def action_to_embedding(
         self, state: TransformerState, symbol: Symbol, action: Action,
     ) -> torch.Tensor:
@@ -290,6 +292,22 @@ class TransformerDecoderFramework(nn.Module):
                 .Then(apply_prod)
             )
         ).states
+
+        # for state in states:
+        #     if state.wrong:
+        #         self.wrong_trace.append(
+        #             {
+        #                 "nlq": " ".join([" ".join(word) for word in state.nlq]),
+        #                 "answer/pred": [
+        #                     (ac1[0], str(ac1[1]) + " / " + str(ac2[1]))
+        #                     for ac1, ac2 in zip(state.history, state.pred_history)
+        #                 ],
+        #                 "db": [
+        #                     (i, state.db["table_names"][t_id], c_name)
+        #                     for i, (t_id, c_name) in enumerate(state.db["column_names"])
+        #                 ],
+        #             }
+        #         )
 
         if is_train:
             return TransformerStateGold.combine_loss(states)

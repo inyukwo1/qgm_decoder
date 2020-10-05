@@ -169,6 +169,8 @@ class TransformerStatePred(TransformerState):
             assert False
         self.base_col_pointer = None
         self.is_done = False
+        self.db = db
+        self.pred_history = []
 
     @classmethod
     def is_to_infer(cls, state) -> bool:
@@ -236,6 +238,7 @@ class TransformerStatePred(TransformerState):
         if self.current_symbol == "C":
             self.history_indices += [len(self.history)]
         self.history.append((current_symbol, action))
+        self.pred_history.append((current_symbol, pred_action))
 
     def get_base_col_pointer(self):
         return self.base_col_pointer

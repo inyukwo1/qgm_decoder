@@ -144,6 +144,11 @@ def train(cfg):
                 f.write("val_step: {} Val Acc:{}".format(val_step, best_val_acc))
         val_step += 1
 
+        with open("debug.json", "w") as f:
+            import json
+
+            f.write(json.dumps(model.decoder.wrong_trace, indent=4))
+
     for epoch in range(1, cfg.max_epoch):
         log.info(
             "\nEpoch: {}  lr: {:.2e}  step: {}  Time: {}".format(

@@ -403,6 +403,10 @@ def to_batch_seq(data_list, table_data):
                     name.lower() for name in table["table_names_original"]
                 ].index(table_name.lower())
                 spider_col_id = None
+                if column_name == "*":
+                    gt.append(("C", 0, -1))
+                    gt.append(("T", table_id, -1))
+                    continue
                 for spider_col_id, (spider_table_id, spider_column_name) in enumerate(
                     table["column_names_original"]
                 ):
