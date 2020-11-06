@@ -29,8 +29,9 @@ optimize_freq: 8
 # bert
 bert: 0
 is_bert: false
+bert_lr: 1e-6
 train_bert: true
-use_bert_cache: true
+use_bert_cache: false
 reduce_dim: true
 
 # etc

@@ -1,4 +1,4 @@
 encoder_name: bert
 bert: 0
-bert_lr: 1e-4
+bert_lr: 1e-6
 reduce_dim: false

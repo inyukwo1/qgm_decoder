@@ -283,6 +283,7 @@ class EncoderDecoderModel(nn.Module):
                 batch.src_sents_word,
                 batch.gt if with_gold else None,
                 is_train=is_train,
+                sql=batch.sql
             )
             return output
         elif self.decoder_name == "semql":

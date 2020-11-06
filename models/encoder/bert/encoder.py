@@ -9,6 +9,7 @@ import os
 import pickle
 from tqdm import tqdm
 
+import logging
 # Transformers has a unified API
 # for 8 transformer architectures and 30 pretrained weights.
 #          Model          | Tokenizer          | Pretrained weights shortcut
@@ -140,57 +141,48 @@ class BERT(nn.Module):
         col_sets = batch.table_sents
         table_sets = batch.table_names
         # Process
-        use_preprocessed = True
-        if use_preprocessed:
-            questions = batch.bert_input
-            word_start_end_batch = [item[0] for item in batch.bert_input_indices]
-            col_start_end_batch = [item[1] for item in batch.bert_input_indices]
-            tab_start_end_batch = [item[2] for item in batch.bert_input_indices]
-        else:
-            questions = []
-            question_lens = []
-            word_start_end_batch = []
-            col_start_end_batch = []
-            tab_start_end_batch = []
-            for b in range(B):
-                word_start_ends = []
-                question = "[CLS]"
-                for word in sentences[b]:
-                    start = len(self.tokenizer.tokenize(question))
-                    for one_word in word:
-                        question += " " + one_word
-                    end = len(self.tokenizer.tokenize(question))
-                    word_start_ends.append((start, end))
-                col_start_ends = []
-                for cols in col_sets[b]:
-                    start = len(self.tokenizer.tokenize(question))
-                    question += " [SEP]"
-                    for one_word in cols:
-                        question += " " + one_word
-                    end = len(self.tokenizer.tokenize(question))
-                    col_start_ends.append((start, end))
-                tab_start_ends = []
-                for tabs in table_sets[b]:
-                    start = len(self.tokenizer.tokenize(question))
-                    question += " [SEP]"
-                    for one_word in tabs:
-                        question += " " + one_word
-                    end = len(self.tokenizer.tokenize(question))
-                    tab_start_ends.append((start, end))
-                if end >= self.tokenizer.max_len:
-                    print("xxxxxxxxxx")
-                    exit(-1)
-                question_lens.append(end)
-                questions.append(question)
-                word_start_end_batch.append(word_start_ends)
-                col_start_end_batch.append(col_start_ends)
-                tab_start_end_batch.append(tab_start_ends)
-            if not questions:
-                return None, None, None, None
-            for idx, question_len in enumerate(question_lens):
-                questions[idx] = questions[idx] + (" " + self.tokenizer.pad_token) * (
-                    max(question_lens) - question_len
-                )
+        questions = []
+        question_lens = []
+        word_start_end_batch = []
+        col_start_end_batch = []
+        tab_start_end_batch = []
+        for b in range(B):
+            word_start_ends = []
+            question = "[CLS]"
+            for word in sentences[b]:
+                start = len(self.tokenizer.tokenize(question))
+                for one_word in word:
+                    question += " " + one_word
+                end = len(self.tokenizer.tokenize(question))
+                word_start_ends.append((start, end))
+            col_start_ends = []
+            for cols in col_sets[b]:
+                start = len(self.tokenizer.tokenize(question))
+                question += " [SEP]"
+                for one_word in cols:
+                    question += " " + one_word
+                end = len(self.tokenizer.tokenize(question))
+                col_start_ends.append((start, end))
+            tab_start_ends = []
+            for tabs in table_sets[b]:
+                start = len(self.tokenizer.tokenize(question))
+                question += " [SEP]"
+                for one_word in tabs:
+                    question += " " + one_word
+                end = len(self.tokenizer.tokenize(question))
+                tab_start_ends.append((start, end))
+            if end >= self.tokenizer.max_len:
+                print("xxxxxxxxxx")
+                exit(-1)
+            question_lens.append(end)
+            questions.append(question)
+            word_start_end_batch.append(word_start_ends)
+            col_start_end_batch.append(col_start_ends)
+            tab_start_end_batch.append(tab_start_ends)
+        for idx, question_len in enumerate(question_lens):
+            questions[idx] = questions[idx] + (" " + self.tokenizer.pad_token) * (
+                max(question_lens) - question_len
+            )
         # Encode
         src_encodings = []
         table_embedding = []

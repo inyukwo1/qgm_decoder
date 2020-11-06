@@ -72,6 +72,7 @@ class TransformerStateGold(TransformerState):
         col_tab_dic: Dict[int, List[int]],
         qgm,
         nlq,
+            sql
     ):
         TransformerState.__init__(
             self, encoded_src, encoded_col, encoded_tab, col_tab_dic, nlq
@@ -83,6 +84,7 @@ class TransformerStateGold(TransformerState):
         self.current_action = None
         self.base_col_pointer = None
         self.is_done = False
+        self.sql = sql
 
         self.loss = Loss(
             [symbol for symbol, _ in SYMBOL_ACTIONS] + ["detail", "sketch", "total"]
@@ -153,6 +155,7 @@ class TransformerStatePred(TransformerState):
         gold,
         db,
         nlq,
+            sql,
         is_analyze=True,
     ):
         TransformerState.__init__(
@@ -170,6 +173,7 @@ class TransformerStatePred(TransformerState):
         self.base_col_pointer = None
         self.is_done = False
         self.db = db
+        self.sql = sql
         self.pred_history = []
 
     @classmethod

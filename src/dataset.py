@@ -122,6 +122,7 @@ class Batch(object):
         self.gt = [e.gt for e in examples]
         self.db = [e.db for e in examples]
         self.bert_input_indices = [e.bert_input_indices for e in examples]
+        self.sql = [e.sql for e in examples]
         if use_bert_cache:
             self.bert_input = [e.bert_input for e in examples]
         else:

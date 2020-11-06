@@ -25,6 +25,9 @@ from utils import (
     group_values,
     group_digital,
     group_db,
+    partial_matches,
+    value_match,
+    db_match
 )
 from utils import AGG, wordnet_lemmatizer
 from utils import load_dataSets
@@ -173,162 +176,104 @@ def process_datas(datas, args, dataset_name):
         type_concol = []
         nltk_result = nltk.pos_tag(question_toks)
         while idx < num_toks:
+            for endIdx in reversed(range(idx + 1, num_toks + 1)):
+                sub_toks = " ".join(question_toks[idx:endIdx])
+                sub_toks_list = question_toks[idx:endIdx]
+                original_sub_toks = " ".join(origin_question_toks[idx:endIdx])
+                original_sub_toks_list = origin_question_toks[idx:endIdx]
+                sub_tok_types = []
+                partial_col_match = partial_matches(sub_toks_list, header_toks)
+                partial_tab_match = partial_matches(sub_toks_list, table_names)
 
-            # fully header
-            end_idx, header = fully_part_header(
-                question_toks, idx, num_toks, header_toks
-            )
-            if header:
-                tok_concol.append(question_toks[idx:end_idx])
-                type_concol.append(["col"])
-                idx = end_idx
-                continue
+                if sub_toks in header_toks:
+                    sub_tok_types.append(["col", header_toks.index(sub_toks)])
+                elif partial_col_match:
+                    sub_tok_types.append(["col_part", partial_col_match])
 
-            # check for table
-            end_idx, tname = group_header(question_toks, idx, num_toks, table_names)
-            if tname:
-                tok_concol.append(question_toks[idx:end_idx])
-                type_concol.append(["table"])
-                idx = end_idx
-                continue
+                if sub_toks in table_names:
+                    sub_tok_types.append(["table", table_names.index(sub_toks)])
+                elif partial_tab_match:
+                    sub_tok_types.append(["table_part", partial_tab_match])
 
-            # check for column
-            end_idx, header = group_header(question_toks, idx, num_toks, header_toks)
-            if header:
-                tok_concol.append(question_toks[idx:end_idx])
-                type_concol.append(["col"])
-                idx = end_idx
-                continue
+                # check for aggregation
+                if sub_toks in AGG:
+                    sub_tok_types.append(["agg"])
 
-            # check for partial column
-            end_idx, tname, headers = partial_header(
-                question_toks, idx, header_toks_list
-            )
-            if tname:
-                tok_concol.append(tname)
-                type_concol.append(["col"] + headers)
-                idx = end_idx
-                continue
-            # check for aggregation
-            end_idx, agg = group_header(question_toks, idx, num_toks, AGG)
-            if agg:
-                tok_concol.append(question_toks[idx:end_idx])
-                type_concol.append(["agg"])
-                idx = end_idx
-                continue
+                def get_concept_result(toks, graph):
+                    for begin_id in range(0, len(toks)):
+                        for r_ind in reversed(range(1, len(toks) + 1 - begin_id)):
+                            tmp_query = "_".join(toks[begin_id:r_ind])
+                            if tmp_query in graph:
+                                mi = graph[tmp_query]
+                                for col in entry["col_set"]:
+                                    if col in mi:
+                                        return col
+                if idx > 0 and endIdx < len(question_toks) - 1 and \
+                        question_toks[idx - 1] == "'" and question_toks[endIdx] == "'":
+                    pro_result = get_concept_result(sub_toks_list, english_IsA)
+                    if pro_result is None:
+                        pro_result = get_concept_result(sub_toks_list, english_RelatedTo)
+                    if pro_result is None:
+                        pro_result = "NONE"
+                    sub_tok_types.append([pro_result])
 
-            if nltk_result[idx][1] == "RBR" or nltk_result[idx][1] == "JJR":
-                tok_concol.append([question_toks[idx]])
-                type_concol.append(["MORE"])
-                idx += 1
-                continue
+                if value_match(original_sub_toks_list) and (len(original_sub_toks_list) > 1 or question_toks[idx - 1] not in ["?", "."]):
+                    tmp_toks = [
+                        x if x in SKIP_WORDS else wordnet_lemmatizer.lemmatize(x)
+                        for x in sub_toks_list
+                    ]
+                    pro_result = get_concept_result(tmp_toks, english_IsA)
+                    if pro_result is None:
+                        pro_result = get_concept_result(tmp_toks, english_RelatedTo)
+                    if pro_result is None:
+                        pro_result = "NONE"
+                    sub_tok_types.append([pro_result])
 
-            if nltk_result[idx][1] == "RBS" or nltk_result[idx][1] == "JJS":
-                tok_concol.append([question_toks[idx]])
-                type_concol.append(["MOST"])
-                idx += 1
-                continue
+                db_cols = db_match(original_sub_toks, db_values[db_id])
 
-            # string match for Time Format
-            if num2year(question_toks[idx]):
-                question_toks[idx] = "year"
-                end_idx, header = group_header(
-                    question_toks, idx, num_toks, header_toks
-                )
-                if header:
-                    tok_concol.append(question_toks[idx:end_idx])
-                    type_concol.append(["col"])
-                    idx = end_idx
-                    continue
+                if db_cols and not (endIdx == idx + 1 and (
+                    nltk_result[idx][1] == "VBZ"
+                    or nltk_result[idx][1] == "IN"
+                    or nltk_result[idx][1] == "CC"
+                    or nltk_result[idx][1] == "DT"
+                    or origin_question_toks[idx] == "'"
+                    or (nltk_result[idx][1] == "VBP" and origin_question_toks[idx] == "are")
+                    or (nltk_result[idx][1] == "VBP" and origin_question_toks[idx] == "do")
+                    or (nltk_result[idx][1] == "VBP" and origin_question_toks[idx] == "doe")
+                    or (
+                        nltk_result[idx][1] == "VBP" and origin_question_toks[idx] == "does"
+                    )
+                )):
+                    sub_tok_types.append(["db", db_cols])
 
-            def get_concept_result(toks, graph):
-                for begin_id in range(0, len(toks)):
-                    for r_ind in reversed(range(1, len(toks) + 1 - begin_id)):
-                        tmp_query = "_".join(toks[begin_id:r_ind])
-                        if tmp_query in graph:
-                            mi = graph[tmp_query]
-                            for col in entry["col_set"]:
-                                if col in mi:
-                                    return col
+                if endIdx == idx + 1:
+                    if nltk_result[idx][1] == "RBR" or nltk_result[idx][1] == "JJR":
+                        sub_tok_types.append(["MORE"])
 
-            end_idx, symbol = group_symbol(question_toks, idx, num_toks)
-            if symbol:
-                tmp_toks = [x for x in question_toks[idx:end_idx]]
-                assert len(tmp_toks) > 0, print(symbol, question_toks)
-                pro_result = get_concept_result(tmp_toks, english_IsA)
-                if pro_result is None:
-                    pro_result = get_concept_result(tmp_toks, english_RelatedTo)
-                if pro_result is None:
-                    pro_result = "NONE"
-                for tmp in tmp_toks:
-                    tok_concol.append([tmp])
-                    type_concol.append([pro_result])
-                    pro_result = "NONE"
-                idx = end_idx
-                continue
+                    if nltk_result[idx][1] == "RBS" or nltk_result[idx][1] == "JJS":
+                        sub_tok_types.append(["MOST"])
 
-            end_idx, values = group_values(origin_question_toks, idx, num_toks)
-            if values and (len(values) > 1 or question_toks[idx - 1] not in ["?", "."]):
-                tmp_toks = [
-                    x if x in SKIP_WORDS else wordnet_lemmatizer.lemmatize(x)
-                    for x in question_toks[idx:end_idx]
-                ]
-                assert len(tmp_toks) > 0, print(
-                    question_toks[idx:end_idx], values, question_toks, idx, end_idx
-                )
-                pro_result = get_concept_result(tmp_toks, english_IsA)
-                if pro_result is None:
-                    pro_result = get_concept_result(tmp_toks, english_RelatedTo)
-                if pro_result is None:
-                    pro_result = "NONE"
-                for tmp in tmp_toks:
-                    tok_concol.append([tmp])
-                    type_concol.append([pro_result])
-                    pro_result = "NONE"
-                idx = end_idx
-                continue
+                    # string match for Time Format
+                    if num2year(sub_toks):
+                        question_toks[idx] = "year"
+                        partial_year_match = partial_matches(["year"], header_toks)
+                        if "year" in header_toks:
+                            sub_tok_types.append(["col", header_toks.index("year")])
+                        elif partial_year_match:
+                            sub_tok_types.append(["col_part", partial_year_match])
 
-            end_idx, values, cols = group_db(
-                origin_question_toks, idx, num_toks, db_values[db_id]
-            )
-            if end_idx == idx + 1 and (
-                nltk_result[idx][1] == "VBZ"
-                or nltk_result[idx][1] == "IN"
-                or nltk_result[idx][1] == "CC"
-                or nltk_result[idx][1] == "DT"
-                or origin_question_toks[idx] == "'"
-                or (nltk_result[idx][1] == "VBP" and origin_question_toks[idx] == "are")
-                or (nltk_result[idx][1] == "VBP" and origin_question_toks[idx] == "do")
-                or (nltk_result[idx][1] == "VBP" and origin_question_toks[idx] == "doe")
-                or (
-                    nltk_result[idx][1] == "VBP" and origin_question_toks[idx] == "does"
-                )
-            ):
-                tok_concol.append([origin_question_toks[idx]])
-                type_concol.append(["NONE"])
-                idx += 1
-                continue
-            if values:
-                tok_concol.append(question_toks[idx:end_idx])
-
-                type_concol.append(["db"] + cols)
-                idx = end_idx
-                continue
-
-            result = group_digital(question_toks, idx)
-            if result is True:
-                tok_concol.append(question_toks[idx : idx + 1])
-                type_concol.append(["value"])
-                idx += 1
-                continue
-            if question_toks[idx] == ["ha"]:
-                question_toks[idx] = ["have"]
-
-            tok_concol.append([origin_question_toks[idx]])
-            type_concol.append(["NONE"])
-            idx += 1
-            continue
-
+                    result = group_digital(question_toks, idx)
+                    if result is True:
+                        sub_tok_types.append(["value"])
+                    if question_toks[idx] == ["ha"]:
+                        question_toks[idx] = ["have"]
+                    if len(sub_tok_types) == 0:
+                        sub_tok_types.append(["NONE"])
+                if len(sub_tok_types) != 0:
+                    tok_concol.append(sub_toks_list)
+                    type_concol.append(sub_tok_types)
+                    idx = endIdx
+                    break
         entry["question_arg"] = tok_concol
         entry["question_arg_type"] = type_concol
         entry["nltk_pos"] = nltk_result

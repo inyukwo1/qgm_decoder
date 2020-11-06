@@ -9,6 +9,7 @@ import pickle
 import numpy as np
 from tqdm import tqdm
 from nltk.stem import WordNetLemmatizer
+from transformers import *
 import logging
 
 from src.dataset import Example
@@ -22,7 +23,6 @@ from rule.noqgm.noqgm import NOQGM
 from rule.semql.semql import SemQL
 from rule.acc import Acc
 from heat_map import *
-from transformers import *
 
 wordnet_lemmatizer = WordNetLemmatizer()
 log = logging.getLogger(__name__)
@@ -164,76 +164,47 @@ def schema_linking(
     sql,
 ):
 
-    for count_q, t_q in enumerate(question_arg_type):
-        t = t_q[0]
-        if t == "NONE":
-            continue
-        elif t == "table":
-            one_hot_type[count_q][0] = 1
-            try:
-                for tab_set_idx in range(len(tab_set_iter)):
-                    if tab_set_iter[tab_set_idx] == question_arg[count_q]:
-                        tab_set_type[tab_set_idx][1] = 5
+    for count_q, possible_types in enumerate(question_arg_type):
+        for possible_type in possible_types:
+            type_name = possible_type[0]
+            if type_name == "table":
+                tab_set_idx = possible_type[1]
+                one_hot_type[count_q][0] = 1
+                tab_set_type[tab_set_idx][0] = 1
                 question_arg[count_q] = ["[table]"] + question_arg[count_q]
-            except:
-                print(tab_set_iter, question_arg[count_q])
-                raise RuntimeError("not in tab set")
-        elif t == "col":
-            one_hot_type[count_q][1] = 1
-            try:
-                if len(t_q) > 1:
-                    for col_name_idx in range(1, len(t_q)):
-                        col_set_type[col_set_iter.index(t_q[col_name_idx])][8] += 1
-                else:
-                    for col_set_idx in range(len(col_set_iter)):
-                        if col_set_iter[col_set_idx] == question_arg[count_q]:
-                            col_set_type[col_set_idx][1] = 5
+            elif type_name == "table_part":
+                for tab_id in  possible_type[1]:
+                    tab_set_type[tab_id][1] = 1
+                one_hot_type[count_q][1] = 1
+                question_arg[count_q] = ["[table]"] + question_arg[count_q]
+            elif type_name == "col":
+                col_set_idx = possible_type[1]
+                one_hot_type[count_q][2] = 1
+                col_set_type[col_set_idx][0] = 1
                 question_arg[count_q] = ["[column]"] + question_arg[count_q]
-            except:
-                print(col_set_iter, question_arg[count_q])
-                raise RuntimeError("not in col set")
-        elif t == "agg":
-            one_hot_type[count_q][2] = 1
-        elif t == "MORE":
-            one_hot_type[count_q][3] = 1
-        elif t == "MOST":
-            one_hot_type[count_q][4] = 1
-        elif t == "value":
-            one_hot_type[count_q][5] = 1
-            question_arg[count_q] = ["[value]"] + question_arg[count_q]
-        elif t == "db":
-            one_hot_type[count_q][6] = 1
-            question_arg[count_q] = ["[db]"] + question_arg[count_q]
-            for col_name_idx in range(1, len(t_q)):
-                c_cand = [
-                    v.lower()
-                    if v in SKIP_WORDS
-                    else wordnet_lemmatizer.lemmatize(v).lower()
-                    for v in t_q[col_name_idx].split(" ")
-                ]
-                col_set_type[col_set_iter.index(c_cand)][4] = 5
-        else:
-            if len(t_q) == 1:
-                for col_probase in t_q:
-                    if col_probase == "asd":
-                        continue
-                    try:
-                        for col_set_idx in range(len(sql["col_set"])):
-                            if sql["col_set"][col_set_idx] == col_probase:
-                                col_set_type[col_set_idx][2] = 5
-                        question_arg[count_q] = ["[value]"] + question_arg[count_q]
-                    except:
-                        print(sql["col_set"], col_probase)
-                        raise RuntimeError("not in col")
-                    one_hot_type[count_q][5] = 1
+            elif type_name == "col_part":
+                for col_id in possible_type[1]:
+                    col_set_type[col_id][1] = 1
+                one_hot_type[count_q][3] = 1
+                question_arg[count_q] = ["[column]"] + question_arg[count_q]
+            elif type_name == "agg":
+                one_hot_type[count_q][4] = 1
+            elif type_name == "MORE":
+                one_hot_type[count_q][5] = 1
+            elif type_name == "MOST":
+                one_hot_type[count_q][6] = 1
+            elif type_name == "value":
+                one_hot_type[count_q][7] = 1
+                question_arg[count_q] = ["[value]"] + question_arg[count_q]
+            elif type_name == "db":
+                one_hot_type[count_q][8] = 1
+                for col_id in possible_type[1]:
+                    col_set_type[col_id][2] = 1
+                question_arg[count_q] = ["[db]"] + question_arg[count_q]
+            elif type_name == "NONE":
+                continue
             else:
-                for col_probase in t_q:
-                    if col_probase == "asd":
-                        continue
-                    for col_set_idx in range(len(sql["col_set"])):
-                        if sql["col_set"][col_set_idx] == col_probase:
-                            col_set_type[col_set_idx][3] += 1
-
+                continue
 
 def process(sql, db_data):
     process_dict = {}
@@ -279,7 +250,7 @@ def process(sql, db_data):
     ]
     question_arg = copy.deepcopy(sql["question_arg"])
     question_arg_type = sql["question_arg_type"]
-    one_hot_type = np.zeros((len(question_arg_type), 7))
+    one_hot_type = np.zeros((len(question_arg_type), 9))
 
     col_set_type = np.zeros((len(col_set_iter), 9))  # 5:primary 6:foreign 7: multi
     tab_set_type = np.zeros((len(table_names), 5))
@@ -592,6 +563,9 @@ def epoch_train(
                 optimizer.zero_grad()
                 if bert_optimizer:
                     bert_optimizer.zero_grad()
+            if idx % 1000 == 999:
+                validation_func()
+                model.train()
 
     # Average loss
     for key in total_loss.keys():
@@ -729,9 +703,11 @@ def load_dataset(
     # Get paths
     table_path = os.path.join(dataset_path, "tables.json")
     train_path = os.path.join(dataset_path, "train.json")
-    train_qgm_path = os.path.join(dataset_path, "spider_qgm_train.json")
+    train_qgm_path = os.path.join(dataset_path, "wikisql_qgm_train.json")
     val_path = os.path.join(dataset_path, "dev.json")
-    val_qgm_path = os.path.join(dataset_path, "spider_qgm_dev.json")
+    val_qgm_path = os.path.join(dataset_path, "wikisql_qgm_dev.json")
+    test_path = os.path.join(dataset_path, "test.json")
+    test_qgm_path = os.path.join(dataset_path, "wikisql_qgm_test.json")
     table_data = []
 
     # Tables as dictionary
@@ -778,9 +754,20 @@ def load_dataset(
         remove_punc,
         cfg,
     )
+    test_data = load_data_new(
+        test_qgm_path,
+        test_path,
+        table_data,
+        is_toy,
+        is_bert,
+        query_type,
+        remove_punc,
+        cfg,
+    )
 
     print(len(train_data))
     print(len(val_data))
+    print(len(test_data))
 
     # # Append sql
     # for data in train_data:
@@ -793,6 +780,10 @@ def load_dataset(
     val_data = [
         relation.create_relation(cfg, item, table_data, True) for item in val_data
     ]
+    test_data = [
+        relation.create_relation(cfg, item, table_data, True) for item in test_data
+    ]
+
 
     # Show dataset length
     log.info("Total training set: {}".format(len(train_data)))
@@ -802,10 +793,12 @@ def load_dataset(
     if use_down_schema:
         train_data = down_schema(train_data)
         val_data = down_schema(val_data)
+        test_data = down_schema(test_data)
 
     # Parse datasets into exampels:
     train_data = to_batch_seq(train_data, table_data)
     val_data = to_batch_seq(val_data, table_data)
+    test_data = to_batch_seq(test_data, table_data)
 
     # Append bert input data
     if is_bert:
@@ -820,7 +813,7 @@ def load_dataset(
         append_bert_input(val_data, bert_encoder.tokenizer)
         bert_encoder.create_cache([train_data, val_data])
 
-    return train_data, val_data, table_data
+    return train_data, val_data, test_data, table_data
 
 
 def down_schema(datas):

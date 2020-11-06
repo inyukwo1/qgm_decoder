@@ -111,6 +111,30 @@ def partial_header(toks, idx, header_toks):
                 return endIdx, sub_toks, []
     return idx, None, None
 
+def partial_matches(toks, header_toks):
+    def check_in(list_one, list_two):
+        if len(set(list_one) & set(list_two)) == len(list_one) and (len(list_two) <= 3):
+            return True
+
+    headers = []
+    if len(toks) > 1:
+        flag_count = 0
+        for head_idx, heads in enumerate(header_toks):
+            if check_in(toks, heads):
+                flag_count += 1
+                headers.append(head_idx)
+        if flag_count > 0:
+            return headers
+    else:
+        flag_count = 0
+        for head_idx, heads in enumerate(header_toks):
+            if check_in(toks, heads):
+                flag_count += 1
+                headers.append(head_idx)
+        if flag_count > 0:
+            return headers
+    return headers
+
 
 def symbol_filter(questions):
     question_tmp_q = []
@@ -151,6 +175,16 @@ def group_db(toks, idx, num_toks, col_value_set):
             return endIdx, sub_toks, cols
     return idx, None, cols
 
+def db_match(sub_toks, col_value_set):
+    cols = []
+
+    for col_id, col in enumerate(col_value_set):
+        if (
+            sub_toks.lower() in col_value_set[col]
+            or lemma(sub_toks.lower()) in col_value_set[col]
+        ):
+            cols.append(col_id)
+    return cols
 
 def group_values(toks, idx, num_toks):
     def check_isupper(tok_lists):
@@ -172,6 +206,24 @@ def group_values(toks, idx, num_toks):
             ):
                 return endIdx, sub_toks
     return idx, None
+
+
+def value_match(tok_list):
+    def check_isupper(tok_lists):
+        for tok_one in tok_lists:
+            if tok_one[0].isupper() is False:
+                return False
+        return True
+    if len(tok_list) > 1 and check_isupper(tok_list) is True:
+        return True
+    if len(tok_list) == 1:
+        if (
+            tok_list[0][0].isupper()
+            and tok_list[0].lower() not in VALUE_FILTER
+            and tok_list[0].lower().isalnum() is True
+        ):
+            return True
+    return False
 
 
 def group_digital(toks, idx):

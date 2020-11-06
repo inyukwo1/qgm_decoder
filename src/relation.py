@@ -398,13 +398,11 @@ def parse_q_q_relation(USE_DEP, sentence, relation_matrix):
 def append_db_content_relation(
     first_symbol, relation_matrix, column_names, token_types
 ):
-    for q_idx, type in enumerate(token_types):
-        # If token is db content
-        if type[0] == "db":
-            target_column_name = type[1:]
-            for c_idx, column_name in enumerate(column_names):
-                if column_name == target_column_name:
-                    # Fix relation type
+    for q_idx, types in enumerate(token_types):
+        for type in types:
+            # If token is db content
+            if type[0] == "db":
+                for c_idx in type[1]:
                     if first_symbol == "q":
                         relation_matrix[q_idx][c_idx] = RELATION_TYPE["qc_db"]
                     else:

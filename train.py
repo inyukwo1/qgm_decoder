@@ -38,7 +38,7 @@ def train(cfg):
         model.cuda()
 
     # Load dataset
-    train_data, val_data, table_data = utils.load_dataset(
+    train_data, val_data, test_data, table_data = utils.load_dataset(
         model,
         cfg.toy,
         cfg.is_bert,
@@ -132,6 +132,8 @@ def train(cfg):
         )
 
         log.info("Total Val Acc: {} Best Acc: {}\n".format(val_acc, best_val_acc))
+        test_acc = utils.epoch_acc(model, cfg.batch_size, test_data).get_acc_dict()
+        log.info("Total Test Acc: {} \n".format(test_acc))
 
         # Save if total_acc is higher
         if best_val_acc <= val_acc["total"]:
@@ -144,11 +146,13 @@ def train(cfg):
                 f.write("val_step: {} Val Acc:{}".format(val_step, best_val_acc))
         val_step += 1
 
-        with open("debug.json", "w") as f:
-            import json
+        # with open("debug.json", "w") as f:
+        #     import json
+        #
+        #     f.write(json.dumps(model.decoder.wrong_trace, indent=4))
 
-            f.write(json.dumps(model.decoder.wrong_trace, indent=4))
-
+    # validation()
+    # return
     for epoch in range(1, cfg.max_epoch):
         log.info(
             "\nEpoch: {}  lr: {:.2e}  step: {}  Time: {}".format(

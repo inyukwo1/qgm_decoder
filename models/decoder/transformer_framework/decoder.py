@@ -103,6 +103,7 @@ class TransformerDecoderFramework(nn.Module):
         nlqs,
         golds=None,
         is_train=False,
+            sql=None
     ):
         # Create states
         if is_train:
@@ -116,6 +117,7 @@ class TransformerDecoderFramework(nn.Module):
                     col_tab_dic[b_idx],
                     golds[b_idx][:],
                     nlqs[b_idx],
+                    sql[b_idx]
                 )
                 for b_idx in range(b_size)
             ]
@@ -130,6 +132,7 @@ class TransformerDecoderFramework(nn.Module):
                     golds[b_idx][:],
                     dbs[b_idx],
                     nlqs[b_idx],
+                    sql[b_idx],
                     golds is not None,
                 )
                 for b_idx in range(b_size)
@@ -298,6 +301,7 @@ class TransformerDecoderFramework(nn.Module):
         #         self.wrong_trace.append(
         #             {
         #                 "nlq": " ".join([" ".join(word) for word in state.nlq]),
+        #                 "sql": state.sql,
         #                 "answer/pred": [
         #                     (ac1[0], str(ac1[1]) + " / " + str(ac2[1]))
         #                     for ac1, ac2 in zip(state.history, state.pred_history)
