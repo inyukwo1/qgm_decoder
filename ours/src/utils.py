@@ -546,8 +546,8 @@ def load_dataset(dataset_dir, use_small=False, use_eval_only=False):
     print("Loading from datasets...")
 
     TABLE_PATH = os.path.join(dataset_dir, "tables.json")
-    TRAIN_PATH = os.path.join(dataset_dir, "ours/train.json")
-    DEV_PATH = os.path.join(dataset_dir, "ours/dev.json")
+    TRAIN_PATH = os.path.join(dataset_dir, "train.json")
+    DEV_PATH = os.path.join(dataset_dir, "dev.json")
     with open(TABLE_PATH) as inf:
         print("Loading data from %s" % TABLE_PATH)
         table_data = json.load(inf)

@@ -1,6 +1,6 @@
 import React from 'react';
-import '../css/App.css';
-import '../css/TopInterfaces.css';
+import '../css/App.scss';
+import '../css/TopInterfaces.scss';
 import {db_ids} from '../constants.js';
 
 class TopInterfaces extends React.Component {

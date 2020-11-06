@@ -545,8 +545,8 @@ if __name__ == "__main__":
     irnet_end2end = dict()
     gnn_end2end = dict()
     for dataset in DATASET:
-        ours_end2end[dataset] = End2EndOurs()
-        ours_end2end[dataset].prepare_model(dataset)
+        # ours_end2end[dataset] = End2EndOurs()
+        # ours_end2end[dataset].prepare_model(dataset)
         irnet_end2end[dataset] = End2EndIRNet()
         irnet_end2end[dataset].prepare_model(dataset)
         # gnn_end2end[dataset] = End2EndGNN()

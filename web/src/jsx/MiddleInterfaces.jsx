@@ -1,5 +1,5 @@
 import React from 'react';
-import '../css/MiddleInterfaces.css';
+import '../css/MiddleInterfaces.scss';
 import Botui from 'botui-react';
 
 const makeStatusbarContent = (total_height, len_msg_pairs) => {

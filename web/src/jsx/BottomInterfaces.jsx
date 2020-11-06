@@ -1,8 +1,8 @@
 import React from 'react';
 import Select from 'react-styled-select';
 import {db_ids, models, loading_files} from '../constants.js';
-import '../css/App.css';
-import '../css/BottomInterfaces.css';
+import '../css/App.scss';
+import '../css/BottomInterfaces.scss';
 import Switch from 'react-switch';
 import MicIcon from '../MicIcon';
 

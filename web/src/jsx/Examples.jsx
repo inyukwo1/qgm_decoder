@@ -1,7 +1,7 @@
 import React from 'react';
 import ScrollArea from "react-scrollbar"
-import '../css/App.css';
-import '../css/Examples.css'
+import '../css/App.scss';
+import '../css/Examples.scss'
 import dev_data from "../dev.json"
 
 const getContent = (db_id) => {
