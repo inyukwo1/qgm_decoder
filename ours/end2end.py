@@ -90,7 +90,7 @@ class End2EndOurs(End2End):
             if k not in self.model.state_dict().keys():
                 del pretrained_modeled[k]
 
-        self.model.load_state_dict(pretrained_modeled)
+        self.model.load_state_dict(pretrained_modeled, strict=False)
 
         self.model.eval()
 
