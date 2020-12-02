@@ -1,0 +1,5 @@
+dataset:
+  name: spider_resplit_1_parsable
+  path: /home/hkkang/spider_parser/data/spider_resplit_1
+  types: [train_parsable, dev_parsable, test_parsable]
+

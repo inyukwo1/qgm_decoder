@@ -8,8 +8,8 @@ use_nl_lstm_encoder: true
 use_col_lstm_encoder: false
 use_tab_lstm_encoder: true
 
-use_nl_rat_encoder: false
-use_schema_rat_encoder: false
+use_nl_rat_encoder: true
+use_schema_rat_encoder: true
 
 nl_rat_num_layer: 2
 schema_rat_num_layer: 1

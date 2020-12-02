@@ -1,0 +1,7 @@
+dataset:
+  name: spider_parsable
+  path: /home/hkkang/spider_parser/data/spider
+  types: [train_parsable, dev_parsable]
+
+
+

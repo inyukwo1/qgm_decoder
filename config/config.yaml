@@ -8,7 +8,7 @@ defaults:
 
 # Default model settings
 seed: 100
-glove_embed_path: ./data/glove.42B.300d.txt
+glove_embed_path: ./data_backup/glove.42B.300d.txt
 log_path: ./logs
 hidden_size: 300
 dropout: 0.3
@@ -35,7 +35,7 @@ reduce_dim: true
 
 # etc
 use_down_schema: false
-rule: "noqgm" # or semql
+rule: semql # noqgm
 remove_punctuation_marks: false
 train_glove: false
 use_dep: false

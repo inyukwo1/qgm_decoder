@@ -1,0 +1,5 @@
+dataset:
+  name: spider_resplit_1_unsimplifiable
+  path: /home/hkkang/spider_parser/data/spider_resplit_1
+  types: [train_unsimplifiable, dev_unsimplifiable, test_unsimplifiable]
+

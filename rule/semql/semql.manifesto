@@ -1,24 +1,52 @@
 <symbol_start>
 Root1
+Root
+Sel
 Filter
+intersect
+union
+except
+Order
+Sup
 N
 A
 C
+T
 none
 max
 min
 count
 sum
 avg
+most
+least
 and
+or
 =
+!=
 <
+<=
 >
+>=
+like
+not_like
+in
+not_in
+desc
+asc
+between
 <symbol_end>
 
 <grammar_start>
-Root1 ::= A | A Filter
-Filter ::= and Filter Filter | = A | < A | > A
+Root1 ::= intersect Root Root | union Root Root | except Root Root | Root
+Root ::= Sel Sup Filter | Sel Filter Order | Sel Sup | Sel Filter | Sel Order | Sel
+Sel ::= N
+N ::= A | A A | A A A | A A A A | A A A A A
+Order ::= desc A | asc A
+Sup ::= desc A | asc A
+Filter ::= and Filter Filter | or Filter Filter | = A | != A | < A | > A | <= A | >= A | between A | like A | not_like A | = A Root | < A Root | > A Root | != A Root | between A Root | >= A Root | <= A Root | in A Root | not_in A Root
 A ::= none C | max C | min C | count C | sum C | avg C
-C ::= none
+C ::= T
+T ::= none
 <grammar_end>
+

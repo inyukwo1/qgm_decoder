@@ -1,6 +1,6 @@
 dataset:
   name: spider
-  path: ./data/spider
+  path: /home/hkkang/spider_parser/data/spider
   types: [train, dev]
 
 
