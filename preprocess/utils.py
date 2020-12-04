@@ -19,9 +19,9 @@ wordnet_lemmatizer = WordNetLemmatizer()
 
 
 def load_dataSets(args):
-    with open(args.table_path, "r", encoding="utf8") as f:
+    with open(args.table_path, "r") as f:
         table_datas = json.load(f)
-    with open(args.data_path, "r", encoding="utf8") as f:
+    with open(args.data_path, "r") as f:
         datas = json.load(f)
 
     output_tab = {}

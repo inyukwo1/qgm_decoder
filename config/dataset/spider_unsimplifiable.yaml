@@ -1,0 +1,7 @@
+dataset:
+  name: spider_unsimplifiable
+  path: ./data/spider_unsimplifiable
+  types: [train, dev]
+
+
+

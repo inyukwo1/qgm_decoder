@@ -316,9 +316,10 @@ def is_valid(rule_label, col_set_table_dict, sql):
 
 def to_batch_seq(data_list, table_data):
     examples = []
-    for data in data_list:
+    for i, data in enumerate(data_list):
         # src
         table = table_data[data["db_id"]]
+
         question_arg = copy.deepcopy(data["question_arg"])
 
         # Append [db], [value] types
@@ -340,7 +341,7 @@ def to_batch_seq(data_list, table_data):
         # column
         col_set_iter = [
             [
-                v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v)
+                v.lower() # v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v)
                 for v in x.split(" ")
             ]
             for x in data["col_set"]
@@ -350,7 +351,7 @@ def to_batch_seq(data_list, table_data):
         # table
         table_names = [
             [
-                v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v)
+                v.lower() # v.lower() if v in SKIP_WORDS else wordnet_lemmatizer.lemmatize(v)
                 for v in x.split(" ")
             ]
             for x in data["table_names"]
@@ -491,7 +492,6 @@ def epoch_train(
     is_train=True,
     optimize_freq=1,
 ):
-    validation_func()
     model.train()
     # shuffle
     def chunks(lst, n):
@@ -570,7 +570,7 @@ def epoch_train(
     # Average loss
     for key in total_loss.keys():
         total_loss[key] = sum(total_loss[key]) / len(total_loss[key])
-
+    validation_func()
     return total_loss
 
 
@@ -602,7 +602,6 @@ def epoch_acc(
 
 
 def load_data_new(
-    qgm_path,
     sql_path,
     table_data,
     use_small=False,
@@ -612,49 +611,42 @@ def load_data_new(
     cfg=None,
 ):
     sql_data = []
-    qgm_data = []
     log.info("Loading data from {}".format(sql_path))
 
     with open(sql_path) as f:
-        with open(qgm_path) as g:
-            data = json.load(f)
-            qgm_json = json.load(g)
+        data = json.load(f)
 
-            assert len(data) == len(qgm_json)
 
-            for datum, qgm_datum in zip(data, qgm_json):
-                # Filter out some datas
-                if remove_punc and datum["question_arg"][-1] in [["?"], ["."]]:
-                    del datum["question_arg"][-1]
-                    del datum["question_arg_type"][-1]
-                datum["query"] = datum["query"].replace("  ", " ")
-                datum["query"] = datum["query"].replace("  ", " ")
-                datum["query"] = datum["query"].replace("  ", " ")
-                assert "  " not in datum["query"]
-                if "actions" not in qgm_datum:
+        for datum in data:
+            # Filter out some datas
+            if remove_punc and datum["question_arg"][-1] in [["?"], ["."]]:
+                del datum["question_arg"][-1]
+                del datum["question_arg_type"][-1]
+            datum["query"] = datum["query"].replace("  ", " ")
+            datum["query"] = datum["query"].replace("  ", " ")
+            datum["query"] = datum["query"].replace("  ", " ")
+            assert "  " not in datum["query"]
+            if query_type == "simple":
+                if "join" in datum["query"].lower():
                     continue
-                if query_type == "simple":
-                    if "join" in datum["query"].lower():
-                        continue
-                    if "group" in datum["query"].lower():
-                        continue
-                    if "(select" in datum["query"].lower():
-                        continue
-                    if "( select" in datum["query"].lower():
-                        continue
-                    if "order" in datum["query"].lower():
-                        continue
-                    if "intersect" in datum["query"].lower():
-                        continue
-                    if "union" in datum["query"].lower():
-                        continue
-                    if "except" in datum["query"].lower():
-                        continue
-                sql_data += [datum]
-                qgm_data += [qgm_datum]
+                if "group" in datum["query"].lower():
+                    continue
+                if "(select" in datum["query"].lower():
+                    continue
+                if "( select" in datum["query"].lower():
+                    continue
+                if "order" in datum["query"].lower():
+                    continue
+                if "intersect" in datum["query"].lower():
+                    continue
+                if "union" in datum["query"].lower():
+                    continue
+                if "except" in datum["query"].lower():
+                    continue
+            sql_data += [datum]
 
     # Add db info
-    for data, qgm_datum in zip(sql_data, qgm_data):
+    for data in sql_data:
         db = table_data[data["db_id"]]
         db["col_set"] = data["col_set"]
         data["db"] = db
@@ -673,7 +665,10 @@ def load_data_new(
                 gt = [SemQL.str_to_action(item) for item in gt_str.split(" ")]
                 data["gt"] = gt
         elif cfg.rule == "qgm":
-            data["gt"] = qgm_datum
+            data["gt"] = data
+            for aid, action in enumerate(data["actions"]):
+                if action in ["ORDERING_LIMIT_2", "ORDERING_LIMIT_3", "ORDERING_LIMIT_4", "ORDERING_LIMIT_5"]:
+                    data["actions"][aid] = "ORDERING_LIMIT_1" #  TODO fix
         else:
             raise NotImplementedError("not yet")
 
@@ -703,11 +698,8 @@ def load_dataset(
     # Get paths
     table_path = os.path.join(dataset_path, "tables.json")
     train_path = os.path.join(dataset_path, "train.json")
-    train_qgm_path = os.path.join(dataset_path, "wikisql_qgm_train.json")
     val_path = os.path.join(dataset_path, "dev.json")
-    val_qgm_path = os.path.join(dataset_path, "wikisql_qgm_dev.json")
     test_path = os.path.join(dataset_path, "test.json")
-    test_qgm_path = os.path.join(dataset_path, "wikisql_qgm_test.json")
     table_data = []
 
     # Tables as dictionary
@@ -735,7 +727,6 @@ def load_dataset(
 
     # Load data
     train_data = load_data_new(
-        train_qgm_path,
         train_path,
         table_data,
         is_toy,
@@ -745,7 +736,6 @@ def load_dataset(
         cfg,
     )
     val_data = load_data_new(
-        val_qgm_path,
         val_path,
         table_data,
         is_toy,
@@ -755,7 +745,6 @@ def load_dataset(
         cfg,
     )
     test_data = load_data_new(
-        test_qgm_path,
         test_path,
         table_data,
         is_toy,

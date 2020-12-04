@@ -39,7 +39,7 @@ class BERT(nn.Module):
         model_class, tokenizer_class, pretrained_weight, dim = MODELS[cfg.bert]
         self.bert_encoder = model_class.from_pretrained(pretrained_weight)
         self.tokenizer = tokenizer_class.from_pretrained(pretrained_weight)
-        # self.special_tokens = {"additional_special_tokens": ["[table]", "[column]", "[value]", "[db]"]}
+        self.special_tokens = {"additional_special_tokens": ["[table]", "[column]", "[value]", "[db]", "[most]", "[more]"]}
         # self.tokenizer.add_special_tokens(self.special_tokens)
         self.transformer_dim = dim
         self.col_lstm = torch.nn.LSTM(
@@ -235,7 +235,8 @@ class BERT(nn.Module):
                     sum_tensor = torch.zeros_like(embedding[b][st])
                     for i in range(st, ed):
                         sum_tensor = sum_tensor + embedding[b][i]
-                    sum_tensor = sum_tensor / (ed - st)
+                    if ed - st != 0:
+                        sum_tensor = sum_tensor / (ed - st)
                     one_q_encodings.append(sum_tensor)
                 src_encodings.append(one_q_encodings)
                 one_col_encodings = []

@@ -1,0 +1,7 @@
+dataset:
+  name: spider_resplit_2_parsable
+  path: ./data/spider_resplit_2_parsable
+  types: [train, dev]
+
+
+

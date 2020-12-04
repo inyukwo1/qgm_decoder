@@ -474,4 +474,4 @@ if __name__ == "__main__":
         % (len(processed_data), len(datas) - len(processed_data))
     )
     with open(args.output, "w") as f:
-        f.write(json.dumps(processed_data))
+        f.write(json.dumps(processed_data, indent=4))

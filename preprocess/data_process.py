@@ -293,11 +293,10 @@ if __name__ == "__main__":
 
     # loading dataSets
     datas, table = load_dataSets(args)
-
     # process datasets
     dataset_name = args.data_path.split("data/")[1].split("/")[0]
     process_result = process_datas(datas, args, dataset_name)
     print("length: {}".format(len(datas)))
 
     with open(args.output, "w") as f:
-        json.dump(datas, f)
+        f.write(json.dumps(datas, indent=4))

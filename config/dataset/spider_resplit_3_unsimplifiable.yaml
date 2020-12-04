@@ -1,0 +1,7 @@
+dataset:
+  name: spider_resplit_3_unsimplifiable
+  path: ./data/spider_resplit_3_unsimplifiable
+  types: [train, dev]
+
+
+
