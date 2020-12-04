@@ -17,6 +17,7 @@ from models.framework.lazy_modules import (
     LazyLinear,
     LazyTransformerDecoder,
     LazyCalculateSimilarity,
+    LazyAttention,
 )
 from qgm.qgm_action import QGM_ACTION, Action, Symbol
 
@@ -41,6 +42,7 @@ class TransformerDecoderFramework(nn.Module):
         self.padding_num = 2
 
         # For inference
+        self.attention_layer = LazyAttention(dim, max_nested_depth=3)
         self.infer_transformer = LazyTransformerDecoder(dim, nhead, layer_num)
         self.infer_action_affine_layer = LazyLinear(dim, dim)
         self.infer_symbol_affine_layer = LazyLinear(dim, dim)
@@ -193,14 +195,35 @@ class TransformerDecoderFramework(nn.Module):
             prev_tensor_dict.update({"combined_embedding": combined_embedding_promise})
             return prev_tensor_dict
 
+        def attention_on_src_with_column(
+            state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
+        ) -> Dict[str, TensorPromise]:
+
+            src_embedding: torch.Tensor = state.get_encoded_src()
+
+            # Select column_embedding
+            current_column_embedding = None
+            if not current_column_embedding:
+                current_column_embedding = self.attention_layer.empty_col_emb.weight[0]
+
+            # Select nested status
+            nesting_state_embedding = self.attention_layer.nesting_emb.weight[0]
+            query = torch.cat((current_column_embedding, nesting_state_embedding), dim=-1)
+
+            src_embedding_promise: TensorPromise = self.attention_layer.forward_later(
+                query, src_embedding, src_embedding
+            )
+
+            prev_tensor_dict.update({"src_embedding": src_embedding_promise})
+            return prev_tensor_dict
+
         def pass_infer_transformer(
             state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
         ) -> Dict[str, TensorPromise]:
             combined_embedding: torch.Tensor = prev_tensor_dict[
                 "combined_embedding"
             ].result
-            src_embedding: torch.Tensor = state.get_encoded_src()
-
+            src_embedding: torch.Tensor = prev_tensor_dict["src_embedding"].result
             decoder_out_promise: TensorPromise = self.infer_transformer.forward_later(
                 combined_embedding, src_embedding
             )
@@ -289,6 +312,7 @@ class TransformerDecoderFramework(nn.Module):
                 LogicUnit.If(state_class.is_to_infer)
                 .Then(embed_history_symbol_actions)
                 .Then(combine_embeddings)
+                .Then(attention_on_src_with_column)
                 .Then(pass_infer_transformer)
                 .Then(pass_infer_out_linear)
                 .Then(calc_prod)

@@ -557,3 +557,33 @@ class LazyMemoryPointerNet(nn.Module, LazyModule):
         probs = torch.log_softmax(total, dim=-1)
 
         self.done_buffer = [item for item in probs]
+
+
+class LazyAttention(nn.Module, LazyModule):
+    def __init__(self, dim, max_nested_depth=3):
+        super(LazyAttention, self).__init__()
+        LazyModule.__init__(self)
+        self.dim = dim
+        self.linear_layer = nn.Linear(dim*2, dim)
+        self.empty_col_emb = nn.Embedding(1, dim)
+        self.nesting_emb = nn.Embedding(max_nested_depth, dim)
+
+    def assert_input(self, *inputs):
+        pass
+
+    def compute(self):
+        query, _ = stack_sequential_tensor_with_mask([item[0] for item in self.later_buffer])
+        key, k_mask = stack_sequential_tensor_with_mask([item[1] for item in self.later_buffer])
+        value, _ = stack_sequential_tensor_with_mask([item[2] for item in self.later_buffer])
+
+        # Scaling
+        query = self.linear_layer(query).unsqueeze(1)
+        scaling = float(query.shape[-1]) ** -0.5
+        query_scaled = query * scaling
+
+        qk = torch.bmm(query_scaled, key.transpose(-1, -2)).squeeze(1)
+        qk = qk.masked_fill(k_mask, float('-inf'))
+        attn_weights = torch.softmax(qk, dim=-1).unsqueeze(-1).expand_as(value)
+        new_query = value * attn_weights + value
+
+        self.done_buffer = torch.unbind(new_query)
