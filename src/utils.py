@@ -367,7 +367,8 @@ def to_batch_seq(data_list, table_data):
         actions = data["gt"]["actions"]
         states = data["gt"]["states"]
         column_pointers = data["gt"]["column_pointer"]
-        for action, state, column_pointer in zip(actions, states, column_pointers):
+        nest_counters = data['nest_counter']
+        for action, state, column_pointer, nest_counter in zip(actions, states, column_pointers, nest_counters):
             if isinstance(action, dict):
                 column_name = action["col_name"]
                 table_name = action["table_name"]
@@ -388,10 +389,10 @@ def to_batch_seq(data_list, table_data):
                     ):
                         break
                 pretty_col_name = data["column_names"][spider_col_id][1]
-                gt.append(("C", data["col_set"].index(pretty_col_name), -1))
-                gt.append(("T", table_id, -1))
+                gt.append(("C", data["col_set"].index(pretty_col_name), -1, nest_counter))
+                gt.append(("T", table_id, -1, nest_counter))
             else:
-                gt.append((state, action, column_pointer))
+                gt.append((state, action, column_pointer, nest_counter))
 
         # Hot type
         process_dict = process(data, data["db"])
