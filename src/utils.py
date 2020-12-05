@@ -377,8 +377,8 @@ def to_batch_seq(data_list, table_data):
                 ].index(table_name.lower())
                 spider_col_id = None
                 if column_name == "*":
-                    gt.append(("C", 0, -1))
-                    gt.append(("T", table_id, -1))
+                    gt.append(("C", 0, -1, nest_counter))
+                    gt.append(("T", table_id, -1, nest_counter))
                     continue
                 for spider_col_id, (spider_table_id, spider_column_name) in enumerate(
                     table["column_names_original"]
@@ -393,6 +393,7 @@ def to_batch_seq(data_list, table_data):
                 gt.append(("T", table_id, -1, nest_counter))
             else:
                 gt.append((state, action, column_pointer, nest_counter))
+
 
         # Hot type
         process_dict = process(data, data["db"])

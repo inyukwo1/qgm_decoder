@@ -203,7 +203,7 @@ class TransformerDecoderFramework(nn.Module):
 
             # Select column_embedding
             base_col_pointer = state.get_base_col_pointer()
-            if base_col_pointer == -1 or True:
+            if base_col_pointer == -1:
                 column_embedding = self.attention_layer.empty_col_emb.weight[0]
             else:
                 history_idx = state.history_indices[base_col_pointer]

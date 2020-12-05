@@ -560,7 +560,7 @@ class LazyMemoryPointerNet(nn.Module, LazyModule):
 
 
 class LazyAttention(nn.Module, LazyModule):
-    def __init__(self, dim, max_nested_depth=3):
+    def __init__(self, dim, max_nested_depth=10):
         super(LazyAttention, self).__init__()
         LazyModule.__init__(self)
         self.dim = dim

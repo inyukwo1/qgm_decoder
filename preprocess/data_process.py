@@ -60,9 +60,9 @@ def process_datas(datas, args, dataset_name):
             c_name.lower() for tid, c_name in one_schema["column_names_original"]
         ]
     # copy of the origin question_toks
-    for d in datas:
-        if "origin_question_toks" not in d:
-            d["origin_question_toks"] = d["question_toks"]
+    # for d in datas:
+    #     if "origin_question_toks" not in d:
+    #         d["origin_question_toks"] = d["question_toks"]
 
     for idx in tqdm(range(len(datas))):
         entry = datas[idx]
@@ -126,7 +126,7 @@ def process_datas(datas, args, dataset_name):
                         col_value_set[col] = value_set
             db_values[db_id] = col_value_set
 
-        entry["question_toks"] = symbol_filter(entry["question_toks"])
+        # entry["question_toks"] = symbol_filter(entry["question_toks"])
         origin_question_toks = [
             x.lower()
             for x in re.findall(
@@ -139,6 +139,7 @@ def process_datas(datas, args, dataset_name):
         ]
 
         entry["question_toks"] = origin_question_toks
+        entry["origin_question_toks"] = entry["question_toks"]
 
         table_names = []
         table_names_pattern = []
