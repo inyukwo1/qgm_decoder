@@ -54,6 +54,9 @@ class TransformerState(State):
     def get_base_col_pointer(self):
         pass
 
+    def get_nest_counter(self):
+        pass
+
     def get_last_symbol_in_history(self, symbol_list):
         for idx in range(len(self.history) - 1, -1, -1):
             symbol, action = self.history[idx]
@@ -83,6 +86,7 @@ class TransformerStateGold(TransformerState):
         self.current_symbol = None
         self.current_action = None
         self.base_col_pointer = None
+        self.nest_counter = None
         self.is_done = False
         self.sql = sql
 
@@ -106,10 +110,11 @@ class TransformerStateGold(TransformerState):
         if len(self.qgm) == 0:
             self.is_done = True
         else:
-            symbol, action, pointer = self.qgm.pop(0)
+            symbol, action, pointer, nest_counter = self.qgm.pop(0)
             self.current_symbol = symbol
             self.current_action = action
             self.base_col_pointer = pointer
+            self.nest_counter = nest_counter
 
     def is_gold(self):
         return True
@@ -144,6 +149,9 @@ class TransformerStateGold(TransformerState):
     def get_base_col_pointer(self):
         return self.base_col_pointer
 
+    def get_nest_counter(self):
+        return self.nest_counter
+
 
 class TransformerStatePred(TransformerState):
     def __init__(
@@ -170,6 +178,7 @@ class TransformerStatePred(TransformerState):
             self.wrong = False
         else:
             assert False
+        self.nest_counter = None
         self.base_col_pointer = None
         self.is_done = False
         self.db = db
@@ -198,10 +207,11 @@ class TransformerStatePred(TransformerState):
                     else:
                         self.qgm_acc.correct("total")
             else:
-                symbol, action, pointer = self.qgm.pop(0)
+                symbol, action, pointer, nest_counter = self.qgm.pop(0)
                 self.current_symbol = symbol
                 self.current_action = action
                 self.base_col_pointer = pointer
+                self.nest_counter = nest_counter
         else:
             assert False
 
@@ -246,3 +256,6 @@ class TransformerStatePred(TransformerState):
 
     def get_base_col_pointer(self):
         return self.base_col_pointer
+
+    def get_nest_counter(self):
+        return self.nest_counter

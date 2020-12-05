@@ -17,6 +17,7 @@ from models.framework.lazy_modules import (
     LazyLinear,
     LazyTransformerDecoder,
     LazyCalculateSimilarity,
+    LazyAttention,
 )
 from qgm.qgm_action import QGM_ACTION, Action, Symbol
 
@@ -41,6 +42,7 @@ class TransformerDecoderFramework(nn.Module):
         self.padding_num = 2
 
         # For inference
+        self.attention_layer = LazyAttention(dim, max_nested_depth=3)
         self.infer_transformer = LazyTransformerDecoder(dim, nhead, layer_num)
         self.infer_action_affine_layer = LazyLinear(dim, dim)
         self.infer_symbol_affine_layer = LazyLinear(dim, dim)
@@ -193,14 +195,41 @@ class TransformerDecoderFramework(nn.Module):
             prev_tensor_dict.update({"combined_embedding": combined_embedding_promise})
             return prev_tensor_dict
 
+        def attention_on_src_with_column(
+            state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
+        ) -> Dict[str, TensorPromise]:
+
+            src_embedding: torch.Tensor = state.get_encoded_src()
+
+            # Select column_embedding
+            base_col_pointer = state.get_base_col_pointer()
+            if base_col_pointer == -1 or True:
+                column_embedding = self.attention_layer.empty_col_emb.weight[0]
+            else:
+                history_idx = state.history_indices[base_col_pointer]
+                physical_idx = history_idx * (self.padding_num + 1)
+                col_idx = state.get_history_symbol_actions()[history_idx][1]
+                column_embedding = state.get_encoded_col()[col_idx]
+
+            # Select nesting embedding
+            nesting_idx = state.get_nest_counter()
+            nesting_state_embedding = self.attention_layer.nesting_emb.weight[nesting_idx]
+            query = torch.cat((column_embedding, nesting_state_embedding), dim=-1)
+            # Attention
+            src_embedding_promise: TensorPromise = self.attention_layer.forward_later(
+                query, src_embedding, src_embedding
+            )
+
+            prev_tensor_dict.update({"src_embedding": src_embedding_promise})
+            return prev_tensor_dict
+
         def pass_infer_transformer(
             state: TransformerState, prev_tensor_dict: Dict[str, TensorPromise]
         ) -> Dict[str, TensorPromise]:
             combined_embedding: torch.Tensor = prev_tensor_dict[
                 "combined_embedding"
             ].result
-            src_embedding: torch.Tensor = state.get_encoded_src()
-
+            src_embedding: torch.Tensor = prev_tensor_dict["src_embedding"].result
             decoder_out_promise: TensorPromise = self.infer_transformer.forward_later(
                 combined_embedding, src_embedding
             )
@@ -212,26 +241,28 @@ class TransformerDecoderFramework(nn.Module):
         ) -> Dict[str, TensorPromise]:
             decoder_out: torch.Tensor = prev_tensor_dict["decoder_out"].result
 
-            current_symbol: Symbol = state.get_current_symbol()
-            if current_symbol not in {"BASE_COL_EXIST", "C", "T"}:
-                predicate_col_pointer = state.get_base_col_pointer()
-                if predicate_col_pointer == len(state.history_indices):
-                    decoder_out_promise: TensorPromise = self.infer_out_linear_layer_pointer_dict.forward_later(
-                        torch.cat((self.col_end_tensor, decoder_out[-1],), dim=-1,)
-                    )
-
-                else:
-                    history_idx = state.history_indices[predicate_col_pointer]
-                    physical_idx = history_idx * (self.padding_num + 1)
-                    decoder_out_promise: TensorPromise = self.infer_out_linear_layer_pointer_dict.forward_later(
-                        torch.cat(
-                            (decoder_out[physical_idx], decoder_out[-1],), dim=-1,
-                        )
-                    )
-            else:
-                decoder_out_promise: TensorPromise = self.infer_out_linear_layer.forward_later(
-                    decoder_out[-1]
-                )
+            # current_symbol: Symbol = state.get_current_symbol()
+            # if current_symbol not in {"BASE_COL_EXIST", "C", "T"}:
+            #     if predicate_col_pointer == len(state.history_indices):
+            #         decoder_out_promise: TensorPromise = self.infer_out_linear_layer_pointer_dict.forward_later(
+            #             torch.cat((self.col_end_tensor, decoder_out[-1],), dim=-1,)
+            #         )
+            #
+            #     else:
+            #         history_idx = state.history_indices[predicate_col_pointer]
+            #         physical_idx = history_idx * (self.padding_num + 1)
+            #         decoder_out_promise: TensorPromise = self.infer_out_linear_layer_pointer_dict.forward_later(
+            #             torch.cat(
+            #                 (decoder_out[physical_idx], decoder_out[-1],), dim=-1,
+            #             )
+            #         )
+            # else:
+            #     decoder_out_promise: TensorPromise = self.infer_out_linear_layer.forward_later(
+            #         decoder_out[-1]
+            #     )
+            decoder_out_promise: TensorPromise = self.infer_out_linear_layer.forward_later(
+                decoder_out[-1]
+            )
             prev_tensor_dict.update({"decoder_out": decoder_out_promise})
             return prev_tensor_dict
 
@@ -289,6 +320,7 @@ class TransformerDecoderFramework(nn.Module):
                 LogicUnit.If(state_class.is_to_infer)
                 .Then(embed_history_symbol_actions)
                 .Then(combine_embeddings)
+                .Then(attention_on_src_with_column)
                 .Then(pass_infer_transformer)
                 .Then(pass_infer_out_linear)
                 .Then(calc_prod)
